@@ -1,0 +1,8 @@
+• Initial release of Iris Gallery (v0.1.0)
+• 100% offline, privacy-first gallery with zero network permissions
+• Material You 3 dynamic color theming
+• High-resolution photo viewer & built-in editor
+• EXIF metadata inspector with map location launcher
+• Integrated Media3 video player
+• Duplicate finder, locked vault, and trash bin
+• Dynamic home screen photo widget

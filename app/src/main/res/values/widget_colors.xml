@@ -1,0 +1,7 @@
+<resources>
+    <color name="widget_surface">#FF211F26</color>
+    <color name="widget_surface_variant">#FF49454F</color>
+    <color name="widget_accent_container">#FFEADDFF</color>
+    <color name="widget_on_accent_container">#FF21005D</color>
+    <string name="widget_description">A responsive Material You frame for moments from your Iris library</string>
+</resources>

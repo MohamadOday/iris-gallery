@@ -1,0 +1,15 @@
+Iris Gallery is a lightweight, fluid, and privacy-focused Android gallery app built with modern Material You 3 and Jetpack Compose.
+
+Features:
+• 100% Offline & Private: Zero INTERNET permissions requested in the manifest. Your photos and videos never leave your device.
+• Fluid Material Design 3: Full dynamic Material You theming that adapts to your wallpaper, complete with seamless dark and light modes.
+• High-Resolution Canvas Viewer: Native hardware bitmap rendering with multi-level zoom (up to 7×) preserving crystal-clear detail on screenshots, text, and photos.
+• Built-in Photo Editor: Crop, rotate (90°/180°/270°), flip horizontally/vertically, apply filters, sketch with custom brush tools, and add text.
+• Rich Camera EXIF & GPS Inspector: View detailed camera metadata including model, aperture, shutter speed, focal length, ISO, flash, and open capture coordinates directly in your preferred map app.
+• Integrated Video Player: Powered by Media3 ExoPlayer with sensor-aware hardware rotation and intuitive playback controls.
+• Dynamic Pinch-to-Resize Grid: Smoothly adjust photo column density between 2 and 6 columns with responsive item placement animations.
+• Media Formats & Special Types: Dedicated smart filters for RAW photos, animated GIFs, motion photos, panoramas, and screenshots.
+• Duplicate & Similar Media Finder: Scan for identical or redundant shots and clean up storage with one tap.
+• Private Locked Vault: Protect sensitive photos and videos behind biometric authentication or device credentials.
+• Safe Trash Bin: Move deleted items to the trash with easy restoration or one-tap permanent purge.
+• Home Screen Photo Widget: Pin favorite memories and photos directly to your launcher with customizable aspect ratios and rotation intervals.

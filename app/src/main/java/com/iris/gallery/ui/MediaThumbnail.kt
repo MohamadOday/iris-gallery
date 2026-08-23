@@ -1,0 +1,146 @@
+package com.iris.gallery.ui
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.os.Build
+import android.provider.MediaStore
+import android.util.LruCache
+import android.util.Size
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.isGif
+import com.iris.gallery.data.isMotionPhoto
+import com.iris.gallery.data.isPanorama
+import com.iris.gallery.data.isRaw
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private object ThumbnailCache {
+    private val maxKilobytes = (Runtime.getRuntime().maxMemory() / 1024 / 4).toInt() // 25% heap
+    private val cache = object : LruCache<Long, Bitmap>(maxKilobytes) {
+        override fun sizeOf(key: Long, value: Bitmap): Int = value.allocationByteCount / 1024
+    }
+
+    fun get(id: Long): Bitmap? = cache.get(id)
+    fun put(id: Long, bitmap: Bitmap) = cache.put(id, bitmap)
+}
+
+private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
+    ThumbnailCache.get(image.id)?.let { return it }
+    val bitmap = try {
+        if (Build.VERSION.SDK_INT >= 29) {
+            context.contentResolver.loadThumbnail(image.uri, Size(256, 256), null)
+        } else {
+            @Suppress("DEPRECATION")
+            if (image.isVideo) {
+                MediaStore.Video.Thumbnails.getThumbnail(
+                    context.contentResolver, image.id, MediaStore.Video.Thumbnails.MINI_KIND, null,
+                )
+            } else {
+                MediaStore.Images.Thumbnails.getThumbnail(
+                    context.contentResolver, image.id, MediaStore.Images.Thumbnails.MINI_KIND, null,
+                )
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+    bitmap?.prepareToDraw()
+    bitmap?.let { ThumbnailCache.put(image.id, it) }
+    return bitmap
+}
+
+@Composable
+fun MediaThumbnail(image: MediaImage, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val cached = remember(image.id) { ThumbnailCache.get(image.id) }
+    var bitmap by remember(image.id) { mutableStateOf(cached) }
+
+    if (bitmap == null) {
+        LaunchedEffect(image.id, image.uri) {
+            val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, image) }
+            bitmap = loaded
+        }
+    }
+
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+        bitmap?.let {
+            Image(
+                bitmap = it.asImageBitmap(),
+                contentDescription = image.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (image.isVideo) {
+            Row(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                    .background(Color.Black.copy(alpha = .68f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.PlayArrow, null, tint = Color.White.copy(alpha = .9f),
+                    modifier = Modifier.size(10.dp).padding(end = 1.dp))
+                Text(formatDuration(image.durationMs), color = Color.White.copy(alpha = .92f), fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        } else {
+            val badge = when {
+                image.isRaw -> "RAW"
+                image.isGif -> "GIF"
+                image.isPanorama -> "PANO"
+                image.isMotionPhoto -> "MOTION"
+                else -> null
+            }
+            if (badge != null) {
+                Box(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp)
+                        .background(Color.Black.copy(alpha = .68f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                ) {
+                    Text(
+                        text = badge,
+                        color = Color.White.copy(alpha = .92f),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = durationMs.coerceAtLeast(0) / 1_000
+    val hours = totalSeconds / 3_600
+    val minutes = totalSeconds % 3_600 / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%d:%02d".format(minutes, seconds)
+}

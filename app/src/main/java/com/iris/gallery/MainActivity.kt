@@ -1,0 +1,1703 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
+package com.iris.gallery
+
+import android.Manifest
+import android.app.Activity
+import android.app.RecoverableSecurityException
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.Intent
+import android.content.ClipData
+import android.content.ContentUris
+import android.content.ContentValues
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.MediaStore
+import android.app.KeyguardManager
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.PhotoAlbum
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.RestoreFromTrash
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.produceState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.collectAsState
+import coil3.compose.AsyncImage
+import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.AsyncImagePainter
+import coil3.request.ImageRequest
+import coil3.size.Precision
+import androidx.compose.ui.graphics.drawscope.withTransform
+import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.ExifMetadata
+import com.iris.gallery.data.loadExifMetadata
+import com.iris.gallery.data.isRaw
+import com.iris.gallery.data.isGif
+import com.iris.gallery.data.isPanorama
+import com.iris.gallery.data.isMotionPhoto
+import com.iris.gallery.data.isScreenshot
+import com.iris.gallery.ui.GalleryViewModel
+import com.iris.gallery.ui.DuplicateScanState
+import com.iris.gallery.ui.MediaThumbnail
+import com.iris.gallery.ui.AlbumsGrid
+import com.iris.gallery.ui.MediaAlbum
+import com.iris.gallery.ui.LibraryScreen
+import com.iris.gallery.ui.EditorScreen
+import com.iris.gallery.ui.video.VideoPage
+import com.iris.gallery.ui.video.Media3VideoEngine
+import com.iris.gallery.data.DuplicateGroup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.iris.gallery.ui.theme.IrisTheme
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.FastOutSlowInEasing
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        IrisPhotoWidget.refreshAll(this)
+        enableEdgeToEdge()
+        val pickerMode = intent.action == Intent.ACTION_PICK || intent.action == Intent.ACTION_GET_CONTENT
+        val isViewAction = intent.action == Intent.ACTION_VIEW || intent.action == "com.android.camera.action.REVIEW"
+        val requestedType = intent.type
+        val viewUri = intent.data.takeIf { isViewAction }
+        setContent {
+            IrisTheme {
+                GalleryApp(
+                    requestedType = requestedType.takeIf { pickerMode },
+                    initialViewUri = viewUri,
+                    initialMemories = intent.getBooleanExtra("open_memories", false),
+                    onPick = if (pickerMode) {{ media ->
+                        val result = Intent().apply {
+                            data = media.uri
+                            clipData = ClipData.newUri(contentResolver, media.name, media.uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        setResult(Activity.RESULT_OK, result)
+                        finish()
+                    }} else null,
+                )
+            }
+        }
+    }
+}
+
+private fun requiredPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT >= 33 -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
+    )
+    Build.VERSION.SDK_INT <= 28 -> arrayOf(
+        Manifest.permission.READ_EXTERNAL_STORAGE,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+    )
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
+private enum class MediaFormatFilter(val label: String) {
+    ALL("All"),
+    RAW("RAW"),
+    GIF("GIFs"),
+    PANORAMA("Panoramas"),
+    MOTION("Motion Photos"),
+}
+
+@Composable
+private fun GalleryApp(
+    requestedType: String? = null,
+    initialViewUri: Uri? = null,
+    initialMemories: Boolean = false,
+    onPick: ((MediaImage) -> Unit)? = null,
+    viewModel: GalleryViewModel = viewModel(),
+) {
+    val context = LocalContext.current
+    val permissions = remember { requiredPermissions() }
+    var permitted by remember {
+        mutableStateOf(permissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PermissionChecker.PERMISSION_GRANTED
+        })
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permitted = permissions.all { permission -> it[permission] == true }
+    }
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+        if (it.resultCode == Activity.RESULT_OK) viewModel.refresh()
+    }
+    var pendingMetadata by remember { mutableStateOf<Pair<MediaImage, ContentValues>?>(null) }
+    val metadataWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+        val pending = pendingMetadata
+        pendingMetadata = null
+        if (it.resultCode == Activity.RESULT_OK && pending != null) {
+            context.contentResolver.update(canonicalMediaUri(pending.first), pending.second, null, null)
+            viewModel.refresh()
+        }
+    }
+    var lockedAuthorized by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) lockedAuthorized = false
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val unlockLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        lockedAuthorized = it.resultCode == Activity.RESULT_OK
+    }
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val libraryState by viewModel.libraryState.collectAsStateWithLifecycle()
+    val duplicateState by viewModel.duplicateState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(permitted) { if (permitted) viewModel.refresh() }
+    LaunchedEffect(Unit) {
+        MemoriesNotifications.schedule(context)
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                Manifest.permission.POST_NOTIFICATIONS) != PermissionChecker.PERMISSION_GRANTED) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    if (!permitted) {
+        PermissionScreen { permissionLauncher.launch(permissions) }
+    } else {
+        val visibleMedia = remember(state.images, requestedType, libraryState.lockedMedia) {
+            val requested = when {
+                requestedType?.startsWith("image/") == true -> state.images.filterNot { it.isVideo }
+                requestedType?.startsWith("video/") == true -> state.images.filter { it.isVideo }
+                else -> state.images
+            }
+            requested.filterNot { it.id in libraryState.lockedMedia }
+        }
+        GalleryScaffold(
+            images = visibleMedia,
+            trashed = state.trashed,
+            lockedIds = libraryState.lockedMedia,
+            lockedMedia = state.images.filter { it.id in libraryState.lockedMedia },
+            pinnedAlbums = libraryState.pinnedAlbums,
+            albumCovers = libraryState.albumCovers,
+            albumSort = libraryState.albumSort,
+            albumOrder = libraryState.albumOrder,
+            lockedAuthorized = lockedAuthorized,
+            loading = state.loading,
+            error = state.error,
+            favorites = favorites,
+            onToggleFavorite = viewModel::toggleFavorite,
+            onSetLocked = viewModel::setLocked,
+            onTogglePinnedAlbum = viewModel::togglePinnedAlbum,
+            onSetAlbumCover = viewModel::setAlbumCover,
+            onSetAlbumSort = viewModel::setAlbumSort,
+            onSetAlbumOrder = viewModel::setAlbumOrder,
+            onRequestUnlock = {
+                val keyguard = context.getSystemService(KeyguardManager::class.java)
+                val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
+                if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
+            },
+            onPick = onPick,
+            onTrash = { media ->
+                if (media.isEmpty()) return@GalleryScaffold
+                if (Build.VERSION.SDK_INT >= 30) {
+                    runCatching {
+                        val request = MediaStore.createTrashRequest(
+                            context.contentResolver,
+                            media.take(2_000).map { item ->
+                                val collection = if (item.isVideo) {
+                                    MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                                } else {
+                                    MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                                }
+                                ContentUris.withAppendedId(collection, item.id)
+                            }, true,
+                        )
+                        deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                    }.onFailure {
+                        Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    media.forEach { image ->
+                        try {
+                            context.contentResolver.delete(image.uri, null, null)
+                        } catch (error: RecoverableSecurityException) {
+                            if (Build.VERSION.SDK_INT >= 29) {
+                                deleteLauncher.launch(IntentSenderRequest.Builder(
+                                    error.userAction.actionIntent.intentSender).build())
+                            }
+                        }
+                    }
+                    viewModel.refresh()
+                }
+            },
+            onRestore = { media ->
+                if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                    val request = MediaStore.createTrashRequest(context.contentResolver,
+                        media.map { canonicalMediaUri(it) }, false)
+                    deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
+            },
+            onDeletePermanently = { media ->
+                if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                    val request = MediaStore.createDeleteRequest(context.contentResolver,
+                        media.map { canonicalMediaUri(it) })
+                    deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+            },
+            onEditMetadata = { media, name, title, captured, orientation ->
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.TITLE, title)
+                    put(MediaStore.Images.Media.DATE_TAKEN, captured)
+                    put(MediaStore.Images.Media.ORIENTATION, orientation)
+                }
+                if (Build.VERSION.SDK_INT >= 30) runCatching {
+                    pendingMetadata = media to values
+                    val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
+                    metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                }.onFailure { pendingMetadata = null; Toast.makeText(context, "Could not request metadata access", Toast.LENGTH_LONG).show() }
+                else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
+            },
+            duplicateState = duplicateState,
+            onScanDuplicates = viewModel::scanDuplicates,
+            onCancelDuplicateScan = viewModel::cancelDuplicateScan,
+            initialMemories = initialMemories,
+            initialViewUri = initialViewUri,
+        )
+    }
+}
+
+private fun canonicalMediaUri(item: MediaImage): Uri {
+    val collection = if (item.isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    return ContentUris.withAppendedId(collection, item.id)
+}
+
+@Composable
+private fun PermissionScreen(onGrant: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Outlined.PhotoLibrary, null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+        Text("Your gallery, beautifully yours", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Allow photo access to browse your library. Iris never uploads or analyzes your photos.", modifier = Modifier.padding(vertical = 16.dp))
+        Button(onClick = onGrant) { Text("Choose photos") }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GalleryScaffold(
+    images: List<MediaImage>,
+    trashed: List<MediaImage>,
+    lockedIds: Set<Long>,
+    lockedMedia: List<MediaImage>,
+    pinnedAlbums: Set<Long>,
+    albumCovers: Map<Long, Long>,
+    albumSort: com.iris.gallery.data.AlbumSort,
+    albumOrder: List<Long>,
+    lockedAuthorized: Boolean,
+    loading: Boolean,
+    error: String?,
+    favorites: Set<Long>,
+    onToggleFavorite: (Long) -> Unit,
+    onSetLocked: (Collection<Long>, Boolean) -> Unit,
+    onTogglePinnedAlbum: (Long) -> Unit,
+    onSetAlbumCover: (Long, Long) -> Unit,
+    onSetAlbumSort: (com.iris.gallery.data.AlbumSort) -> Unit,
+    onSetAlbumOrder: (List<Long>) -> Unit,
+    onRequestUnlock: () -> Unit,
+    onPick: ((MediaImage) -> Unit)?,
+    onTrash: (List<MediaImage>) -> Unit,
+    onRestore: (List<MediaImage>) -> Unit,
+    onDeletePermanently: (List<MediaImage>) -> Unit,
+    onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
+    duplicateState: DuplicateScanState,
+    onScanDuplicates: () -> Unit,
+    onCancelDuplicateScan: () -> Unit,
+    initialMemories: Boolean,
+    initialViewUri: Uri? = null,
+) {
+    val context = LocalContext.current
+    val tabPagerState = rememberPagerState(initialPage = if (initialMemories) 3 else 0, pageCount = { 4 })
+    val tabScope = rememberCoroutineScope()
+    val destination = tabPagerState.currentPage
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(images, initialViewUri) {
+        if (initialViewUri != null && selectedId == null && images.isNotEmpty()) {
+            images.firstOrNull { it.uri == initialViewUri || it.uri.lastPathSegment == initialViewUri.lastPathSegment }?.let {
+                selectedId = it.id
+            }
+        }
+    }
+    var viewerImages by remember { mutableStateOf<List<MediaImage>?>(null) }
+    var selectedAlbumId by remember { mutableStateOf<Long?>(null) }
+    var librarySection by remember { mutableStateOf<String?>(if (initialMemories) "memories" else null) }
+    var editorImage by remember { mutableStateOf<MediaImage?>(null) }
+    var customCellSize by remember { mutableStateOf(105.dp) }
+    var compactGrid by remember { mutableStateOf(false) }
+    var confirmEmptyTrash by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    var selectionMenuExpanded by remember { mutableStateOf(false) }
+    val photoGridState = rememberLazyGridState()
+    val albumGridState = rememberLazyGridState()
+    val albumPhotoGridState = rememberLazyGridState()
+    val favoriteGridState = rememberLazyGridState()
+    val libraryGridState = rememberLazyGridState()
+    val labels = remember { listOf("Photos", "Albums", "Favorites", "Library") }
+    val icons = remember { listOf(Icons.Outlined.PhotoLibrary, Icons.Outlined.PhotoAlbum, Icons.Outlined.FavoriteBorder, Icons.Outlined.Dashboard) }
+    val photoCellSize = customCellSize
+    val onCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
+        customCellSize = newSize
+        compactGrid = newSize < 95.dp
+    }
+    val favoriteImages = remember(images, favorites) { images.filter { it.id in favorites } }
+    // Keep only the album identity as state. Its contents are derived atomically
+    // from the current library, so deletion/locking cannot expose a stale list.
+    val selectedAlbum = remember(images, selectedAlbumId, albumCovers) {
+        selectedAlbumId?.let { albumId ->
+            val albumImages = images.filter { it.bucketId == albumId }
+            albumImages.firstOrNull()?.let { first ->
+                MediaAlbum(
+                    id = albumId,
+                    name = first.bucketName,
+                    cover = albumImages.firstOrNull { it.id == albumCovers[albumId] } ?: first,
+                    images = albumImages,
+                )
+            }
+        }
+    }
+    val activeMedia = when {
+        destination == 3 && librarySection == "trash" -> trashed
+        destination == 3 && librarySection == "locked" -> lockedMedia
+        destination == 1 && selectedAlbum != null -> selectedAlbum!!.images
+        destination == 2 -> favoriteImages
+        else -> images
+    }
+    fun toggleSelection(id: Long) {
+        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+    }
+    fun setSelection(id: Long, selected: Boolean) {
+        selectedIds = if (selected) selectedIds + id else selectedIds - id
+    }
+    fun setDateSelection(ids: List<Long>, selected: Boolean) {
+        selectedIds = if (selected) selectedIds + ids else selectedIds - ids.toSet()
+    }
+    fun clearSelection() { selectedIds = emptySet() }
+    fun shareSelection() {
+        val selected = activeMedia.filter { it.id in selectedIds }
+        if (selected.isEmpty()) return
+        val uris = ArrayList(selected.map { it.uri })
+        val intent = Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
+            type = if (uris.size == 1) selected.first().mimeType.ifBlank { "*/*" } else "*/*"
+            if (uris.size == 1) putExtra(Intent.EXTRA_STREAM, uris.first())
+            else putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share media"))
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    val count = if (selectedIds.isNotEmpty()) "${selectedIds.size} selected"
+                        else when {
+                            destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
+                            destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
+                            destination == 2 -> "Favorites"
+                            destination == 1 -> "Albums"
+                            destination == 3 -> "Library"
+                            else -> "Photos"
+                        }
+                    AnimatedContent(count, label = "topbar title") { text -> Text(text,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                },
+                navigationIcon = {
+                    if (selectedIds.isNotEmpty()) {
+                        IconButton(onClick = ::clearSelection) { Icon(Icons.Outlined.Close, "Clear selection") }
+                    } else if (destination == 1 && selectedAlbum != null) {
+                        IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.Outlined.ArrowBack, "Albums") }
+                    } else if (destination == 3 && librarySection != null) {
+                        IconButton(onClick = { librarySection = null }) { Icon(Icons.Outlined.ArrowBack, "Library") }
+                    }
+                },
+                actions = {
+                    if (selectedIds.isNotEmpty()) {
+                        if (destination == 3 && librarySection == "trash") {
+                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onRestore(selected) }) {
+                                Icon(Icons.Outlined.RestoreFromTrash, "Restore selected")
+                            }
+                        }
+                        IconButton(onClick = ::shareSelection) { Icon(Icons.Outlined.Share, "Share selected") }
+                        IconButton(onClick = {
+                            val selected = activeMedia.filter { it.id in selectedIds }
+                            clearSelection(); if (destination == 3 && librarySection == "trash") onDeletePermanently(selected) else onTrash(selected)
+                        }) { Icon(Icons.Outlined.DeleteOutline, "Delete selected") }
+                        Box {
+                            IconButton(onClick = { selectionMenuExpanded = true }) {
+                                Icon(Icons.Outlined.MoreVert, "More selection actions")
+                            }
+                            DropdownMenu(selectionMenuExpanded, onDismissRequest = { selectionMenuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Select all") }, leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
+                                    onClick = { selectionMenuExpanded = false; selectedIds = activeMedia.mapTo(mutableSetOf()) { it.id } })
+                                if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
+                                    DropdownMenuItem(text = { Text("Set as album cover") }, leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
+                                        onClick = { selectionMenuExpanded = false; onSetAlbumCover(selectedAlbum!!.id, selectedIds.first()); clearSelection() })
+                                }
+                                if (destination == 3 && librarySection == "locked") {
+                                    DropdownMenuItem(text = { Text("Remove from Locked") }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
+                                        onClick = { selectionMenuExpanded = false; val ids = selectedIds; clearSelection(); onSetLocked(ids, false) })
+                                } else if (!(destination == 3 && librarySection == "trash")) {
+                                    DropdownMenuItem(text = { Text("Move to Locked") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                        onClick = { selectionMenuExpanded = false; val ids = selectedIds; clearSelection(); onSetLocked(ids, true) })
+                                }
+                                DropdownMenuItem(text = { Text("Favorite") }, leadingIcon = { Icon(Icons.Outlined.FavoriteBorder, null) },
+                                    onClick = {
+                                        selectionMenuExpanded = false
+                                        val makeFavorite = selectedIds.any { it !in favorites }
+                                        selectedIds.forEach { id -> if ((id in favorites) != makeFavorite) onToggleFavorite(id) }
+                                        clearSelection()
+                                    })
+                            }
+                        }
+                    } else {
+                        if (destination == 3 && librarySection == "trash" && trashed.isNotEmpty()) {
+                            TextButton(onClick = { confirmEmptyTrash = true }) {
+                                Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Empty", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (destination != 1 || selectedAlbum != null) {
+                            IconButton(onClick = {
+                                compactGrid = !compactGrid
+                                customCellSize = if (compactGrid) 80.dp else 112.dp
+                            }) {
+                                Icon(Icons.Outlined.GridView, if (compactGrid) "Comfortable grid" else "Compact grid")
+                            }
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+            )
+        },
+        bottomBar = {
+          if (selectedIds.isEmpty()) {
+            NavigationBar {
+                labels.forEachIndexed { index, label ->
+                    NavigationBarItem(
+                        selected = destination == index,
+                        onClick = { tabScope.launch {
+                            tabPagerState.animateScrollToPage(index, animationSpec = tween(240, easing = FastOutSlowInEasing))
+                        } },
+                        icon = { AnimatedNavigationIcon(icons[index], destination == index, label) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+          }
+        },
+    ) { padding ->
+      when {
+        loading && images.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        error != null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(error) }
+        else -> HorizontalPager(
+          state = tabPagerState,
+          beyondViewportPageCount = 3,
+          userScrollEnabled = selectedIds.isEmpty(),
+          modifier = Modifier.fillMaxSize(),
+        ) { page ->
+          when (page) {
+            0 -> if (images.isNotEmpty()) PhotoGrid(
+              images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+              selectedIds = selectedIds,
+              onToggleSelection = if (onPick == null) ::toggleSelection else null,
+              onSetSelection = if (onPick == null) ::setSelection else null,
+              onSetDateSelection = if (onPick == null) ::setDateSelection else null,
+            ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = images; selectedId = it.id } }
+            else EmptyState("No photos found", padding)
+            1 -> if (selectedAlbum != null) PhotoGrid(
+              selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+              selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
+              onSetSelection = if (onPick == null) ::setSelection else null,
+            ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
+            else AlbumsGrid(images, padding, albumGridState, pinnedAlbums, albumCovers, albumSort, albumOrder,
+                onTogglePinnedAlbum, onSetAlbumSort, onSetAlbumOrder) { selectedAlbumId = it.id }
+            else -> {
+                if (page == 3) {
+                    when (librarySection) {
+                        "trash" -> if (trashed.isEmpty()) EmptyState("Trash is empty", padding) else PhotoGrid(
+                            trashed, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, selectedIds = selectedIds,
+                            onSetSelection = ::setSelection) { toggleSelection(it.id) }
+                        "locked" -> if (!lockedAuthorized) {
+                            LaunchedEffect(Unit) { onRequestUnlock() }
+                            EmptyState("Unlock to view private items", padding)
+                        } else {
+                            val locked = lockedMedia
+                            if (locked.isEmpty()) EmptyState("No locked items", padding) else PhotoGrid(
+                                locked, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, selectedIds = selectedIds,
+                                onSetSelection = ::setSelection) { toggleSelection(it.id) }
+                        }
+                        "memories" -> {
+                            val today = LocalDate.now()
+                            val memories = remember(images, today) { images.filter {
+                                val date = Instant.ofEpochMilli(it.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
+                                date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth
+                            } }
+                            if (memories.isEmpty()) EmptyState("No memories for today yet", padding) else PhotoGrid(
+                                memories, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true) {
+                                viewerImages = memories; selectedId = it.id
+                            }
+                        }
+                        "formats" -> {
+                            var formatFilter by remember { mutableStateOf(MediaFormatFilter.ALL) }
+                            val allRaw = remember(images) { images.filter { it.isRaw } }
+                            val allGifs = remember(images) { images.filter { it.isGif } }
+                            val allPanos = remember(images) { images.filter { it.isPanorama } }
+                            val allMotion = remember(images) { images.filter { it.isMotionPhoto } }
+                            val allSpecial = remember(allRaw, allGifs, allPanos, allMotion) {
+                                (allRaw + allGifs + allPanos + allMotion).distinctBy { it.id }.sortedByDescending { it.dateTaken }
+                            }
+                            val currentFiltered = when (formatFilter) {
+                                MediaFormatFilter.ALL -> allSpecial
+                                MediaFormatFilter.RAW -> allRaw
+                                MediaFormatFilter.GIF -> allGifs
+                                MediaFormatFilter.PANORAMA -> allPanos
+                                MediaFormatFilter.MOTION -> allMotion
+                            }
+
+                            if (allSpecial.isEmpty()) {
+                                EmptyState("No RAW, GIF, motion photos or panoramas found", padding)
+                            } else {
+                                Column(Modifier.fillMaxSize().padding(padding)) {
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        item {
+                                            FilterChip(
+                                                selected = formatFilter == MediaFormatFilter.ALL,
+                                                onClick = { formatFilter = MediaFormatFilter.ALL },
+                                                label = { Text("All (${allSpecial.size})") },
+                                            )
+                                        }
+                                        if (allRaw.isNotEmpty()) item {
+                                            FilterChip(
+                                                selected = formatFilter == MediaFormatFilter.RAW,
+                                                onClick = { formatFilter = MediaFormatFilter.RAW },
+                                                label = { Text("RAW (${allRaw.size})") },
+                                            )
+                                        }
+                                        if (allGifs.isNotEmpty()) item {
+                                            FilterChip(
+                                                selected = formatFilter == MediaFormatFilter.GIF,
+                                                onClick = { formatFilter = MediaFormatFilter.GIF },
+                                                label = { Text("GIFs (${allGifs.size})") },
+                                            )
+                                        }
+                                        if (allPanos.isNotEmpty()) item {
+                                            FilterChip(
+                                                selected = formatFilter == MediaFormatFilter.PANORAMA,
+                                                onClick = { formatFilter = MediaFormatFilter.PANORAMA },
+                                                label = { Text("Panoramas (${allPanos.size})") },
+                                            )
+                                        }
+                                        if (allMotion.isNotEmpty()) item {
+                                            FilterChip(
+                                                selected = formatFilter == MediaFormatFilter.MOTION,
+                                                onClick = { formatFilter = MediaFormatFilter.MOTION },
+                                                label = { Text("Motion Photos (${allMotion.size})") },
+                                            )
+                                        }
+                                    }
+                                    if (currentFiltered.isEmpty()) {
+                                        EmptyState("No ${formatFilter.label} found", PaddingValues(0.dp))
+                                    } else {
+                                        PhotoGrid(
+                                            images = currentFiltered,
+                                            padding = PaddingValues(0.dp),
+                                            gridState = libraryGridState,
+                                            cellSize = photoCellSize,
+                                            onCellSizeChange = onCellSizeChange,
+                                            selectedIds = selectedIds,
+                                            onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                                            onSetSelection = if (onPick == null) ::setSelection else null,
+                                        ) {
+                                            if (selectedIds.isNotEmpty()) toggleSelection(it.id)
+                                            else if (onPick != null) onPick(it)
+                                            else { viewerImages = currentFiltered; selectedId = it.id }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "editor" -> {
+                            val editable = remember(images) { images.filterNot { it.isVideo } }
+                            if (editable.isEmpty()) EmptyState("No editable images", padding)
+                            else PhotoGrid(editable, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange) { editorImage = it }
+                        }
+                        "duplicates" -> DuplicateReviewScreen(
+                            state = duplicateState,
+                            padding = padding,
+                            onScan = onScanDuplicates,
+                            onCancel = onCancelDuplicateScan,
+                            onOpen = { group, media -> viewerImages = group.items; selectedId = media.id },
+                            onTrash = onTrash,
+                        )
+                        else -> LibraryScreen(padding, trashed.size, lockedIds.size) {
+                            librarySection = it
+                        }
+                    }
+                    return@HorizontalPager
+                }
+                if (favoriteImages.isEmpty()) EmptyState("Favorite photos appear here", padding)
+                else PhotoGrid(favoriteImages, padding, favoriteGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                    selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                    onSetSelection = if (onPick == null) ::setSelection else null) {
+                    if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = favoriteImages; selectedId = it.id }
+                }
+            }
+          }
+        }
+      }
+    }
+
+    if (confirmEmptyTrash) {
+        AlertDialog(
+            onDismissRequest = { confirmEmptyTrash = false },
+            title = { Text("Empty Trash?") },
+            text = { Text("Permanently delete all ${trashed.size} item${if (trashed.size != 1) "s" else ""} from your device? This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmEmptyTrash = false
+                    onDeletePermanently(trashed)
+                }) {
+                    Text("Empty Trash", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmEmptyTrash = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    BackHandler(enabled = selectedIds.isNotEmpty()) { clearSelection() }
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum != null) { selectedAlbumId = null }
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection != null) { librarySection = null }
+    BackHandler(enabled = editorImage != null) { editorImage = null }
+
+    selectedId?.let { id ->
+        val activeImages = viewerImages ?: images
+        val index = activeImages.indexOfFirst { it.id == id }
+        if (index >= 0 && activeImages.isNotEmpty()) PhotoViewer(
+            images = activeImages,
+            initialPage = index,
+            favorites = favorites,
+            onToggleFavorite = onToggleFavorite,
+            onClose = { selectedId = null },
+            onDelete = {
+                selectedId = null
+                onTrash(listOf(it))
+            },
+            onEditMetadata = onEditMetadata,
+            onEdit = { editorImage = it; selectedId = null },
+            onLock = { onSetLocked(listOf(it.id), true); selectedId = null },
+        )
+    }
+    editorImage?.let { image ->
+        EditorScreen(image, onClose = { editorImage = null }, onSaved = { saved ->
+            if (saved) editorImage = null
+            Toast.makeText(context, if (saved) "Edited copy saved to Pictures/Iris" else "Could not save edited copy",
+                Toast.LENGTH_SHORT).show()
+        })
+    }
+}
+
+@Composable
+private fun DuplicateReviewScreen(
+    state: DuplicateScanState,
+    padding: PaddingValues,
+    onScan: () -> Unit,
+    onCancel: () -> Unit,
+    onOpen: (DuplicateGroup, MediaImage) -> Unit,
+    onTrash: (List<MediaImage>) -> Unit,
+) {
+    var selectedIds by remember(state.groups) {
+        mutableStateOf(state.groups.flatMap { it.items.drop(1) }.mapTo(mutableSetOf()) { it.id }.toSet())
+    }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(padding),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Clean up with confidence", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Iris compares files and small on-device visual fingerprints. Photos never leave your phone, and nothing is removed without Android's confirmation.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when {
+                        state.scanning -> {
+                            val progress = if (state.total == 0) 0f else state.done.toFloat() / state.total
+                            LinearProgressIndicator({ progress }, Modifier.fillMaxWidth())
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text("Comparing ${state.done} of ${state.total}", style = MaterialTheme.typography.labelLarge)
+                                TextButton(onClick = onCancel) { Text("Cancel") }
+                            }
+                        }
+                        else -> Button(onClick = onScan) { Text(if (state.hasScanned) "Scan again" else "Scan library") }
+                    }
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        if (state.hasScanned && state.groups.isEmpty() && state.error == null) {
+            item { Text("Your library looks clean — no convincing duplicates found.",
+                modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium) }
+        }
+        if (state.groups.isNotEmpty()) {
+            item {
+                val selected = state.groups.flatMap { it.items }.filter { it.id in selectedIds }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${state.groups.size} groups", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("${selected.size} suggested for removal · ${formatBytes(selected.sumOf { it.sizeBytes })}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Button(enabled = selected.isNotEmpty(), onClick = { onTrash(selected) }) { Text("Review delete") }
+                }
+            }
+            items(state.groups, key = { group -> group.items.joinToString { it.id.toString() } }) { group ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (group.exact) "Exact copies" else "Similar photos", fontWeight = FontWeight.SemiBold)
+                            Text("Save up to ${formatBytes(group.reclaimableBytes)}",
+                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        LazyRow(contentPadding = PaddingValues(horizontal = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(group.items, key = { it.id }) { media ->
+                                val selected = media.id in selectedIds
+                                Box(Modifier.size(126.dp).clip(RoundedCornerShape(16.dp))
+                                    .clickable { selectedIds = selectedIds.toMutableSet().apply {
+                                        if (!add(media.id)) remove(media.id)
+                                    } }) {
+                                    MediaThumbnail(media, Modifier.fillMaxSize())
+                                    Surface(Modifier.align(Alignment.TopEnd).padding(6.dp),
+                                        shape = RoundedCornerShape(50),
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = .86f)) {
+                                        Icon(if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Close,
+                                            if (selected) "Remove" else "Keep", Modifier.padding(5.dp).size(18.dp),
+                                            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    TextButton(onClick = { onOpen(group, media) },
+                                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))) { Text("Preview") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)
+    bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024 -> "%.0f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
+}
+
+@Composable
+private fun AnimatedNavigationIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    label: String,
+) {
+    val scale by animateFloatAsState(
+        if (selected) 1.16f else 1f,
+        tween(260, easing = FastOutSlowInEasing),
+        label = "navigation icon scale",
+    )
+    val rotation by animateFloatAsState(
+        if (selected) 0f else -7f,
+        tween(300, easing = FastOutSlowInEasing),
+        label = "navigation icon rotation",
+    )
+    Icon(icon, label, Modifier.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+        rotationZ = rotation
+    })
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhotoGrid(
+    images: List<MediaImage>,
+    padding: PaddingValues,
+    gridState: LazyGridState,
+    cellSize: androidx.compose.ui.unit.Dp,
+    onCellSizeChange: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
+    showTimeline: Boolean = false,
+    selectedIds: Set<Long> = emptySet(),
+    onToggleSelection: ((Long) -> Unit)? = null,
+    onSetSelection: ((Long, Boolean) -> Unit)? = null,
+    onSetDateSelection: ((List<Long>, Boolean) -> Unit)? = null,
+    onOpen: (MediaImage) -> Unit,
+) {
+    val groups = remember(images, showTimeline) {
+        if (showTimeline) {
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            val yesterday = today.minusDays(1)
+            val dayCache = HashMap<LocalDate, String>()
+            images.groupBy { image ->
+                val date = Instant.ofEpochMilli(image.dateTaken).atZone(zone).toLocalDate()
+                dayCache.getOrPut(date) {
+                    when (date) {
+                        today -> "Today"
+                        yesterday -> "Yesterday"
+                        else -> date.format(if (date.year == today.year) timelinePatternSameYear else timelinePatternOtherYear)
+                    }
+                }
+            }.entries.toList()
+        } else listOf("" to images).map { object : Map.Entry<String, List<MediaImage>> {
+            override val key = it.first
+            override val value = it.second
+        } }
+    }
+    val timelineItems = remember(groups, showTimeline) {
+        buildList<MediaImage?> {
+            groups.forEach { group ->
+                if (showTimeline) add(null)
+                addAll(group.value)
+            }
+        }
+    }
+    var scrubberDragging by remember { mutableStateOf(false) }
+    var scrubTargetIndex by remember(timelineItems) { mutableIntStateOf(0) }
+    var suppressReleaseClickId by remember { mutableStateOf<Long?>(null) }
+    val scrubberScope = rememberCoroutineScope()
+    val scrollFraction by remember(timelineItems) { derivedStateOf {
+        val index = if (scrubberDragging) scrubTargetIndex else gridState.firstVisibleItemIndex
+        index.toFloat() / timelineItems.lastIndex.coerceAtLeast(1)
+    } }
+    val visibleDate by remember(timelineItems) { derivedStateOf {
+        if (timelineItems.isEmpty()) return@derivedStateOf null
+        val visibleIndex = if (scrubberDragging) scrubTargetIndex else gridState.firstVisibleItemIndex
+        val index = visibleIndex.coerceIn(0, timelineItems.lastIndex)
+        var found: MediaImage? = null
+        for (i in index..timelineItems.lastIndex) {
+            val item = timelineItems[i]
+            if (item != null) {
+                found = item
+                break
+            }
+        }
+        if (found == null) {
+            for (i in index downTo 0) {
+                val item = timelineItems[i]
+                if (item != null) {
+                    found = item
+                    break
+                }
+            }
+        }
+        found
+    } }
+    val currentSelection by rememberUpdatedState(selectedIds)
+    val currentSetSelection by rememberUpdatedState(onSetSelection)
+    val currentCellSize by rememberUpdatedState(cellSize)
+    val currentOnCellSizeChange by rememberUpdatedState(onCellSizeChange)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .pointerInput(Unit) {
+                if (currentOnCellSizeChange == null) return@pointerInput
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val downChanges = event.changes.filter { it.pressed }
+                        if (downChanges.size >= 2) {
+                            val zoom = event.calculateZoom()
+                            if (kotlin.math.abs(zoom - 1f) > 0.001f) {
+                                val nextSize = (currentCellSize.value * zoom).coerceIn(60f, 220f)
+                                currentOnCellSizeChange?.invoke(nextSize.dp)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+    ) {
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(cellSize),
+            modifier = Modifier.fillMaxSize().pointerInput(gridState, onSetSelection) {
+                if (currentSetSelection == null) return@pointerInput
+                var selecting = true
+                val visited = mutableSetOf<Long>()
+                var autoScrollJob: kotlinx.coroutines.Job? = null
+                val edge = 72.dp.toPx()
+                fun mediaRowAt(y: Float) = gridState.layoutInfo.visibleItemsInfo.filter { item ->
+                    item.key is Long && y >= item.offset.y && y <= item.offset.y + item.size.height
+                }.mapNotNull { it.key as? Long }
+                fun mediaAt(position: Offset) = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                    item.key is Long &&
+                        position.x >= item.offset.x && position.x <= item.offset.x + item.size.width &&
+                        position.y >= item.offset.y && position.y <= item.offset.y + item.size.height
+                }?.key as? Long
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { position ->
+                        visited.clear()
+                        val id = mediaAt(position) ?: return@detectDragGesturesAfterLongPress
+                        selecting = id !in currentSelection
+                        suppressReleaseClickId = id
+                        visited.add(id)
+                        currentSetSelection?.invoke(id, selecting)
+                    },
+                    onDrag = { change, _ ->
+                        mediaRowAt(change.position.y).forEach { id ->
+                            if (visited.add(id)) currentSetSelection?.invoke(id, selecting)
+                        }
+                        val scrollBy = when {
+                            change.position.y < edge -> -38f
+                            change.position.y > size.height - edge -> 38f
+                            else -> 0f
+                        }
+                        if (scrollBy != 0f && autoScrollJob?.isActive != true) {
+                            autoScrollJob = scrubberScope.launch { gridState.scrollBy(scrollBy) }
+                        }
+                        change.consume()
+                    },
+                    onDragEnd = {
+                        autoScrollJob?.cancel(); visited.clear()
+                        scrubberScope.launch {
+                            kotlinx.coroutines.delay(250)
+                            suppressReleaseClickId = null
+                        }
+                    },
+                    onDragCancel = {
+                        autoScrollJob?.cancel(); visited.clear()
+                        suppressReleaseClickId = null
+                    },
+                )
+            },
+            contentPadding = PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            groups.forEach { group ->
+              if (showTimeline) {
+                item(key = "header:${group.key}", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
+                    val ids = remember(group.value) { group.value.map { it.id } }
+                    val wholeDateSelected = ids.isNotEmpty() && ids.all { it in selectedIds }
+                    Row(Modifier.animateItem().fillMaxWidth().combinedClickable(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) onSetDateSelection?.invoke(ids, !wholeDateSelected)
+                        },
+                        onLongClick = { onSetDateSelection?.invoke(ids, !wholeDateSelected) },
+                    ).padding(start = 12.dp, end = 12.dp, top = 18.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(group.key, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        AnimatedVisibility(selectedIds.isNotEmpty()) {
+                            Text(if (wholeDateSelected) "Deselect date" else "Select date",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+              }
+              items(group.value, key = { it.id }, contentType = { "photo" }) { image ->
+                val selected = image.id in selectedIds
+                Box(Modifier.animateItem().aspectRatio(1f).clip(RoundedCornerShape(if (selected) 14.dp else 1.dp))
+                    .combinedClickable(onClick = {
+                        if (suppressReleaseClickId == image.id) suppressReleaseClickId = null
+                        else onOpen(image)
+                    },
+                        onLongClick = null)) {
+                    MediaThumbnail(image, Modifier.fillMaxSize().graphicsLayer {
+                        val selectedScale = if (selected) .91f else 1f
+                        scaleX = selectedScale; scaleY = selectedScale
+                    })
+                    AnimatedVisibility(selected, enter = fadeIn(tween(120)) + scaleIn(tween(160)),
+                        exit = fadeOut(tween(100)) + scaleOut(tween(120)),
+                        modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)) {
+                        Icon(Icons.Filled.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(27.dp).background(MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(50)))
+                    }
+                }
+              }
+            }
+        }
+        if (showTimeline && timelineItems.size > 30) {
+            val trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .22f)
+            val thumbColor = MaterialTheme.colorScheme.primary
+            Canvas(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(28.dp)
+                .pointerInput(timelineItems.size) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        scrubberDragging = true
+                        var finalTarget = gridState.firstVisibleItemIndex
+                        try {
+                            var change = down
+                            do {
+                                val fraction = (change.position.y / size.height).coerceIn(0f, 1f)
+                                finalTarget = (fraction * timelineItems.lastIndex).toInt()
+                                scrubTargetIndex = finalTarget
+                                change.consume()
+                                change = awaitPointerEvent().changes.first()
+                            } while (change.pressed)
+                        } finally {
+                            scrubberDragging = false
+                            scrubberScope.launch { gridState.scrollToItem(finalTarget) }
+                        }
+                    }
+                }) {
+                val inset = 14.dp.toPx()
+                val trackWidth = 4.dp.toPx()
+                val thumbWidth = 8.dp.toPx()
+                val thumbHeight = 48.dp.toPx()
+                val travel = (size.height - inset * 2).coerceAtLeast(1f)
+                val centerY = inset + scrollFraction.coerceIn(0f, 1f) * travel
+                drawRoundRect(trackColor, Offset((size.width - trackWidth) / 2f, inset),
+                    Size(trackWidth, travel), CornerRadius(trackWidth))
+                drawRoundRect(thumbColor, Offset((size.width - thumbWidth) / 2f,
+                    (centerY - thumbHeight / 2f).coerceIn(inset, size.height - inset - thumbHeight)),
+                    Size(thumbWidth, thumbHeight), CornerRadius(thumbWidth))
+            }
+            AnimatedVisibility(visible = scrubberDragging,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 32.dp),
+                enter = fadeIn(tween(120)) + scaleIn(tween(180), initialScale = .88f),
+                exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = .9f)) {
+                Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.primaryContainer) {
+                    Text(visibleDate?.let { timelineLabel(it.dateTaken) } ?: "",
+                        Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        }
+    }
+}
+
+private val timelinePatternSameYear = DateTimeFormatter.ofPattern("MMMM d", Locale.getDefault())
+private val timelinePatternOtherYear = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())
+
+private fun timelineLabel(
+    timestamp: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+    today: LocalDate = LocalDate.now(zone),
+): String {
+    val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
+    return when (date) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> date.format(if (date.year == today.year) timelinePatternSameYear else timelinePatternOtherYear)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PhotoViewer(
+    images: List<MediaImage>,
+    initialPage: Int,
+    favorites: Set<Long>,
+    onToggleFavorite: (Long) -> Unit,
+    onClose: () -> Unit,
+    onDelete: (MediaImage) -> Unit,
+    onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
+    onEdit: (MediaImage) -> Unit,
+    onLock: (MediaImage) -> Unit,
+) {
+    val context = LocalContext.current
+    val activity = remember(context) {
+        generateSequence(context) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<Activity>().firstOrNull()
+    }
+    DisposableEffect(activity) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+    val handleClose = {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        onClose()
+    }
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { images.size })
+    var showInfo by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var zoomedImageId by remember { mutableStateOf<Long?>(null) }
+    val current = images[pagerState.currentPage]
+    val videoEngine = remember { Media3VideoEngine(context) }
+    DisposableEffect(videoEngine) { onDispose { videoEngine.release() } }
+    LaunchedEffect(current.id) {
+        if (current.isVideo) videoEngine.load(current.uri) else videoEngine.player.pause()
+    }
+
+    Dialog(
+        onDismissRequest = handleClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF080808)) {
+          Box(Modifier.fillMaxSize()) {
+            HorizontalPager(
+                state = pagerState,
+                beyondViewportPageCount = 1,
+                userScrollEnabled = zoomedImageId != current.id,
+            ) { page ->
+                val media = images[page]
+                if (media.isVideo) {
+                    VideoPage(
+                        media = media,
+                        engine = videoEngine,
+                        active = page == pagerState.currentPage,
+                        onTap = { controlsVisible = !controlsVisible },
+                        controlsVisible = controlsVisible,
+                        onZoomChanged = { zoomed -> zoomedImageId = if (zoomed) media.id else null },
+                    )
+                } else {
+                    ZoomablePhoto(
+                        image = media,
+                        onTap = { controlsVisible = !controlsVisible },
+                        onZoomChanged = { zoomed ->
+                            zoomedImageId = if (zoomed) media.id else null
+                        },
+                    )
+                }
+            }
+            AnimatedVisibility(
+              visible = controlsVisible,
+              modifier = Modifier.align(Alignment.TopCenter),
+              enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { -it / 5 },
+              exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 5 },
+            ) {
+              Box(Modifier.fillMaxWidth().height(156.dp)) {
+              Box(
+                modifier = Modifier.fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .82f), Color.Transparent))),
+              )
+              Row(
+                modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, "Back", tint = Color.White) }
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                    Text(current.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${pagerState.currentPage + 1} of ${images.size}", color = Color.White.copy(alpha = .7f),
+                        style = MaterialTheme.typography.labelMedium)
+                }
+                IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, "Details", tint = Color.White) }
+              }
+              }
+            }
+            AnimatedVisibility(
+              visible = controlsVisible,
+              modifier = Modifier.align(Alignment.BottomCenter),
+              enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 5 },
+              exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 5 },
+            ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 16.dp, vertical = 28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .94f),
+                shape = RoundedCornerShape(32.dp),
+                tonalElevation = 8.dp,
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+              ) {
+                ViewerAction(Icons.Outlined.Share, "Share") {
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = if (current.isVideo) "video/*" else "image/*"
+                        putExtra(Intent.EXTRA_STREAM, current.uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Share photo"))
+                }
+                ViewerAction(
+                    if (current.id in favorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    if (current.id in favorites) "Favorited" else "Favorite",
+                ) { onToggleFavorite(current.id) }
+                if (!current.isVideo) ViewerAction(Icons.Outlined.Edit, "Edit") { onEdit(current) }
+                ViewerAction(Icons.Outlined.Lock, "Lock") { onLock(current) }
+                ViewerAction(Icons.Outlined.DeleteOutline, "Delete") { confirmDelete = true }
+              }
+            }
+            }
+          }
+        }
+    }
+
+    if (showInfo) PhotoDetailsSheet(current, onDismiss = { showInfo = false }, onSave = { name, title, captured, orientation ->
+        onEditMetadata(current, name, title, captured, orientation); showInfo = false
+    })
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Move ${if (current.isVideo) "video" else "photo"} to trash?") },
+            text = { Text("Android will ask you to confirm this change.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(current) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun ZoomablePhoto(image: MediaImage, onTap: () -> Unit, onZoomChanged: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    var scale by remember(image.id) { mutableFloatStateOf(1f) }
+    var offset by remember(image.id) { mutableStateOf(Offset.Zero) }
+    var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
+    val imageRequest: ImageRequest = remember(image.id, image.uri) {
+        ImageRequest.Builder(context)
+            .data(image.uri)
+            .size(coil3.size.Size.ORIGINAL)
+            .precision(Precision.EXACT)
+            .build()
+    }
+    val painter = rememberAsyncImagePainter(model = imageRequest)
+    val painterState by painter.state.collectAsState()
+    val fullImageLoaded = painterState is AsyncImagePainter.State.Success
+
+    fun clampOffset(candidate: Offset, atScale: Float): Offset {
+        if (atScale <= 1f || containerSize == IntSize.Zero) return Offset.Zero
+        val intrinsic = painter.intrinsicSize
+        val imgWidth = if (intrinsic.width > 0f) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
+        val imgHeight = if (intrinsic.height > 0f) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
+        val imageAspect = imgWidth / imgHeight
+        val containerAspect = containerSize.width.toFloat() / containerSize.height.coerceAtLeast(1)
+        val displayedWidth: Float
+        val displayedHeight: Float
+        if (imageAspect > containerAspect) {
+            displayedWidth = containerSize.width.toFloat()
+            displayedHeight = displayedWidth / imageAspect
+        } else {
+            displayedHeight = containerSize.height.toFloat()
+            displayedWidth = displayedHeight * imageAspect
+        }
+        val maxX = (displayedWidth * atScale - containerSize.width).coerceAtLeast(0f) / 2f
+        val maxY = (displayedHeight * atScale - containerSize.height).coerceAtLeast(0f) / 2f
+        return Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (!fullImageLoaded) {
+            MediaThumbnail(image, Modifier.fillMaxSize())
+        }
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { containerSize = it }
+                .pointerInput(image.id) {
+                    detectTapGestures(
+                        onTap = { onTap() },
+                        onDoubleTap = { tapPos ->
+                            if (scale > 1.05f) {
+                                scale = 1f
+                                offset = Offset.Zero
+                                onZoomChanged(false)
+                            } else {
+                                val targetScale = 3f
+                                val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                val targetOffset = (center - tapPos) * (targetScale - 1f)
+                                offset = clampOffset(targetOffset, targetScale)
+                                scale = targetScale
+                                onZoomChanged(true)
+                            }
+                        },
+                    )
+                }
+                .pointerInput(image.id) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val event = awaitPointerEvent()
+                            val pointersDown = event.changes.count { it.pressed }
+                            if (pointersDown >= 2 || scale > 1f) {
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+                                val isTransforming = pointersDown >= 2 || panChange.getDistance() > 0.5f
+                                val calculatedScale = (scale * zoomChange).coerceIn(1f, 7f)
+                                val nextScale = if (calculatedScale < 1.02f) 1f else calculatedScale
+                                val panSpeed = 1f + (nextScale - 1f) * 0.32f
+                                offset = clampOffset(offset + panChange * panSpeed, nextScale)
+                                scale = nextScale
+                                onZoomChanged(scale > 1.01f)
+                                if (isTransforming) event.changes.forEach { it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                },
+        ) {
+            val intrinsic = painter.intrinsicSize
+            if (intrinsic.width > 0f && intrinsic.height > 0f) {
+                val imageAspect = intrinsic.width / intrinsic.height
+                val canvasAspect = size.width / size.height
+                val fitWidth: Float
+                val fitHeight: Float
+                if (imageAspect > canvasAspect) {
+                    fitWidth = size.width
+                    fitHeight = fitWidth / imageAspect
+                } else {
+                    fitHeight = size.height
+                    fitWidth = fitHeight * imageAspect
+                }
+                val left = (size.width - fitWidth) / 2f
+                val top = (size.height - fitHeight) / 2f
+
+                withTransform({
+                    translate(offset.x, offset.y)
+                    scale(scale, scale, pivot = center)
+                    translate(left, top)
+                }) {
+                    with(painter) {
+                        draw(size = androidx.compose.ui.geometry.Size(fitWidth, fitHeight))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        IconButton(onClick = onClick) { Icon(icon, label, tint = MaterialTheme.colorScheme.onSurface) }
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
+    onSave: (String, String, Long, Int) -> Unit) {
+    val context = LocalContext.current
+    val exif by produceState<ExifMetadata?>(initialValue = null, image.id, image.uri) {
+        value = withContext(Dispatchers.IO) {
+            loadExifMetadata(context, image.uri)
+        }
+    }
+    var editing by remember { mutableStateOf(false) }
+    var editedName by remember(image.id) { mutableStateOf(image.name) }
+    var editedTitle by remember(image.id) { mutableStateOf(image.title) }
+    var editedOrientation by remember(image.id) { mutableStateOf(image.orientation.toString()) }
+    val metadataFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+    var editedDate by remember(image.id) { mutableStateOf(metadataFormat.format(Date(image.dateTaken))) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(image.name.ifBlank { "Photo details" }, style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+            exif?.let { data ->
+                val hasCamera = data.cameraModel != null || data.aperture != null || data.shutterSpeed != null || data.iso != null || data.focalLength != null
+                if (hasCamera) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Outlined.CameraAlt, "Camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Text(data.cameraModel ?: "Camera Capture", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            val specs = listOfNotNull(data.aperture, data.shutterSpeed, data.focalLength, data.iso).joinToString(" · ")
+                            if (specs.isNotBlank()) {
+                                Text(specs, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (data.flash != null) {
+                                Text(data.flash, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                if (data.latitude != null && data.longitude != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Outlined.LocationOn, "Location", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Text("Location", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                }
+                                Text("%.4f, %.4f".format(Locale.US, data.latitude, data.longitude),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = {
+                                val uri = Uri.parse("geo:${data.latitude},${data.longitude}?q=${data.latitude},${data.longitude}(Photo+Location)")
+                                val intent = Intent(Intent.ACTION_VIEW, uri)
+                                runCatching { context.startActivity(intent) }
+                            }) {
+                                Icon(Icons.Outlined.Map, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Map")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (image.title.isNotBlank()) DetailBlock("Title", image.title)
+            if (image.description.isNotBlank()) DetailBlock("Description", image.description)
+            DetailItem("Captured", DateFormat.getDateTimeInstance().format(Date(image.dateTaken)))
+            DetailItem("Resolution", "${image.width} × ${image.height}")
+            DetailItem("Type", image.mimeType.ifBlank { if (image.isVideo) "Video" else "Image" })
+            DetailItem("Size", formatFileSize(image.sizeBytes))
+            if (image.orientation != 0) DetailItem("Orientation", "${image.orientation}°")
+            if (image.isVideo) DetailItem("Duration", formatMediaDuration(image.durationMs))
+            DetailBlock("Path", image.path)
+            if (!image.isVideo) Button(onClick = { editing = true }, Modifier.fillMaxWidth()) { Text("Edit metadata") }
+        }
+    }
+    if (editing) AlertDialog(
+        onDismissRequest = { editing = false },
+        title = { Text("Edit metadata") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.material3.OutlinedTextField(editedName, { editedName = it },
+                label = { Text("File name") }, singleLine = true)
+            androidx.compose.material3.OutlinedTextField(editedTitle, { editedTitle = it },
+                label = { Text("Title") }, singleLine = true)
+            androidx.compose.material3.OutlinedTextField(editedDate, { editedDate = it },
+                label = { Text("Captured · yyyy-MM-dd HH:mm") }, singleLine = true)
+            androidx.compose.material3.OutlinedTextField(editedOrientation, { editedOrientation = it.filter(Char::isDigit) },
+                label = { Text("Orientation · 0, 90, 180 or 270") }, singleLine = true)
+            Text("Android will ask before changing media owned by another app.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } },
+        confirmButton = { TextButton(onClick = {
+            val timestamp = runCatching { metadataFormat.parse(editedDate)?.time }.getOrNull()
+            val orientation = editedOrientation.toIntOrNull()
+            if (editedName.isNotBlank() && timestamp != null && orientation in listOf(0, 90, 180, 270)) {
+                editing = false; onSave(editedName.trim(), editedTitle.trim(), timestamp, orientation!!)
+            }
+        }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
+    )
+}
+
+private fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)
+    bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
+}
+
+private fun formatMediaDuration(durationMs: Long): String {
+    val seconds = durationMs / 1_000
+    return "%d:%02d".format(seconds / 60, seconds % 60)
+}
+
+@Composable
+private fun DetailItem(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun DetailBlock(label: String, value: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        SelectionContainer {
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(message: String, padding: PaddingValues) {
+    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+        Text(message, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

@@ -1,0 +1,44 @@
+# Built artifacts
+bin/
+gen/
+out/
+build/
+app/build/
+
+# Gradle files
+.gradle/
+.kotlin/
+.navigation/
+
+# Local configuration & keys
+local.properties
+.signing/
+*.jks
+*.keystore
+
+# Log files
+*.log
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# Device / Emulator / Test debug files
+*.apk
+*.ap_
+*.dex
+iris_widget_*.png
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
