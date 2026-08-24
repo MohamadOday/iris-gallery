@@ -133,6 +133,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1589,8 +1590,9 @@ private fun ZoomablePhoto(
     fun clampOffset(candidate: Offset, atScale: Float): Offset {
         if (atScale <= 1f || containerSize == IntSize.Zero) return Offset.Zero
         val intrinsic = painter.intrinsicSize
-        val imgWidth = if (intrinsic.width > 0f) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
-        val imgHeight = if (intrinsic.height > 0f) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
+        val hasIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
+        val imgWidth = if (hasIntrinsic) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
+        val imgHeight = if (hasIntrinsic) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
         val imageAspect = imgWidth / imgHeight
         val containerAspect = containerSize.width.toFloat() / containerSize.height.coerceAtLeast(1)
         val displayedWidth: Float
@@ -1657,8 +1659,12 @@ private fun ZoomablePhoto(
                 },
         ) {
             val intrinsic = painter.intrinsicSize
-            if (intrinsic.width > 0f && intrinsic.height > 0f) {
-                val imageAspect = intrinsic.width / intrinsic.height
+            val hasValidIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
+            val imgWidth = if (hasValidIntrinsic) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
+            val imgHeight = if (hasValidIntrinsic) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
+
+            if (imgWidth > 0f && imgHeight > 0f && size.width > 0f && size.height > 0f) {
+                val imageAspect = imgWidth / imgHeight
                 val canvasAspect = size.width / size.height
                 val fitWidth: Float
                 val fitHeight: Float
@@ -1677,8 +1683,10 @@ private fun ZoomablePhoto(
                     scale(scale, scale, pivot = center)
                     translate(left, top)
                 }) {
-                    with(painter) {
-                        draw(size = androidx.compose.ui.geometry.Size(fitWidth, fitHeight))
+                    if (fullImageLoaded) {
+                        with(painter) {
+                            draw(size = androidx.compose.ui.geometry.Size(fitWidth, fitHeight))
+                        }
                     }
                 }
             }
