@@ -18,6 +18,14 @@
 
 ---
 
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_photos_timeline.png" width="18%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_albums_grid.png" width="18%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_photo_viewer.png" width="18%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_photo_editor.png" width="18%" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8_app_lock.png" width="18%" />
+</p>
+
 Iris Gallery is designed to be a private, responsive, and customizable local media viewer. It has zero network permissions, opens instantly, and stays out of your way.
 
 ## Highlights

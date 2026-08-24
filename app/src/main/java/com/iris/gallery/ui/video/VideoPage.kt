@@ -21,6 +21,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -109,9 +111,13 @@ fun VideoPage(
 
     fun duration() = engine.player.duration.takeIf { it > 0 } ?: media.durationMs
     fun clamp(candidate: Offset, zoom: Float): Offset {
+        if (zoom <= 1f || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
         val maxX = size.width * (zoom - 1f) / 2f
         val maxY = size.height * (zoom - 1f) / 2f
-        return if (zoom <= 1f) Offset.Zero else Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
+        val clampedX = candidate.x.coerceIn(-maxX, maxX)
+        val clampedY = candidate.y.coerceIn(-maxY, maxY)
+        if (clampedX.isNaN() || clampedY.isNaN()) return Offset.Zero
+        return Offset(clampedX, clampedY)
     }
 
     LaunchedEffect(engine, active, autoPlay, loop) {
@@ -214,11 +220,32 @@ fun VideoPage(
                 do {
                     val event = awaitPointerEvent()
                     val pointers = event.changes.count { it.pressed }
-                    if (pointers >= 2 || scale > 1f) {
-                        val calculated = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                    if (pointers >= 2 || (pointers == 1 && scale > 1f)) {
+                        val zoomChange = event.calculateZoom()
+                        val panChange = event.calculatePan()
+                        val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
+                        val validPan = if (panChange.isSpecified && !panChange.x.isNaN() && !panChange.y.isNaN()) panChange else Offset.Zero
+
+                        val calculated = (scale * validZoom).coerceIn(1f, 5f)
                         val next = if (calculated < 1.02f) 1f else calculated
-                        offset = clamp(offset + event.calculatePan() * (1f + (next - 1f) * .32f), next)
-                        scale = next; onZoomChanged(next > 1f); event.changes.forEach { it.consume() }
+
+                        if (pointers >= 2 && size != IntSize.Zero) {
+                            val centroid = event.calculateCentroid(useCurrent = true)
+                            if (centroid.isSpecified && !centroid.x.isNaN() && !centroid.y.isNaN()) {
+                                val center = Offset(size.width / 2f, size.height / 2f)
+                                val effectiveZoom = next / scale
+                                val focalOffset = (offset + validPan) + (centroid - center - offset) * (1f - effectiveZoom)
+                                offset = clamp(focalOffset, next)
+                            } else {
+                                offset = clamp(offset + validPan, next)
+                            }
+                        } else {
+                            offset = clamp(offset + validPan, next)
+                        }
+
+                        scale = next
+                        onZoomChanged(next > 1f)
+                        event.changes.forEach { it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
             } },

@@ -41,7 +41,7 @@ import com.iris.gallery.data.isRaw
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private object ThumbnailCache {
+internal object ThumbnailCache {
     private val maxKilobytes = (Runtime.getRuntime().maxMemory() / 1024 / 4).toInt() // 25% heap
     private val cache = object : LruCache<Long, Bitmap>(maxKilobytes) {
         override fun sizeOf(key: Long, value: Bitmap): Int = value.allocationByteCount / 1024

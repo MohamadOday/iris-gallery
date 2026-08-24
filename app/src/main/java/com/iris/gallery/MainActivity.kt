@@ -36,6 +36,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
@@ -169,6 +170,8 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.size.Precision
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.drawscope.withTransform
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.ExifMetadata
@@ -181,6 +184,7 @@ import com.iris.gallery.data.isScreenshot
 import com.iris.gallery.ui.GalleryViewModel
 import com.iris.gallery.ui.DuplicateScanState
 import com.iris.gallery.ui.MediaThumbnail
+import com.iris.gallery.ui.ThumbnailCache
 import com.iris.gallery.ui.AlbumsGrid
 import com.iris.gallery.ui.MediaAlbum
 import com.iris.gallery.ui.LibraryScreen
@@ -750,12 +754,14 @@ private fun GalleryScaffold(
             else EmptyState("No photos found", padding)
             1 -> if (selectedAlbum != null) PhotoGrid(
               selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+              showTimeline = settings.showTimelineHeaders,
               cornerStyle = settings.cornerStyle,
               gridSpacing = settings.gridSpacing,
               showVideoDuration = settings.showVideoDurationBadge,
               showFormatBadge = settings.showMediaFormatBadge,
               selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
               onSetSelection = if (onPick == null) ::setSelection else null,
+              onSetDateSelection = if (onPick == null) ::setDateSelection else null,
             ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
             else AlbumsGrid(
                 images = images,
@@ -937,13 +943,22 @@ private fun GalleryScaffold(
                     return@HorizontalPager
                 }
                 if (favoriteImages.isEmpty()) EmptyState("Favorite photos appear here", padding)
-                else PhotoGrid(favoriteImages, padding, favoriteGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                else PhotoGrid(
+                    images = favoriteImages,
+                    padding = padding,
+                    gridState = favoriteGridState,
+                    cellSize = photoCellSize,
+                    onCellSizeChange = onCellSizeChange,
+                    showTimeline = settings.showTimelineHeaders,
                     cornerStyle = settings.cornerStyle,
                     gridSpacing = settings.gridSpacing,
                     showVideoDuration = settings.showVideoDurationBadge,
                     showFormatBadge = settings.showMediaFormatBadge,
-                    selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
-                    onSetSelection = if (onPick == null) ::setSelection else null) {
+                    selectedIds = selectedIds,
+                    onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                    onSetSelection = if (onPick == null) ::setSelection else null,
+                    onSetDateSelection = if (onPick == null) ::setDateSelection else null,
+                ) {
                     if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = favoriteImages; selectedId = it.id }
                 }
             }
@@ -1576,6 +1591,13 @@ private fun ZoomablePhoto(
     var scale by remember(image.id) { mutableFloatStateOf(1f) }
     var offset by remember(image.id) { mutableStateOf(Offset.Zero) }
     var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
+
+    // Instant zero-delay preview from memory cache while full image decodes
+    val cachedThumb = remember(image.id) { ThumbnailCache.get(image.id) }
+    val thumbPainter = remember(cachedThumb) {
+        cachedThumb?.let { BitmapPainter(it.asImageBitmap()) }
+    }
+
     val imageRequest: ImageRequest = remember(image.id, image.uri) {
         ImageRequest.Builder(context)
             .data(image.uri)
@@ -1588,7 +1610,7 @@ private fun ZoomablePhoto(
     val fullImageLoaded = painterState is AsyncImagePainter.State.Success
 
     fun clampOffset(candidate: Offset, atScale: Float): Offset {
-        if (atScale <= 1f || containerSize == IntSize.Zero) return Offset.Zero
+        if (atScale <= 1f || containerSize == IntSize.Zero || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
         val intrinsic = painter.intrinsicSize
         val hasIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
         val imgWidth = if (hasIntrinsic) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
@@ -1606,18 +1628,18 @@ private fun ZoomablePhoto(
         }
         val maxX = (displayedWidth * atScale - containerSize.width).coerceAtLeast(0f) / 2f
         val maxY = (displayedHeight * atScale - containerSize.height).coerceAtLeast(0f) / 2f
-        return Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
+        val clampedX = candidate.x.coerceIn(-maxX, maxX)
+        val clampedY = candidate.y.coerceIn(-maxY, maxY)
+        if (clampedX.isNaN() || clampedY.isNaN()) return Offset.Zero
+        return Offset(clampedX, clampedY)
     }
 
     Box(Modifier.fillMaxSize()) {
-        if (!fullImageLoaded) {
-            MediaThumbnail(image, Modifier.fillMaxSize())
-        }
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { containerSize = it }
-                .pointerInput(image.id) {
+                .pointerInput(image.id, doubleTapZoomLevel) {
                     detectTapGestures(
                         onTap = { onTap() },
                         onDoubleTap = { tapPos ->
@@ -1628,7 +1650,8 @@ private fun ZoomablePhoto(
                             } else {
                                 val targetScale = doubleTapZoomLevel
                                 val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                val targetOffset = (center - tapPos) * (targetScale - 1f)
+                                val z = targetScale / scale
+                                val targetOffset = offset + (tapPos - center - offset) * (1f - z)
                                 offset = clampOffset(targetOffset, targetScale)
                                 scale = targetScale
                                 onZoomChanged(true)
@@ -1642,14 +1665,31 @@ private fun ZoomablePhoto(
                         do {
                             val event = awaitPointerEvent()
                             val pointersDown = event.changes.count { it.pressed }
-                            if (pointersDown >= 2 || scale > 1f) {
+                            if (pointersDown >= 2 || (pointersDown == 1 && scale > 1f)) {
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
                                 val isTransforming = pointersDown >= 2 || panChange.getDistance() > 0.5f
-                                val calculatedScale = (scale * zoomChange).coerceIn(1f, 7f)
+
+                                val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
+                                val validPan = if (panChange.isSpecified && !panChange.x.isNaN() && !panChange.y.isNaN()) panChange else Offset.Zero
+
+                                val calculatedScale = (scale * validZoom).coerceIn(1f, 7f)
                                 val nextScale = if (calculatedScale < 1.02f) 1f else calculatedScale
-                                val panSpeed = 1f + (nextScale - 1f) * 0.32f
-                                offset = clampOffset(offset + panChange * panSpeed, nextScale)
+
+                                if (pointersDown >= 2 && containerSize != IntSize.Zero) {
+                                    val centroid = event.calculateCentroid(useCurrent = true)
+                                    if (centroid.isSpecified && !centroid.x.isNaN() && !centroid.y.isNaN()) {
+                                        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                        val effectiveZoom = nextScale / scale
+                                        val focalOffset = (offset + validPan) + (centroid - center - offset) * (1f - effectiveZoom)
+                                        offset = clampOffset(focalOffset, nextScale)
+                                    } else {
+                                        offset = clampOffset(offset + validPan, nextScale)
+                                    }
+                                } else {
+                                    offset = clampOffset(offset + validPan, nextScale)
+                                }
+
                                 scale = nextScale
                                 onZoomChanged(scale > 1.01f)
                                 if (isTransforming) event.changes.forEach { it.consume() }
@@ -1683,9 +1723,18 @@ private fun ZoomablePhoto(
                     scale(scale, scale, pivot = center)
                     translate(left, top)
                 }) {
+                    val drawSize = androidx.compose.ui.geometry.Size(fitWidth, fitHeight)
                     if (fullImageLoaded) {
                         with(painter) {
-                            draw(size = androidx.compose.ui.geometry.Size(fitWidth, fitHeight))
+                            draw(size = drawSize)
+                        }
+                    } else if (thumbPainter != null) {
+                        with(thumbPainter) {
+                            draw(size = drawSize)
+                        }
+                    } else {
+                        with(painter) {
+                            draw(size = drawSize)
                         }
                     }
                 }
