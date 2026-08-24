@@ -145,6 +145,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.core.content.ContextCompat
@@ -176,9 +184,20 @@ import com.iris.gallery.ui.AlbumsGrid
 import com.iris.gallery.ui.MediaAlbum
 import com.iris.gallery.ui.LibraryScreen
 import com.iris.gallery.ui.EditorScreen
+import com.iris.gallery.ui.AppLockScreen
 import com.iris.gallery.ui.video.VideoPage
 import com.iris.gallery.ui.video.Media3VideoEngine
 import com.iris.gallery.data.DuplicateGroup
+import com.iris.gallery.data.SettingsPreferences
+import com.iris.gallery.data.SettingsState
+import com.iris.gallery.data.CornerStyle
+import com.iris.gallery.data.GridSpacing
+import com.iris.gallery.data.StartupTab
+import com.iris.gallery.data.ThemeMode
+import com.iris.gallery.data.AccentColor
+import com.iris.gallery.ui.SettingsScreen
+import com.iris.gallery.ui.AboutScreen
+import androidx.compose.material.icons.outlined.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -208,6 +227,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 
+private var isSessionAppUnlocked = false
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -217,9 +238,17 @@ class MainActivity : ComponentActivity() {
         val isViewAction = intent.action == Intent.ACTION_VIEW || intent.action == "com.android.camera.action.REVIEW"
         val requestedType = intent.type
         val viewUri = intent.data.takeIf { isViewAction }
+        val settingsPreferences = SettingsPreferences(this)
         setContent {
-            IrisTheme {
+            val settings by settingsPreferences.state.collectAsStateWithLifecycle()
+            IrisTheme(
+                themeMode = settings.themeMode,
+                amoledBlack = settings.amoledBlack,
+                accentColor = settings.accentColor,
+            ) {
                 GalleryApp(
+                    settings = settings,
+                    settingsPreferences = settingsPreferences,
                     requestedType = requestedType.takeIf { pickerMode },
                     initialViewUri = viewUri,
                     initialMemories = intent.getBooleanExtra("open_memories", false),
@@ -260,6 +289,8 @@ private enum class MediaFormatFilter(val label: String) {
 
 @Composable
 private fun GalleryApp(
+    settings: SettingsState,
+    settingsPreferences: SettingsPreferences,
     requestedType: String? = null,
     initialViewUri: Uri? = null,
     initialMemories: Boolean = false,
@@ -290,10 +321,15 @@ private fun GalleryApp(
         }
     }
     var lockedAuthorized by remember { mutableStateOf(false) }
+    var isAppUnlocked by remember {
+        mutableStateOf(!settings.appLockEnabled || !settings.hasPin || isSessionAppUnlocked)
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) lockedAuthorized = false
+            if (event == Lifecycle.Event.ON_STOP) {
+                lockedAuthorized = false // Only lock private vault albums
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -318,106 +354,111 @@ private fun GalleryApp(
     if (!permitted) {
         PermissionScreen { permissionLauncher.launch(permissions) }
     } else {
-        val visibleMedia = remember(state.images, requestedType, libraryState.lockedMedia) {
-            val requested = when {
-                requestedType?.startsWith("image/") == true -> state.images.filterNot { it.isVideo }
-                requestedType?.startsWith("video/") == true -> state.images.filter { it.isVideo }
-                else -> state.images
-            }
-            requested.filterNot { it.id in libraryState.lockedMedia }
-        }
-        GalleryScaffold(
-            images = visibleMedia,
-            trashed = state.trashed,
-            lockedIds = libraryState.lockedMedia,
-            lockedMedia = state.images.filter { it.id in libraryState.lockedMedia },
-            pinnedAlbums = libraryState.pinnedAlbums,
-            albumCovers = libraryState.albumCovers,
-            albumSort = libraryState.albumSort,
-            albumOrder = libraryState.albumOrder,
-            lockedAuthorized = lockedAuthorized,
-            loading = state.loading,
-            error = state.error,
-            favorites = favorites,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onSetLocked = viewModel::setLocked,
-            onTogglePinnedAlbum = viewModel::togglePinnedAlbum,
-            onSetAlbumCover = viewModel::setAlbumCover,
-            onSetAlbumSort = viewModel::setAlbumSort,
-            onSetAlbumOrder = viewModel::setAlbumOrder,
-            onRequestUnlock = {
-                val keyguard = context.getSystemService(KeyguardManager::class.java)
-                val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
-                if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
+        AnimatedContent(
+            targetState = (!settings.appLockEnabled || !settings.hasPin || isAppUnlocked),
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(320, easing = FastOutSlowInEasing)) +
+                 scaleIn(initialScale = 0.94f, animationSpec = tween(320, easing = FastOutSlowInEasing)))
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                        scaleOut(targetScale = 1.06f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+                    )
             },
-            onPick = onPick,
-            onTrash = { media ->
-                if (media.isEmpty()) return@GalleryScaffold
-                if (Build.VERSION.SDK_INT >= 30) {
-                    runCatching {
-                        val request = MediaStore.createTrashRequest(
-                            context.contentResolver,
-                            media.take(2_000).map { item ->
-                                val collection = if (item.isVideo) {
-                                    MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                                } else {
-                                    MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                                }
-                                ContentUris.withAppendedId(collection, item.id)
-                            }, true,
-                        )
-                        deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                    }.onFailure {
-                        Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show()
+            label = "AppLockTransition"
+        ) { unlocked ->
+            if (!unlocked) {
+                AppLockScreen(
+                    isPicker = onPick != null,
+                    biometricsEnabled = settings.appLockBiometricsEnabled,
+                    onVerifyPin = { pin -> settingsPreferences.verifyPin(pin) },
+                    onUnlocked = {
+                        isSessionAppUnlocked = true
+                        isAppUnlocked = true
                     }
-                } else {
-                    media.forEach { image ->
-                        try {
-                            context.contentResolver.delete(image.uri, null, null)
-                        } catch (error: RecoverableSecurityException) {
-                            if (Build.VERSION.SDK_INT >= 29) {
-                                deleteLauncher.launch(IntentSenderRequest.Builder(
-                                    error.userAction.actionIntent.intentSender).build())
-                            }
+                )
+            } else {
+                val visibleMedia = remember(state.images, requestedType, libraryState.lockedMedia) {
+                    val requested = when {
+                        requestedType?.startsWith("image/") == true -> state.images.filterNot { it.isVideo }
+                        requestedType?.startsWith("video/") == true -> state.images.filter { it.isVideo }
+                        else -> state.images
+                    }
+                    requested.filterNot { it.id in libraryState.lockedMedia }
+                }
+                GalleryScaffold(
+                    settings = settings,
+                    settingsPreferences = settingsPreferences,
+                    images = visibleMedia,
+                    trashed = state.trashed,
+                    lockedIds = libraryState.lockedMedia,
+                    lockedMedia = state.images.filter { it.id in libraryState.lockedMedia },
+                    pinnedAlbums = libraryState.pinnedAlbums,
+                    albumCovers = libraryState.albumCovers,
+                    albumSort = libraryState.albumSort,
+                    albumOrder = libraryState.albumOrder,
+                    lockedAuthorized = lockedAuthorized,
+                    loading = state.loading,
+                    error = state.error,
+                    favorites = favorites,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onSetLocked = viewModel::setLocked,
+                    onTogglePinnedAlbum = viewModel::togglePinnedAlbum,
+                    onSetAlbumCover = viewModel::setAlbumCover,
+                    onSetAlbumSort = viewModel::setAlbumSort,
+                    onSetAlbumOrder = viewModel::setAlbumOrder,
+                    onRequestUnlock = {
+                        if (!settings.biometricLockEnabled) {
+                            lockedAuthorized = true
+                        } else {
+                            val keyguard = context.getSystemService(KeyguardManager::class.java)
+                            val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
+                            if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
                         }
-                    }
-                    viewModel.refresh()
-                }
-            },
-            onRestore = { media ->
-                if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                    val request = MediaStore.createTrashRequest(context.contentResolver,
-                        media.map { canonicalMediaUri(it) }, false)
-                    deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
-            },
-            onDeletePermanently = { media ->
-                if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                    val request = MediaStore.createDeleteRequest(context.contentResolver,
-                        media.map { canonicalMediaUri(it) })
-                    deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
-            },
-            onEditMetadata = { media, name, title, captured, orientation ->
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(MediaStore.MediaColumns.TITLE, title)
-                    put(MediaStore.Images.Media.DATE_TAKEN, captured)
-                    put(MediaStore.Images.Media.ORIENTATION, orientation)
-                }
-                if (Build.VERSION.SDK_INT >= 30) runCatching {
-                    pendingMetadata = media to values
-                    val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
-                    metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                }.onFailure { pendingMetadata = null; Toast.makeText(context, "Could not request metadata access", Toast.LENGTH_LONG).show() }
-                else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
-            },
-            duplicateState = duplicateState,
-            onScanDuplicates = viewModel::scanDuplicates,
-            onCancelDuplicateScan = viewModel::cancelDuplicateScan,
-            initialMemories = initialMemories,
-            initialViewUri = initialViewUri,
-        )
+                    },
+                    onPick = onPick,
+                    onTrash = { media ->
+                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                            val request = MediaStore.createTrashRequest(context.contentResolver,
+                                media.map { canonicalMediaUri(it) }, true)
+                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                        }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                    },
+                    onRestore = { media ->
+                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                            val request = MediaStore.createTrashRequest(context.contentResolver,
+                                media.map { canonicalMediaUri(it) }, false)
+                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                        }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
+                    },
+                    onDeletePermanently = { media ->
+                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                            val request = MediaStore.createDeleteRequest(context.contentResolver,
+                                media.map { canonicalMediaUri(it) })
+                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                        }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                    },
+                    onEditMetadata = { media, name, title, captured, orientation ->
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                            put(MediaStore.MediaColumns.TITLE, title)
+                            put(MediaStore.Images.Media.DATE_TAKEN, captured)
+                            put(MediaStore.Images.Media.ORIENTATION, orientation)
+                        }
+                        if (Build.VERSION.SDK_INT >= 30) runCatching {
+                            pendingMetadata = media to values
+                            val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
+                            metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                        }.onFailure { pendingMetadata = null; Toast.makeText(context, "Could not request metadata access", Toast.LENGTH_LONG).show() }
+                        else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
+                    },
+                    duplicateState = duplicateState,
+                    onScanDuplicates = viewModel::scanDuplicates,
+                    onCancelDuplicateScan = viewModel::cancelDuplicateScan,
+                    initialMemories = initialMemories,
+                    initialViewUri = initialViewUri,
+                )
+            }
+        }
     }
 }
 
@@ -444,6 +485,8 @@ private fun PermissionScreen(onGrant: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GalleryScaffold(
+    settings: SettingsState,
+    settingsPreferences: SettingsPreferences,
     images: List<MediaImage>,
     trashed: List<MediaImage>,
     lockedIds: Set<Long>,
@@ -475,7 +518,10 @@ private fun GalleryScaffold(
     initialViewUri: Uri? = null,
 ) {
     val context = LocalContext.current
-    val tabPagerState = rememberPagerState(initialPage = if (initialMemories) 3 else 0, pageCount = { 4 })
+    val tabPagerState = rememberPagerState(
+        initialPage = if (initialMemories) 3 else settings.startupTab.pageIndex,
+        pageCount = { 4 }
+    )
     val tabScope = rememberCoroutineScope()
     val destination = tabPagerState.currentPage
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -490,8 +536,18 @@ private fun GalleryScaffold(
     var selectedAlbumId by remember { mutableStateOf<Long?>(null) }
     var librarySection by remember { mutableStateOf<String?>(if (initialMemories) "memories" else null) }
     var editorImage by remember { mutableStateOf<MediaImage?>(null) }
-    var customCellSize by remember { mutableStateOf(105.dp) }
-    var compactGrid by remember { mutableStateOf(false) }
+    var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
+    var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
+    var compactGrid by remember { mutableStateOf(settings.photoGridSize < 95f) }
+
+    LaunchedEffect(settings.photoGridSize) {
+        customCellSize = settings.photoGridSize.dp
+        compactGrid = settings.photoGridSize < 95f
+    }
+    LaunchedEffect(settings.albumGridSize) {
+        customAlbumCellSize = settings.albumGridSize.dp
+    }
+
     var confirmEmptyTrash by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var selectionMenuExpanded by remember { mutableStateOf(false) }
@@ -506,6 +562,11 @@ private fun GalleryScaffold(
     val onCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
         customCellSize = newSize
         compactGrid = newSize < 95.dp
+        settingsPreferences.setPhotoGridSize(newSize.value)
+    }
+    val onAlbumCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
+        customAlbumCellSize = newSize
+        settingsPreferences.setAlbumGridSize(newSize.value)
     }
     val favoriteImages = remember(images, favorites) { images.filter { it.id in favorites } }
     // Keep only the album identity as state. Its contents are derived atomically
@@ -560,6 +621,8 @@ private fun GalleryScaffold(
                     val count = if (selectedIds.isNotEmpty()) "${selectedIds.size} selected"
                         else when {
                             destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
+                            destination == 3 && librarySection == "settings" -> "Settings"
+                            destination == 3 && librarySection == "about" -> "About Iris"
                             destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
                             destination == 2 -> "Favorites"
                             destination == 1 -> "Albums"
@@ -625,10 +688,16 @@ private fun GalleryScaffold(
                                 Text("Empty", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
+                        if (destination == 3 && librarySection == null) {
+                            IconButton(onClick = { librarySection = "settings" }) {
+                                Icon(Icons.Outlined.Settings, "Settings")
+                            }
+                        }
                         if (destination != 1 || selectedAlbum != null) {
                             IconButton(onClick = {
                                 compactGrid = !compactGrid
                                 customCellSize = if (compactGrid) 80.dp else 112.dp
+                                settingsPreferences.setPhotoGridSize(customCellSize.value)
                             }) {
                                 Icon(Icons.Outlined.GridView, if (compactGrid) "Comfortable grid" else "Compact grid")
                             }
@@ -666,7 +735,12 @@ private fun GalleryScaffold(
         ) { page ->
           when (page) {
             0 -> if (images.isNotEmpty()) PhotoGrid(
-              images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+              images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+              showTimeline = settings.showTimelineHeaders,
+              cornerStyle = settings.cornerStyle,
+              gridSpacing = settings.gridSpacing,
+              showVideoDuration = settings.showVideoDurationBadge,
+              showFormatBadge = settings.showMediaFormatBadge,
               selectedIds = selectedIds,
               onToggleSelection = if (onPick == null) ::toggleSelection else null,
               onSetSelection = if (onPick == null) ::setSelection else null,
@@ -675,16 +749,50 @@ private fun GalleryScaffold(
             else EmptyState("No photos found", padding)
             1 -> if (selectedAlbum != null) PhotoGrid(
               selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+              cornerStyle = settings.cornerStyle,
+              gridSpacing = settings.gridSpacing,
+              showVideoDuration = settings.showVideoDurationBadge,
+              showFormatBadge = settings.showMediaFormatBadge,
               selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
               onSetSelection = if (onPick == null) ::setSelection else null,
             ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
-            else AlbumsGrid(images, padding, albumGridState, pinnedAlbums, albumCovers, albumSort, albumOrder,
-                onTogglePinnedAlbum, onSetAlbumSort, onSetAlbumOrder) { selectedAlbumId = it.id }
+            else AlbumsGrid(
+                images = images,
+                padding = padding,
+                state = albumGridState,
+                cellSize = customAlbumCellSize,
+                onCellSizeChange = onAlbumCellSizeChange,
+                cornerStyle = settings.cornerStyle,
+                gridSpacing = settings.gridSpacing,
+                showCount = settings.showAlbumCount,
+                pinned = pinnedAlbums,
+                covers = albumCovers,
+                sort = albumSort,
+                customOrder = albumOrder,
+                onTogglePinned = onTogglePinnedAlbum,
+                onSortChanged = onSetAlbumSort,
+                onOrderChanged = onSetAlbumOrder
+            ) { selectedAlbumId = it.id }
             else -> {
                 if (page == 3) {
                     when (librarySection) {
+                        "settings" -> SettingsScreen(
+                            padding = padding,
+                            settings = settings,
+                            preferences = settingsPreferences,
+                            onBack = { librarySection = null }
+                        )
+                        "about" -> AboutScreen(
+                            padding = padding,
+                            onBack = { librarySection = null }
+                        )
                         "trash" -> if (trashed.isEmpty()) EmptyState("Trash is empty", padding) else PhotoGrid(
-                            trashed, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, selectedIds = selectedIds,
+                            trashed, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                            cornerStyle = settings.cornerStyle,
+                            gridSpacing = settings.gridSpacing,
+                            showVideoDuration = settings.showVideoDurationBadge,
+                            showFormatBadge = settings.showMediaFormatBadge,
+                            selectedIds = selectedIds,
                             onSetSelection = ::setSelection) { toggleSelection(it.id) }
                         "locked" -> if (!lockedAuthorized) {
                             LaunchedEffect(Unit) { onRequestUnlock() }
@@ -692,7 +800,12 @@ private fun GalleryScaffold(
                         } else {
                             val locked = lockedMedia
                             if (locked.isEmpty()) EmptyState("No locked items", padding) else PhotoGrid(
-                                locked, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, selectedIds = selectedIds,
+                                locked, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                                cornerStyle = settings.cornerStyle,
+                                gridSpacing = settings.gridSpacing,
+                                showVideoDuration = settings.showVideoDurationBadge,
+                                showFormatBadge = settings.showMediaFormatBadge,
+                                selectedIds = selectedIds,
                                 onSetSelection = ::setSelection) { toggleSelection(it.id) }
                         }
                         "memories" -> {
@@ -702,7 +815,12 @@ private fun GalleryScaffold(
                                 date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth
                             } }
                             if (memories.isEmpty()) EmptyState("No memories for today yet", padding) else PhotoGrid(
-                                memories, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true) {
+                                memories, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+                                cornerStyle = settings.cornerStyle,
+                                gridSpacing = settings.gridSpacing,
+                                showVideoDuration = settings.showVideoDurationBadge,
+                                showFormatBadge = settings.showMediaFormatBadge,
+                            ) {
                                 viewerImages = memories; selectedId = it.id
                             }
                         }
@@ -776,6 +894,10 @@ private fun GalleryScaffold(
                                             gridState = libraryGridState,
                                             cellSize = photoCellSize,
                                             onCellSizeChange = onCellSizeChange,
+                                            cornerStyle = settings.cornerStyle,
+                                            gridSpacing = settings.gridSpacing,
+                                            showVideoDuration = settings.showVideoDurationBadge,
+                                            showFormatBadge = settings.showMediaFormatBadge,
                                             selectedIds = selectedIds,
                                             onToggleSelection = if (onPick == null) ::toggleSelection else null,
                                             onSetSelection = if (onPick == null) ::setSelection else null,
@@ -791,7 +913,13 @@ private fun GalleryScaffold(
                         "editor" -> {
                             val editable = remember(images) { images.filterNot { it.isVideo } }
                             if (editable.isEmpty()) EmptyState("No editable images", padding)
-                            else PhotoGrid(editable, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange) { editorImage = it }
+                            else PhotoGrid(
+                                editable, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                                cornerStyle = settings.cornerStyle,
+                                gridSpacing = settings.gridSpacing,
+                                showVideoDuration = settings.showVideoDurationBadge,
+                                showFormatBadge = settings.showMediaFormatBadge,
+                            ) { editorImage = it }
                         }
                         "duplicates" -> DuplicateReviewScreen(
                             state = duplicateState,
@@ -809,6 +937,10 @@ private fun GalleryScaffold(
                 }
                 if (favoriteImages.isEmpty()) EmptyState("Favorite photos appear here", padding)
                 else PhotoGrid(favoriteImages, padding, favoriteGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                    cornerStyle = settings.cornerStyle,
+                    gridSpacing = settings.gridSpacing,
+                    showVideoDuration = settings.showVideoDurationBadge,
+                    showFormatBadge = settings.showMediaFormatBadge,
                     selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
                     onSetSelection = if (onPick == null) ::setSelection else null) {
                     if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = favoriteImages; selectedId = it.id }
@@ -850,6 +982,9 @@ private fun GalleryScaffold(
             images = activeImages,
             initialPage = index,
             favorites = favorites,
+            autoPlay = settings.autoPlayVideo,
+            loop = settings.loopVideo,
+            doubleTapZoomLevel = settings.doubleTapZoomLevel,
             onToggleFavorite = onToggleFavorite,
             onClose = { selectedId = null },
             onDelete = {
@@ -1003,6 +1138,10 @@ private fun PhotoGrid(
     cellSize: androidx.compose.ui.unit.Dp,
     onCellSizeChange: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
     showTimeline: Boolean = false,
+    cornerStyle: CornerStyle = CornerStyle.ROUNDED,
+    gridSpacing: GridSpacing = GridSpacing.STANDARD,
+    showVideoDuration: Boolean = true,
+    showFormatBadge: Boolean = true,
     selectedIds: Set<Long> = emptySet(),
     onToggleSelection: ((Long) -> Unit)? = null,
     onSetSelection: ((Long, Boolean) -> Unit)? = null,
@@ -1149,9 +1288,9 @@ private fun PhotoGrid(
                     },
                 )
             },
-            contentPadding = PaddingValues(horizontal = 3.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            contentPadding = PaddingValues(horizontal = gridSpacing.dp.dp, vertical = (gridSpacing.dp + 3).dp),
+            horizontalArrangement = Arrangement.spacedBy(gridSpacing.dp.dp),
+            verticalArrangement = Arrangement.spacedBy(gridSpacing.dp.dp),
         ) {
             groups.forEach { group ->
               if (showTimeline) {
@@ -1177,16 +1316,21 @@ private fun PhotoGrid(
               }
               items(group.value, key = { it.id }, contentType = { "photo" }) { image ->
                 val selected = image.id in selectedIds
-                Box(Modifier.animateItem().aspectRatio(1f).clip(RoundedCornerShape(if (selected) 14.dp else 1.dp))
+                Box(Modifier.animateItem().aspectRatio(1f).clip(RoundedCornerShape(if (selected) 14.dp else cornerStyle.dp.dp))
                     .combinedClickable(onClick = {
                         if (suppressReleaseClickId == image.id) suppressReleaseClickId = null
                         else onOpen(image)
                     },
                         onLongClick = null)) {
-                    MediaThumbnail(image, Modifier.fillMaxSize().graphicsLayer {
-                        val selectedScale = if (selected) .91f else 1f
-                        scaleX = selectedScale; scaleY = selectedScale
-                    })
+                    MediaThumbnail(
+                        image = image,
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            val selectedScale = if (selected) .91f else 1f
+                            scaleX = selectedScale; scaleY = selectedScale
+                        },
+                        showVideoDuration = showVideoDuration,
+                        showFormatBadge = showFormatBadge,
+                    )
                     AnimatedVisibility(selected, enter = fadeIn(tween(120)) + scaleIn(tween(160)),
                         exit = fadeOut(tween(100)) + scaleOut(tween(120)),
                         modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)) {
@@ -1272,6 +1416,9 @@ private fun PhotoViewer(
     images: List<MediaImage>,
     initialPage: Int,
     favorites: Set<Long>,
+    autoPlay: Boolean = true,
+    loop: Boolean = true,
+    doubleTapZoomLevel: Float = 2.5f,
     onToggleFavorite: (Long) -> Unit,
     onClose: () -> Unit,
     onDelete: (MediaImage) -> Unit,
@@ -1322,13 +1469,16 @@ private fun PhotoViewer(
                         media = media,
                         engine = videoEngine,
                         active = page == pagerState.currentPage,
-                        onTap = { controlsVisible = !controlsVisible },
                         controlsVisible = controlsVisible,
+                        autoPlay = autoPlay,
+                        loop = loop,
+                        onTap = { controlsVisible = !controlsVisible },
                         onZoomChanged = { zoomed -> zoomedImageId = if (zoomed) media.id else null },
                     )
                 } else {
                     ZoomablePhoto(
                         image = media,
+                        doubleTapZoomLevel = doubleTapZoomLevel,
                         onTap = { controlsVisible = !controlsVisible },
                         onZoomChanged = { zoomed ->
                             zoomedImageId = if (zoomed) media.id else null
@@ -1415,7 +1565,12 @@ private fun PhotoViewer(
 }
 
 @Composable
-private fun ZoomablePhoto(image: MediaImage, onTap: () -> Unit, onZoomChanged: (Boolean) -> Unit) {
+private fun ZoomablePhoto(
+    image: MediaImage,
+    doubleTapZoomLevel: Float = 2.5f,
+    onTap: () -> Unit,
+    onZoomChanged: (Boolean) -> Unit,
+) {
     val context = LocalContext.current
     var scale by remember(image.id) { mutableFloatStateOf(1f) }
     var offset by remember(image.id) { mutableStateOf(Offset.Zero) }
@@ -1469,7 +1624,7 @@ private fun ZoomablePhoto(image: MediaImage, onTap: () -> Unit, onZoomChanged: (
                                 offset = Offset.Zero
                                 onZoomChanged(false)
                             } else {
-                                val targetScale = 3f
+                                val targetScale = doubleTapZoomLevel
                                 val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
                                 val targetOffset = (center - tapPos) * (targetScale - 1f)
                                 offset = clampOffset(targetOffset, targetScale)

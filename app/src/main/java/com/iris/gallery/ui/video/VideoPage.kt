@@ -83,6 +83,8 @@ fun VideoPage(
     engine: VideoEngine,
     active: Boolean,
     controlsVisible: Boolean,
+    autoPlay: Boolean = true,
+    loop: Boolean = true,
     onTap: () -> Unit,
     onZoomChanged: (Boolean) -> Unit,
 ) {
@@ -112,12 +114,14 @@ fun VideoPage(
         return if (zoom <= 1f) Offset.Zero else Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
     }
 
-    LaunchedEffect(engine, active) {
+    LaunchedEffect(engine, active, autoPlay, loop) {
+        engine.player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(value: Boolean) { playing = value }
         }
         engine.player.addListener(listener)
-        if (!active) engine.player.pause()
+        if (active && autoPlay) engine.player.play()
+        else if (!active) engine.player.pause()
         try { while (true) {
             if (!scrubbing && duration() > 0) progress = engine.player.currentPosition.toFloat() / duration()
             delay(200)

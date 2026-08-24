@@ -77,7 +77,12 @@ private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
 }
 
 @Composable
-fun MediaThumbnail(image: MediaImage, modifier: Modifier = Modifier) {
+fun MediaThumbnail(
+    image: MediaImage,
+    modifier: Modifier = Modifier,
+    showVideoDuration: Boolean = true,
+    showFormatBadge: Boolean = true,
+) {
     val context = LocalContext.current
     val cached = remember(image.id) { ThumbnailCache.get(image.id) }
     var bitmap by remember(image.id) { mutableStateOf(cached) }
@@ -98,19 +103,23 @@ fun MediaThumbnail(image: MediaImage, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        if (image.isVideo) {
+        if (image.isVideo && showVideoDuration) {
             Row(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
                     .background(Color.Black.copy(alpha = .68f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 4.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.PlayArrow, null, tint = Color.White.copy(alpha = .9f),
-                    modifier = Modifier.size(10.dp).padding(end = 1.dp))
-                Text(formatDuration(image.durationMs), color = Color.White.copy(alpha = .92f), fontWeight = FontWeight.Medium,
-                    style = MaterialTheme.typography.labelSmall)
+                Icon(
+                    Icons.Filled.PlayArrow, null, tint = Color.White.copy(alpha = .9f),
+                    modifier = Modifier.size(10.dp).padding(end = 1.dp)
+                )
+                Text(
+                    formatDuration(image.durationMs), color = Color.White.copy(alpha = .92f), fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
-        } else {
+        } else if (!image.isVideo && showFormatBadge) {
             val badge = when {
                 image.isRaw -> "RAW"
                 image.isGif -> "GIF"
