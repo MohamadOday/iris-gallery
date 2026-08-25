@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -1535,7 +1536,11 @@ private fun PhotoViewer(
               exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 5 },
             ) {
             Surface(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 16.dp, vertical = 28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .94f),
                 shape = RoundedCornerShape(32.dp),
                 tonalElevation = 8.dp,

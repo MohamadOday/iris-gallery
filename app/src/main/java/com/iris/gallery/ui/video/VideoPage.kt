@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -306,6 +307,7 @@ fun VideoPage(
         val compactLandscape = maxHeight < 500.dp
         Column(
             modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp).padding(horizontal = 24.dp)
+                .navigationBarsPadding()
                 .padding(top = if (compactLandscape) 8.dp else 128.dp,
                     bottom = if (compactLandscape) 116.dp else 128.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
