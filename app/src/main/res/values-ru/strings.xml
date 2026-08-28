@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">Iris Gallery</string>
+    <string name="app_description">Полностью автономная медиагалерея для Android в ботаническом стиле</string>
+    <string name="version_format">Версия %1$s (сборка %2$d)</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_photos">Фото</string>
+    <string name="tab_albums">Альбомы</string>
+    <string name="tab_favorites">Избранное</string>
+    <string name="tab_library">Библиотека</string>
+
+    <!-- Sections -->
+    <string name="section_settings">Настройки</string>
+    <string name="section_about">О приложении Iris</string>
+    <string name="section_trash">Корзина</string>
+    <string name="section_locked">Личное</string>
+    <string name="section_duplicates">Дубликаты</string>
+    <string name="section_memories">Воспоминания</string>
+
+    <!-- Top Bar & Selection -->
+    <string name="selected_count">Выбрано: %1$d</string>
+    <string name="selected_count_format">Выбрано: %1$d</string>
+    <string name="action_clear_selection">Сбросить выбор</string>
+    <string name="action_restore">Восстановить</string>
+    <string name="action_restore_selected">Восстановить выбранные</string>
+    <string name="action_share">Поделиться</string>
+    <string name="action_share_selected">Поделиться выбранными</string>
+    <string name="action_share_media">Поделиться медиа</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_delete_selected">Удалить выбранные</string>
+    <string name="action_more">Другие действия</string>
+    <string name="action_more_options">Другие параметры</string>
+    <string name="action_select_all">Выбрать все</string>
+    <string name="action_set_album_cover">Сделать обложкой альбома</string>
+    <string name="action_remove_from_locked">Убрать из личного</string>
+    <string name="action_move_to_locked">Переместить в личное</string>
+    <string name="action_favorite">В избранное</string>
+    <string name="action_favorited">В избранном</string>
+    <string name="action_empty_trash">Очистить</string>
+    <string name="action_comfortable_grid">Просторная сетка</string>
+    <string name="action_compact_grid">Компактная сетка</string>
+    <string name="action_back">Назад</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_save_copy">Сохранить копию</string>
+    <string name="action_saving">Сохранение…</string>
+    <string name="action_grant">Предоставить</string>
+    <string name="action_grant_access">Предоставить доступ</string>
+    <string name="action_use_system_popup">Использовать системный запрос</string>
+    <string name="action_close">Закрыть</string>
+    <string name="action_continue">Продолжить</string>
+    <string name="action_edit">Правка</string>
+    <string name="action_unlock">Показать</string>
+    <string name="action_lock">Скрыть</string>
+    <string name="action_details">Сведения</string>
+    <string name="action_backspace">Стереть</string>
+
+    <!-- Language & First Launch -->
+    <string name="settings_section_language">Язык и регион</string>
+    <string name="settings_language_title">Язык приложения</string>
+    <string name="settings_language_desc">Выберите предпочтительный язык интерфейса</string>
+    <string name="first_launch_lang_title">Язык приложения</string>
+    <string name="first_launch_lang_subtitle">Выберите язык для продолжения</string>
+    <string name="first_launch_lang_detected">Язык системы</string>
+
+    <!-- Permission Screen -->
+    <string name="permission_title">Ваша галерея, созданная для вас</string>
+    <string name="permission_desc">Предоставьте доступ к фото для просмотра медиатеки. Iris никогда не отправляет и не анализирует ваши фотографии.</string>
+    <string name="permission_button">Выбрать фото</string>
+
+    <!-- Empty States -->
+    <string name="empty_photos">Фотографии не найдены</string>
+    <string name="empty_favorites">Здесь будут избранные фото</string>
+    <string name="empty_trash">Корзина пуста</string>
+    <string name="empty_locked">Нет личных объектов</string>
+    <string name="empty_locked_locked_state">Разблокируйте для просмотра личных файлов</string>
+    <string name="empty_memories">На сегодня воспоминаний пока нет</string>
+    <string name="empty_editable">Нет изображений для редактирования</string>
+    <string name="empty_formats">RAW, GIF, живые фото и панорамы не найдены</string>
+    <string name="empty_special_formats">RAW, GIF, живые фото и панорамы не найдены</string>
+    <string name="empty_format_filter">%1$s не найдены</string>
+    <string name="empty_format_type">%1$s не найдены</string>
+    <string name="empty_search_albums">Альбомы по запросу «%1$s» не найдены</string>
+    <string name="empty_duplicates">Дубликаты фото не найдены</string>
+
+    <!-- Dialogs -->
+    <string name="empty_trash_dialog_title">Очистить корзину?</string>
+    <string name="empty_trash_dialog_desc">Навсегда удалить все объекты (%1$d%2$s) с устройства? Это действие нельзя отменить.</string>
+    <string name="dialog_empty_trash_title">Очистить корзину?</string>
+    <string name="dialog_empty_trash_message">Навсегда удалить все объекты (%1$d шт.) с устройства? Это действие нельзя отменить.</string>
+    <string name="dialog_empty_trash_confirm">Очистить корзину</string>
+    <string name="dialog_delete_item_title">Переместить %1$s в корзину?</string>
+    <string name="dialog_delete_item_message">Android запросит подтверждение для этого действия.</string>
+    <string name="delete_trash_video_title">Переместить видео в корзину?</string>
+    <string name="delete_trash_photo_title">Переместить фото в корзину?</string>
+    <string name="delete_trash_desc">Android запросит подтверждение для этого действия.</string>
+    <string name="delete_permanent_video_title">Удалить видео навсегда?</string>
+    <string name="delete_permanent_photo_title">Удалить фото навсегда?</string>
+    <string name="delete_permanent_desc">Этот объект будет навсегда удален из вашего личного хранилища.</string>
+    <string name="dialog_delete_vault_item_title">Удалить %1$s навсегда?</string>
+    <string name="dialog_delete_vault_item_message">Этот объект будет навсегда удален из вашего личного хранилища.</string>
+    <string name="prompt_free_vault_title">Хранилище без запросов</string>
+    <string name="prompt_free_vault_desc">Предоставление разрешения «Доступ ко всем файлам» позволяет Iris Gallery перемещать и скрывать фотографии в личном хранилище без постоянных подтверждений удаления от Android.\n\nIris работает на 100% офлайн без доступа к интернету, поэтому ваши файлы никогда не покинут устройство.</string>
+    <string name="dialog_prompt_free_vault_title">Хранилище без запросов</string>
+    <string name="dialog_prompt_free_vault_message">Предоставление разрешения «Доступ ко всем файлам» позволяет Iris Gallery перемещать и скрывать фотографии в личном хранилище без постоянных подтверждений удаления от Android.\n\nIris работает на 100% офлайн без доступа к интернету, поэтому ваши файлы никогда не покинут устройство.</string>
+
+    <!-- Media Types & Titles -->
+    <string name="media_type_photo">фото</string>
+    <string name="media_type_video">видео</string>
+    <string name="format_image">Изображение</string>
+    <string name="format_video">Видео</string>
+    <string name="media_page_indicator">%1$d из %2$d</string>
+    <string name="viewer_page_count">%1$d из %2$d</string>
+
+    <!-- Albums Screen -->
+    <string name="search_albums_placeholder">Поиск среди %1$d альбомов…</string>
+    <string name="clear_search">Очистить поиск</string>
+    <string name="sort_recent">Недавние</string>
+    <string name="sort_name">По названию</string>
+    <string name="sort_size">По размеру</string>
+    <string name="sort_custom">Свой порядок</string>
+    <string name="album_items_count">%1$d объектов</string>
+    <string name="album_pin">Закрепить альбом</string>
+    <string name="album_unpin">Открепить альбом</string>
+    <string name="action_move_up">Переместить выше</string>
+    <string name="action_move_down">Переместить ниже</string>
+
+    <!-- Library Screen Cards -->
+    <string name="library_header">Упорядочивайте и открывайте заново</string>
+    <string name="library_memories_title">Воспоминания</string>
+    <string name="library_memories_subtitle">Лучшие моменты этого дня за прошлые годы</string>
+    <string name="library_duplicates_title">Дубликаты</string>
+    <string name="library_duplicates_subtitle">Поиск точных копий и похожих фотографий</string>
+    <string name="library_locked_title">Личное</string>
+    <string name="library_locked_subtitle">%1$d личных объектов</string>
+    <string name="library_trash_title">Корзина</string>
+    <string name="library_trash_subtitle">%1$d объектов · Android удалит их через 30 дней</string>
+    <string name="library_editor_title">Редактор</string>
+    <string name="library_editor_subtitle">Создавайте улучшенные копии без изменения оригинала</string>
+    <string name="library_formats_title">Форматы медиа</string>
+    <string name="library_formats_subtitle">RAW, GIF, живые фото и панорамы</string>
+    <string name="library_settings_title">Настройки и персонализация</string>
+    <string name="library_settings_subtitle">Темы, палитры, стили сетки и жесты</string>
+    <string name="library_about_title">О приложении</string>
+    <string name="library_about_subtitle">Разработчик, открытый исходный код и сведения</string>
+
+    <!-- Media Formats Filters -->
+    <string name="format_all">Все (%1$d)</string>
+    <string name="format_raw">RAW (%1$d)</string>
+    <string name="format_gif">GIF (%1$d)</string>
+    <string name="format_panorama">Панорамы (%1$d)</string>
+    <string name="format_motion">Живые фото (%1$d)</string>
+    <string name="filter_all_count">Все (%1$d)</string>
+    <string name="filter_raw_count">RAW (%1$d)</string>
+    <string name="filter_gifs_count">GIF (%1$d)</string>
+    <string name="filter_panoramas_count">Панорамы (%1$d)</string>
+    <string name="filter_motion_count">Живые фото (%1$d)</string>
+
+    <!-- Duplicates Review Screen -->
+    <string name="duplicates_title">Дубликаты и похожие фото</string>
+    <string name="duplicates_desc">Поиск точных копий и визуально похожих кадров</string>
+    <string name="duplicates_scan_now">Сканировать</string>
+    <string name="duplicates_scanning">Сканирование…</string>
+    <string name="duplicates_summary">%1$d групп (%2$d фото)</string>
+    <string name="duplicates_keep_best_delete">Оставить лучшее, удалить выбранные (%1$d)</string>
+    <string name="duplicates_scan_count">%1$d из %2$d</string>
+    <string name="duplicates_hero_title">Безопасная очистка</string>
+    <string name="duplicates_hero_desc">Iris сравнивает файлы и локальные визуальные отпечатки. Фотографии не покидают устройство, и ничто не удаляется без подтверждения Android.</string>
+    <string name="duplicates_comparing_progress">Сравнение: %1$d из %2$d</string>
+    <string name="duplicates_scan_again">Повторить сканирование</string>
+    <string name="duplicates_scan_library">Сканировать медиатеку</string>
+    <string name="duplicates_empty_state">В медиатеке чисто — явных дубликатов не найдено.</string>
+    <string name="duplicates_groups_count">%1$d групп</string>
+    <string name="duplicates_suggested_removal">Рекомендуется удалить: %1$d · %2$s</string>
+    <string name="duplicates_review_delete">Просмотреть удаление</string>
+    <string name="duplicates_exact_copies">Точные копии</string>
+    <string name="duplicates_similar_photos">Похожие фото</string>
+    <string name="duplicates_save_up_to">Освободить до %1$s</string>
+    <string name="duplicates_remove">Удалить</string>
+    <string name="duplicates_keep">Оставить</string>
+    <string name="duplicates_preview">Предпросмотр</string>
+
+    <!-- Timeline Labels -->
+    <string name="timeline_today">Сегодня</string>
+    <string name="timeline_yesterday">Вчера</string>
+
+    <!-- Details Sheet -->
+    <string name="details_title">Сведения</string>
+    <string name="details_photo_details">Сведения о фото</string>
+    <string name="details_file_name">Имя файла</string>
+    <string name="details_title_label">Название</string>
+    <string name="details_title_field">Название</string>
+    <string name="details_desc_field">Описание</string>
+    <string name="details_date_taken">Дата съемки</string>
+    <string name="details_captured">Снято</string>
+    <string name="details_time">Время</string>
+    <string name="details_resolution">Разрешение</string>
+    <string name="details_file_size">Размер файла</string>
+    <string name="details_size">Размер</string>
+    <string name="details_location">Местоположение</string>
+    <string name="details_open_in_map">Открыть на карте</string>
+    <string name="details_map">Карта</string>
+    <string name="details_camera">Камера</string>
+    <string name="details_camera_capture">Параметры съемки</string>
+    <string name="details_camera_lens">Камера и объектив</string>
+    <string name="details_aperture">Диафрагма</string>
+    <string name="details_shutter">Выдержка</string>
+    <string name="details_iso">ISO</string>
+    <string name="details_focal_length">Фокусное расстояние</string>
+    <string name="details_dimensions">Размеры</string>
+    <string name="details_orientation">Ориентация</string>
+    <string name="details_duration">Длительность</string>
+    <string name="details_format">Формат</string>
+    <string name="details_type">Тип</string>
+    <string name="details_path">Путь</string>
+    <string name="details_edit_metadata">Изменить метаданные</string>
+    <string name="details_edit_filename">Имя файла</string>
+    <string name="details_edit_title">Название</string>
+    <string name="details_edit_captured_hint">Снято · гггг-ММ-дд ЧЧ:мм</string>
+    <string name="details_edit_orientation_hint">Ориентация · 0, 90, 180 или 270</string>
+    <string name="details_edit_permission_note">Android запросит подтверждение перед изменением файла другого приложения.</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_section_appearance">Внешний вид и тема</string>
+    <string name="settings_theme_mode">Тема оформления</string>
+    <string name="settings_theme_system">Системная</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_dark">Темная</string>
+    <string name="settings_amoled_black_title">Глубокий черный AMOLED</string>
+    <string name="settings_amoled_black_desc">Абсолютно черный фон для OLED-экранов и максимальной контрастности</string>
+    <string name="settings_material_you_title">Динамические цвета Material You</string>
+    <string name="settings_material_you_desc">Автоматический подбор акцентных цветов под обои устройства</string>
+    <string name="settings_custom_accents">Пользовательские цветовые палитры</string>
+
+    <string name="settings_section_layout">Макет и стиль сетки</string>
+    <string name="settings_corner_style">Скругление углов миниатюр</string>
+    <string name="settings_corner_sharp">Прямые (0 dp)</string>
+    <string name="settings_corner_subtle">Легкое (8 dp)</string>
+    <string name="settings_corner_rounded">Скругленные (16 dp)</string>
+    <string name="settings_corner_pill">Овальные (28 dp)</string>
+    <string name="settings_grid_spacing">Отступы сетки</string>
+    <string name="settings_spacing_compact">Компактные (2 dp)</string>
+    <string name="settings_spacing_standard">Стандартные (4 dp)</string>
+    <string name="settings_spacing_relaxed">Просторные (8 dp)</string>
+    <string name="settings_show_timeline_title">Заголовки шкалы времени</string>
+    <string name="settings_show_timeline_desc">Группировка фото по дате съемки с плавающими заголовками дней</string>
+
+    <string name="settings_section_badges">Значки и индикаторы</string>
+    <string name="settings_badge_duration_title">Длительность видео</string>
+    <string name="settings_badge_duration_desc">Отображать длительность на миниатюрах видео в сетке</string>
+    <string name="settings_badge_formats_title">Значки особых форматов</string>
+    <string name="settings_badge_formats_desc">Показывать значки на GIF, RAW, панорамах и живых фото</string>
+    <string name="settings_album_count_title">Количество элементов в альбоме</string>
+    <string name="settings_album_count_desc">Показывать число файлов под названием альбома</string>
+
+    <string name="settings_section_viewer">Просмотр и воспроизведение</string>
+    <string name="settings_autoplay_video_title">Автовоспроизведение видео</string>
+    <string name="settings_autoplay_video_desc">Начинать воспроизведение сразу при открытии видео</string>
+    <string name="settings_loop_video_title">Зацикливать видео</string>
+    <string name="settings_loop_video_desc">Непрерывно повторять воспроизведение видео</string>
+    <string name="settings_zoom_scale_title">Масштаб при двойном касании</string>
+
+    <string name="settings_section_behavior">Поведение и безопасность</string>
+    <string name="settings_startup_tab">Вкладка по умолчанию при запуске</string>
+    <string name="settings_app_lock_title">Блокировка приложения</string>
+    <string name="settings_app_lock_desc">Запрашивать PIN-код для входа в Iris Gallery и выбора медиа</string>
+    <string name="settings_change_pin">Изменить PIN-код</string>
+    <string name="settings_biometric_unlock_title">Разблокировка по отпечатку / биометрии</string>
+    <string name="settings_biometric_unlock_desc">Разрешить разблокировку Iris Gallery по отпечатку пальца</string>
+    <string name="settings_hide_vault_title">Скрывать файлы хранилища из памяти</string>
+    <string name="settings_hide_vault_desc">Перемещает защищенные фото и видео в изолированное хранилище приложения, скрывая их от других программ и проводников. Если выключено, файлы скрываются только внутри Iris Gallery.</string>
+    <string name="settings_silent_vault_title">Управление хранилищем без запросов</string>
+    <string name="settings_silent_vault_desc_granted">Доступ ко всем файлам предоставлен — операции с хранилищем выполняются без системных окон подтверждения.</string>
+    <string name="settings_silent_vault_desc_prompt">Предоставьте разрешение «Доступ ко всем файлам», чтобы Iris могла перемещать и скрывать фото в хранилище без всплывающих окон подтверждения Android.</string>
+    <string name="settings_vault_biometric_title">Биометрия для личного хранилища</string>
+    <string name="settings_vault_biometric_desc">Запрашивать данные разблокировки устройства или PIN при просмотре личного хранилища</string>
+
+    <string name="settings_section_storage">Хранилище и сброс</string>
+    <string name="settings_clear_cache">Очистить кэш миниатюр фото и видео</string>
+    <string name="settings_reset_all">Сбросить все настройки</string>
+    <string name="settings_reset_dialog_title">Сбросить все настройки?</string>
+    <string name="settings_reset_dialog_desc">Будут восстановлены стандартная тема, параметры сетки и настройки просмотра. Ваши фото, альбомы и избранное не пострадают.</string>
+    <string name="settings_reset_confirm">Сбросить по умолчанию</string>
+
+    <!-- App Lock & PIN Dialogs -->
+    <string name="app_lock_title">Разблокировка Iris Gallery</string>
+    <string name="app_lock_picker_title">Разблокируйте для выбора медиа</string>
+    <string name="app_lock_welcome_back">С возвращением</string>
+    <string name="app_lock_select_media">Выбор медиа</string>
+    <string name="app_lock_unlocking">Разблокировка…</string>
+    <string name="app_lock_enter_pin_select">Введите PIN-код для выбора фото</string>
+    <string name="app_lock_enter_pin_unlock">Введите PIN-код для разблокировки</string>
+    <string name="app_lock_subtitle">Введите PIN-код для разблокировки</string>
+    <string name="app_lock_picker_subtitle">Введите PIN-код для выбора фото</string>
+    <string name="app_lock_wrong_pin">Неверный PIN-код. Попробуйте еще раз.</string>
+    <string name="app_lock_biometric_title">Разблокировка Iris Gallery</string>
+    <string name="app_lock_biometric_subtitle">Коснитесь сканера отпечатка пальца</string>
+    <string name="app_lock_scan_fingerprint">Коснитесь сканера отпечатка пальца для продолжения</string>
+    <string name="app_lock_biometric_negative">Ввести PIN-код</string>
+    <string name="app_lock_auth_cancelled">Аутентификация отменена</string>
+    <string name="app_lock_biometrics_unavailable">Биометрия недоступна</string>
+    <string name="pin_keypad_use_pin">Ввести PIN-код</string>
+    <string name="pin_setup_create_title">Создайте PIN-код галереи</string>
+    <string name="pin_setup_create_subtitle">Введите PIN-код от 4 до 6 цифр</string>
+    <string name="pin_setup_confirm_title">Подтвердите PIN-код галереи</string>
+    <string name="pin_setup_confirm_subtitle">Введите PIN-код еще раз для подтверждения</string>
+    <string name="pin_setup_mismatch">PIN-коды не совпадают. Попробуйте снова.</string>
+    <string name="pin_change_verify_title">Введите текущий PIN-код</string>
+    <string name="pin_change_verify_subtitle">Подтвердите вашу личность</string>
+    <string name="pin_change_new_title">Введите новый PIN-код</string>
+    <string name="pin_change_new_subtitle">Задайте PIN-код от 4 до 6 цифр</string>
+    <string name="pin_change_confirm_title">Подтвердите новый PIN-код</string>
+    <string name="pin_change_confirm_subtitle">Введите его еще раз для подтверждения</string>
+    <string name="pin_incorrect_current">Неверный текущий PIN-код</string>
+    <string name="pin_mismatch_new">Новые PIN-коды не совпадают</string>
+    <string name="pin_incorrect">Неверный PIN-код</string>
+    <string name="pin_disable_title">Отключить блокировку приложения</string>
+    <string name="pin_disable_subtitle">Введите PIN-код для отключения блокировки приложения</string>
+    <string name="pin_continue_with_digits">Продолжить с %1$d цифрами</string>
+
+    <!-- Image Editor -->
+    <string name="editor_title">Редактировать копию</string>
+    <string name="editor_close">Закрыть редактор</string>
+    <string name="editor_preparing">Подготовка редактора…</string>
+    <string name="editor_tool_adjust">Коррекция</string>
+    <string name="editor_tool_crop">Кадрирование</string>
+    <string name="editor_tool_transform">Трансформация</string>
+    <string name="editor_tool_resize">Размер</string>
+    <string name="editor_tool_pixelate">Пикселизация</string>
+    <string name="editor_tool_blur">Размытие</string>
+    <string name="editor_rotate_flip">Поворот и отражение</string>
+    <string name="editor_rotate_left">90° влево</string>
+    <string name="editor_rotate_right">90° вправо</string>
+    <string name="editor_flip_h">Отразить ⇄</string>
+    <string name="editor_flip_v">Отразить ⇅</string>
+    <string name="editor_reset_orientation">Сбросить ориентацию</string>
+    <string name="editor_crop_manual_hint">Потяните за любой угол для ручной обрезки</string>
+    <string name="editor_crop_help">Перетаскивайте область внутри рамки для перемещения. Белые маркеры меняют ее размер.</string>
+    <string name="editor_crop_manual">Произвольно</string>
+    <string name="editor_crop_square">Квадрат</string>
+    <string name="editor_width_px">Ширина (px)</string>
+    <string name="editor_height_px">Высота (px)</string>
+    <string name="editor_lock_aspect">Сохранять пропорции</string>
+    <string name="editor_original">Оригинал</string>
+    <string name="editor_brush_hint">Нарисуйте %1$s прямо на фото</string>
+    <string name="editor_brush_pixelation">пикселизацию</string>
+    <string name="editor_brush_blur">размытие</string>
+    <string name="editor_brush_size">Размер кисти · %1$d</string>
+    <string name="editor_strength">Интенсивность · %1$d</string>
+    <string name="editor_eraser_on">Ластик включен</string>
+    <string name="editor_erase">Стереть</string>
+    <string name="editor_undo_stroke">Отменить штрих</string>
+    <string name="editor_redo_stroke">Повторить штрих</string>
+    <string name="editor_clear_effects">Очистить эффекты</string>
+    <string name="editor_brightness">Яркость</string>
+    <string name="editor_saturation">Насыщенность</string>
+    <string name="editor_contrast">Контрастность</string>
+    <string name="editor_warmth">Теплота</string>
+
+    <!-- About Screen -->
+    <string name="about_title">О приложении Iris</string>
+    <string name="about_developer_project">Разработчик и проект</string>
+    <string name="about_developer_label">Разработчик</string>
+    <string name="about_developer_name">Mohamad Oday (@MohamadOday)</string>
+    <string name="about_website_label">Веб-сайт и портфолио</string>
+    <string name="about_source_label">Исходный код и репозиторий</string>
+    <string name="about_source_url">github.com/MohamadOday/iris-gallery</string>
+    <string name="about_license_label">Лицензия</string>
+    <string name="about_license_name">Apache License 2.0 (Open Source)</string>
+    <string name="about_general_info">Общая информация</string>
+    <string name="about_arch_title">Архитектура</string>
+    <string name="about_arch_desc">100% автономная локальная галерея без разрешений на доступ к сети</string>
+    <string name="about_ui_title">Интерфейс и темы</string>
+    <string name="about_ui_desc">Jetpack Compose, Material 3, динамический Material You и глубокий черный AMOLED</string>
+    <string name="about_img_engine_title">Движок изображений</string>
+    <string name="about_img_engine_desc">Аппаратно-ускоренный конвейер Coil 3 с субдискретизацией и кэшированием растровых изображений</string>
+    <string name="about_vid_engine_title">Видеодвижок</string>
+    <string name="about_vid_engine_desc">Media3 ExoPlayer с жестовой перемоткой, автовоспроизведением и поворотом по датчику</string>
+    <string name="about_features_title">Возможности</string>
+    <string name="about_features_desc">Масштабирование сетки щипком, редактор Exif, корзина, защищенное хранилище, поиск дубликатов</string>
+
+    <!-- Notifications & Widgets -->
+    <string name="notification_channel_memories">Ежедневные воспоминания</string>
+    <string name="notification_channel_desc">Фото и видео этого дня в прошлые годы</string>
+    <string name="notification_memory_waiting">Вас ждет %1$d воспоминание</string>
+    <string name="notification_memories_waiting">Вас ждут воспоминания: %1$d</string>
+
+    <!-- Toasts -->
+    <string name="toast_items_vaulted">Перемещено в скрытое хранилище: %1$d шт.</string>
+    <string name="toast_vault_items_moved">Перемещено в скрытое хранилище: %1$d шт.</string>
+    <string name="toast_vault_items_locked_gallery">Скрыто в Iris Gallery: %1$d шт.</string>
+    <string name="toast_vault_items_restored">Восстановлено из хранилища: %1$d шт.</string>
+    <string name="toast_vault_items_deleted">Удалено навсегда: %1$d шт.</string>
+    <string name="toast_lock_cancelled">Блокировка отменена</string>
+    <string name="toast_could_not_request_removal">Не удалось запросить удаление из памяти</string>
+    <string name="toast_could_not_request_metadata">Не удалось запросить доступ к метаданным</string>
+    <string name="toast_error_storage_removal">Не удалось запросить удаление из памяти</string>
+    <string name="toast_error_original_removal">Не удалось удалить исходный файл из памяти</string>
+    <string name="toast_cache_cleared">Кэш миниатюр очищен</string>
+    <string name="toast_settings_reset">Все настройки сброшены по умолчанию</string>
+    <string name="toast_pin_enabled">PIN-код галереи включен</string>
+    <string name="toast_pin_changed">PIN-код галереи обновлен</string>
+    <string name="toast_pin_disabled">PIN-код галереи отключен</string>
+    <string name="toast_edited_saved">Отредактированная копия сохранена в Pictures/Iris</string>
+    <string name="toast_edited_failed">Не удалось сохранить отредактированную копию</string>
+    <string name="toast_editor_saved">Отредактированная копия сохранена в Pictures/Iris</string>
+    <string name="toast_editor_failed">Не удалось сохранить отредактированную копию</string>
+    <string name="toast_optics_unlocked">Оптика Ибн аль-Хайсама разблокирована!</string>
+    <string name="toast_easter_egg_hint">Нажмите еще %1$d раз(а), чтобы открыть пасхалку</string>
+    <string name="toast_easter_egg_hint_one">Нажмите еще 1 раз, чтобы открыть пасхалку</string>
+</resources>

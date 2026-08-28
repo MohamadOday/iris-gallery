@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">Iris Gallery</string>
+    <string name="app_description">Vollständig offlinefähige, botanisch inspirierte Android-Mediengalerie</string>
+    <string name="version_format">Version %1$s (Build %2$d)</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_photos">Fotos</string>
+    <string name="tab_albums">Alben</string>
+    <string name="tab_favorites">Favoriten</string>
+    <string name="tab_library">Sammlung</string>
+
+    <!-- Sections -->
+    <string name="section_settings">Einstellungen</string>
+    <string name="section_about">Über Iris</string>
+    <string name="section_trash">Papierkorb</string>
+    <string name="section_locked">Gesperrt</string>
+    <string name="section_duplicates">Duplikate</string>
+    <string name="section_memories">Erinnerungen</string>
+
+    <!-- Top Bar & Selection -->
+    <string name="selected_count">%1$d ausgewählt</string>
+    <string name="selected_count_format">%1$d ausgewählt</string>
+    <string name="action_clear_selection">Auswahl aufheben</string>
+    <string name="action_restore">Ausgewählte wiederherstellen</string>
+    <string name="action_restore_selected">Ausgewählte wiederherstellen</string>
+    <string name="action_share">Teilen</string>
+    <string name="action_share_selected">Ausgewählte teilen</string>
+    <string name="action_share_media">Medien teilen</string>
+    <string name="action_delete">Löschen</string>
+    <string name="action_delete_selected">Ausgewählte löschen</string>
+    <string name="action_more">Weitere Auswahlaktionen</string>
+    <string name="action_more_options">Weitere Optionen</string>
+    <string name="action_select_all">Alle auswählen</string>
+    <string name="action_set_album_cover">Als Album-Cover festlegen</string>
+    <string name="action_remove_from_locked">Aus „Gesperrt“ entfernen</string>
+    <string name="action_move_to_locked">In „Gesperrt“ verschieben</string>
+    <string name="action_favorite">Favorit</string>
+    <string name="action_favorited">Favorit</string>
+    <string name="action_empty_trash">Leeren</string>
+    <string name="action_comfortable_grid">Komfortables Raster</string>
+    <string name="action_compact_grid">Kompaktes Raster</string>
+    <string name="action_back">Zurück</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_save">Speichern</string>
+    <string name="action_save_copy">Kopie speichern</string>
+    <string name="action_saving">Wird gespeichert…</string>
+    <string name="action_grant">Gewähren</string>
+    <string name="action_grant_access">Zugriff gewähren</string>
+    <string name="action_use_system_popup">System-Dialog verwenden</string>
+    <string name="action_close">Schließen</string>
+    <string name="action_continue">Weiter</string>
+    <string name="action_edit">Bearbeiten</string>
+    <string name="action_unlock">Entsperren</string>
+    <string name="action_lock">Sperren</string>
+    <string name="action_details">Details</string>
+    <string name="action_backspace">Rücktaste</string>
+
+    <!-- Language & First Launch -->
+    <string name="settings_section_language">Sprache &amp; Region</string>
+    <string name="settings_language_title">App-Sprache</string>
+    <string name="settings_language_desc">Wähle deine bevorzugte Anzeigesprache</string>
+    <string name="first_launch_lang_title">App-Sprache</string>
+    <string name="first_launch_lang_subtitle">Wähle deine Sprache, um fortzufahren</string>
+    <string name="first_launch_lang_detected">Systemsprache deines Geräts</string>
+
+    <!-- Permission Screen -->
+    <string name="permission_title">Deine Galerie, ganz für dich</string>
+    <string name="permission_desc">Gewähre Zugriff auf Fotos, um deine Sammlung zu durchsuchen. Iris lädt deine Fotos niemals hoch und analysiert sie nicht.</string>
+    <string name="permission_button">Fotos auswählen</string>
+
+    <!-- Empty States -->
+    <string name="empty_photos">Keine Fotos gefunden</string>
+    <string name="empty_favorites">Favorisierte Fotos werden hier angezeigt</string>
+    <string name="empty_trash">Der Papierkorb ist leer</string>
+    <string name="empty_locked">Keine gesperrten Elemente</string>
+    <string name="empty_locked_locked_state">Entsperren, um private Elemente anzuzeigen</string>
+    <string name="empty_memories">Noch keine Erinnerungen für heute</string>
+    <string name="empty_editable">Keine bearbeitbaren Bilder</string>
+    <string name="empty_formats">Keine RAW-, GIF-, Bewegtfotos oder Panoramen gefunden</string>
+    <string name="empty_special_formats">Keine RAW-, GIF-, Bewegtfotos oder Panoramen gefunden</string>
+    <string name="empty_format_filter">Keine %1$s gefunden</string>
+    <string name="empty_format_type">Keine %1$s gefunden</string>
+    <string name="empty_search_albums">Keine Alben gefunden, die zu „%1$s“ passen</string>
+    <string name="empty_duplicates">Keine doppelten Fotos gefunden</string>
+
+    <!-- Dialogs -->
+    <string name="empty_trash_dialog_title">Papierkorb leeren?</string>
+    <string name="empty_trash_dialog_desc">Alle %1$d Element%2$s dauerhaft von deinem Gerät löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.</string>
+    <string name="dialog_empty_trash_title">Papierkorb leeren?</string>
+    <string name="dialog_empty_trash_message">Alle %1$d Element(e) endgültig von deinem Gerät löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.</string>
+    <string name="dialog_empty_trash_confirm">Papierkorb leeren</string>
+    <string name="dialog_delete_item_title">%1$s in den Papierkorb verschieben?</string>
+    <string name="dialog_delete_item_message">Android wird dich um Bestätigung dieser Änderung bitten.</string>
+    <string name="delete_trash_video_title">Video in den Papierkorb verschieben?</string>
+    <string name="delete_trash_photo_title">Foto in den Papierkorb verschieben?</string>
+    <string name="delete_trash_desc">Android wird dich um Bestätigung dieser Änderung bitten.</string>
+    <string name="delete_permanent_video_title">Video dauerhaft löschen?</string>
+    <string name="delete_permanent_photo_title">Foto dauerhaft löschen?</string>
+    <string name="delete_permanent_desc">Dieses Element wird dauerhaft aus deinem privaten Tresor gelöscht.</string>
+    <string name="dialog_delete_vault_item_title">%1$s dauerhaft löschen?</string>
+    <string name="dialog_delete_vault_item_message">Dieses Element wird dauerhaft aus deinem privaten Tresor gelöscht.</string>
+    <string name="prompt_free_vault_title">Tresor ohne Bestätigungsdialoge</string>
+    <string name="prompt_free_vault_desc">Durch das Gewähren von \'Vollzugriff auf Dateien\' kann Iris Gallery Fotos nahtlos in deinen privaten Tresor verschieben und verbergen, ohne dass Android jedes Mal nach einer Bestätigung fragt.\n\nIris arbeitet zu 100 % offline ohne Internetzugriff – deine Dateien verlassen dein Gerät niemals.</string>
+    <string name="dialog_prompt_free_vault_title">Tresor ohne Bestätigungsdialoge</string>
+    <string name="dialog_prompt_free_vault_message">Durch das Gewähren von \'Vollzugriff auf Dateien\' kann Iris Gallery Fotos nahtlos in deinen privaten Tresor verschieben und verbergen, ohne dass Android jedes Mal nach einer Bestätigung fragt.\n\nIris arbeitet zu 100 % offline ohne Internetzugriff – deine Dateien verlassen dein Gerät niemals.</string>
+
+    <!-- Media Types & Titles -->
+    <string name="media_type_photo">Foto</string>
+    <string name="media_type_video">Video</string>
+    <string name="format_image">Bild</string>
+    <string name="format_video">Video</string>
+    <string name="media_page_indicator">%1$d von %2$d</string>
+    <string name="viewer_page_count">%1$d von %2$d</string>
+
+    <!-- Albums Screen -->
+    <string name="search_albums_placeholder">%1$d Alben durchsuchen…</string>
+    <string name="clear_search">Suchanfrage löschen</string>
+    <string name="sort_recent">Neueste</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_size">Größe</string>
+    <string name="sort_custom">Benutzerdefiniert</string>
+    <string name="album_items_count">%1$d Elemente</string>
+    <string name="album_pin">Album anheften</string>
+    <string name="album_unpin">Anheften aufheben</string>
+    <string name="action_move_up">Nach oben verschieben</string>
+    <string name="action_move_down">Nach unten verschieben</string>
+
+    <!-- Library Screen Cards -->
+    <string name="library_header">Organisieren und wiederentdecken</string>
+    <string name="library_memories_title">Erinnerungen</string>
+    <string name="library_memories_subtitle">Höhepunkte dieses Tages aus vergangenen Jahren</string>
+    <string name="library_duplicates_title">Duplikate</string>
+    <string name="library_duplicates_subtitle">Exakte Kopien und optisch ähnliche Fotos finden</string>
+    <string name="library_locked_title">Gesperrt</string>
+    <string name="library_locked_subtitle">%1$d private Elemente</string>
+    <string name="library_trash_title">Papierkorb</string>
+    <string name="library_trash_subtitle">%1$d Elemente · Android löscht sie nach 30 Tagen</string>
+    <string name="library_editor_title">Editor</string>
+    <string name="library_editor_subtitle">Erstelle eine optimierte Kopie, ohne das Original zu verändern</string>
+    <string name="library_formats_title">Medienformate</string>
+    <string name="library_formats_subtitle">RAW, GIF, Bewegtfotos und Panoramen</string>
+    <string name="library_settings_title">Einstellungen &amp; Anpassung</string>
+    <string name="library_settings_subtitle">Designs, Farbpaletten, Rasterstile und Gesten</string>
+    <string name="library_about_title">Über die App</string>
+    <string name="library_about_subtitle">Entwickler, Open-Source-Projekt und App-Details</string>
+
+    <!-- Media Formats Filters -->
+    <string name="format_all">Alle (%1$d)</string>
+    <string name="format_raw">RAW (%1$d)</string>
+    <string name="format_gif">GIFs (%1$d)</string>
+    <string name="format_panorama">Panoramen (%1$d)</string>
+    <string name="format_motion">Bewegtfotos (%1$d)</string>
+    <string name="filter_all_count">Alle (%1$d)</string>
+    <string name="filter_raw_count">RAW (%1$d)</string>
+    <string name="filter_gifs_count">GIFs (%1$d)</string>
+    <string name="filter_panoramas_count">Panoramen (%1$d)</string>
+    <string name="filter_motion_count">Bewegtfotos (%1$d)</string>
+
+    <!-- Duplicates Review Screen -->
+    <string name="duplicates_title">Duplikate &amp; ähnliche Fotos</string>
+    <string name="duplicates_desc">Nach exakten Kopien und optisch ähnlichen Aufnahmen suchen</string>
+    <string name="duplicates_scan_now">Jetzt scannen</string>
+    <string name="duplicates_scanning">Wird gescannt…</string>
+    <string name="duplicates_summary">%1$d Gruppen (%2$d Fotos)</string>
+    <string name="duplicates_keep_best_delete">Beste behalten, %1$d ausgewählte löschen</string>
+    <string name="duplicates_scan_count">%1$d von %2$d</string>
+    <string name="duplicates_hero_title">Sorgenfrei aufräumen</string>
+    <string name="duplicates_hero_desc">Iris vergleicht Dateien und kompakte visuelle Fingerabdrücke direkt auf dem Gerät. Fotos verlassen dein Smartphone nie und nichts wird ohne Bestätigung von Android gelöscht.</string>
+    <string name="duplicates_comparing_progress">Vergleiche %1$d von %2$d</string>
+    <string name="duplicates_scan_again">Erneut scannen</string>
+    <string name="duplicates_scan_library">Sammlung scannen</string>
+    <string name="duplicates_empty_state">Deine Sammlung ist aufgeräumt – keine eindeutigen Duplikate gefunden.</string>
+    <string name="duplicates_groups_count">%1$d Gruppen</string>
+    <string name="duplicates_suggested_removal">%1$d zum Löschen vorgeschlagen · %2$s</string>
+    <string name="duplicates_review_delete">Löschen überprüfen</string>
+    <string name="duplicates_exact_copies">Exakte Kopien</string>
+    <string name="duplicates_similar_photos">Ähnliche Fotos</string>
+    <string name="duplicates_save_up_to">Bis zu %1$s sparen</string>
+    <string name="duplicates_remove">Entfernen</string>
+    <string name="duplicates_keep">Behalten</string>
+    <string name="duplicates_preview">Vorschau</string>
+
+    <!-- Timeline Labels -->
+    <string name="timeline_today">Heute</string>
+    <string name="timeline_yesterday">Gestern</string>
+
+    <!-- Details Sheet -->
+    <string name="details_title">Details</string>
+    <string name="details_photo_details">Fotodetails</string>
+    <string name="details_file_name">Dateiname</string>
+    <string name="details_title_label">Titel</string>
+    <string name="details_title_field">Titel</string>
+    <string name="details_desc_field">Beschreibung</string>
+    <string name="details_date_taken">Aufnahmedatum</string>
+    <string name="details_captured">Aufgenommen</string>
+    <string name="details_time">Uhrzeit</string>
+    <string name="details_resolution">Auflösung</string>
+    <string name="details_file_size">Dateigröße</string>
+    <string name="details_size">Größe</string>
+    <string name="details_location">Standort</string>
+    <string name="details_open_in_map">Auf Karte anzeigen</string>
+    <string name="details_map">Karte</string>
+    <string name="details_camera">Kamera</string>
+    <string name="details_camera_capture">Kameraaufnahme</string>
+    <string name="details_camera_lens">Kamera &amp; Objektiv</string>
+    <string name="details_aperture">Blende</string>
+    <string name="details_shutter">Verschlusszeit</string>
+    <string name="details_iso">ISO</string>
+    <string name="details_focal_length">Brennweite</string>
+    <string name="details_dimensions">Abmessungen</string>
+    <string name="details_orientation">Ausrichtung</string>
+    <string name="details_duration">Dauer</string>
+    <string name="details_format">Format</string>
+    <string name="details_type">Typ</string>
+    <string name="details_path">Pfad</string>
+    <string name="details_edit_metadata">Metadaten bearbeiten</string>
+    <string name="details_edit_filename">Dateiname</string>
+    <string name="details_edit_title">Titel</string>
+    <string name="details_edit_captured_hint">Aufgenommen · JJJJ-MM-TT HH:mm</string>
+    <string name="details_edit_orientation_hint">Ausrichtung · 0, 90, 180 oder 270</string>
+    <string name="details_edit_permission_note">Android wird vor dem Ändern von Medien einer anderen App nachfragen.</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_section_appearance">Erscheinungsbild &amp; Design</string>
+    <string name="settings_theme_mode">Designmodus</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Hell</string>
+    <string name="settings_theme_dark">Dunkel</string>
+    <string name="settings_amoled_black_title">AMOLED-Tiefschwarz</string>
+    <string name="settings_amoled_black_desc">Tiefschwarzer Hintergrund für OLED-Displays und maximalen Kontrast</string>
+    <string name="settings_material_you_title">Dynamische Farben (Material You)</string>
+    <string name="settings_material_you_desc">Akzentfarben automatisch aus deinem Hintergrundbild übernehmen</string>
+    <string name="settings_custom_accents">Eigene Farbakzente</string>
+
+    <string name="settings_section_layout">Layout &amp; Rasterstil</string>
+    <string name="settings_corner_style">Eckenstil der Miniaturansichten</string>
+    <string name="settings_corner_sharp">Kantig (0 dp)</string>
+    <string name="settings_corner_subtle">Dezent (8 dp)</string>
+    <string name="settings_corner_rounded">Abgerundet (16 dp)</string>
+    <string name="settings_corner_pill">Pillenförmig (28 dp)</string>
+    <string name="settings_grid_spacing">Rasterabstand</string>
+    <string name="settings_spacing_compact">Kompakt (2 dp)</string>
+    <string name="settings_spacing_standard">Standard (4 dp)</string>
+    <string name="settings_spacing_relaxed">Großzügig (8 dp)</string>
+    <string name="settings_show_timeline_title">Zeitachsen-Gruppenüberschriften</string>
+    <string name="settings_show_timeline_desc">Fotos nach Aufnahmedatum mit schwebenden Tagesüberschriften gruppieren</string>
+
+    <string name="settings_section_badges">Badges &amp; Indikatoren</string>
+    <string name="settings_badge_duration_title">Videodauer-Badge</string>
+    <string name="settings_badge_duration_desc">Videolänge auf Vorschaubildern im Raster anzeigen</string>
+    <string name="settings_badge_formats_title">Badges für Spezialformate</string>
+    <string name="settings_badge_formats_desc">Indikator für GIF-, RAW-, Panorama- und Bewegtfotos anzeigen</string>
+    <string name="settings_album_count_title">Elementanzahl in Alben</string>
+    <string name="settings_album_count_desc">Anzahl der Elemente unter Albumnamen anzeigen</string>
+
+    <string name="settings_section_viewer">Betrachter &amp; Wiedergabe</string>
+    <string name="settings_autoplay_video_title">Videos automatisch abspielen</string>
+    <string name="settings_autoplay_video_desc">Wiedergabe sofort beim Öffnen des Videos im Betrachter starten</string>
+    <string name="settings_loop_video_title">Videos wiederholen</string>
+    <string name="settings_loop_video_desc">Videowiedergabe kontinuierlich in Schleife wiederholen</string>
+    <string name="settings_zoom_scale_title">Doppeltipp-Zoomstufe</string>
+
+    <string name="settings_section_behavior">Verhalten &amp; Sicherheit</string>
+    <string name="settings_startup_tab">Standard-Start-Tab</string>
+    <string name="settings_app_lock_title">Galerie-App-Sperre</string>
+    <string name="settings_app_lock_desc">Eigene PIN zum Öffnen von Iris Gallery und der Medienauswahl anfordern</string>
+    <string name="settings_change_pin">Galerie-PIN ändern</string>
+    <string name="settings_biometric_unlock_title">Fingerabdruck / Biometrisches Entsperren</string>
+    <string name="settings_biometric_unlock_desc">Entsperren von Iris Gallery mit deinem Fingerabdruck erlauben</string>
+    <string name="settings_hide_vault_title">Tresormedien vor Speicher verbergen</string>
+    <string name="settings_hide_vault_desc">Verschiebt gesperrte Fotos und Videos in den privaten App-Speicher, sodass andere Apps und Dateimanager sie nicht sehen können. Wenn deaktiviert, werden Elemente nur innerhalb von Iris Gallery ausgeblendet.</string>
+    <string name="settings_silent_vault_title">Tresorverwaltung ohne Bestätigungsdialoge</string>
+    <string name="settings_silent_vault_desc_granted">Vollzugriff auf Dateien gewährt – Tresoraktionen erfolgen nahtlos ohne System-Popups.</string>
+    <string name="settings_silent_vault_desc_prompt">Gewähre \'Vollzugriff auf Dateien\', damit Iris Fotos ohne Android-Bestätigungsdialoge in den Tresor verschieben und verbergen kann.</string>
+    <string name="settings_vault_biometric_title">Biometrische Sperre für privaten Tresor</string>
+    <string name="settings_vault_biometric_desc">Geräte-PIN/-Muster beim Aufrufen gesperrter Tresorelemente anfordern</string>
+
+    <string name="settings_section_storage">Speicher &amp; Zurücksetzen</string>
+    <string name="settings_clear_cache">Cache für Bild- &amp; Video-Miniaturansichten leeren</string>
+    <string name="settings_reset_all">Alle Einstellungen auf Standard zurücksetzen</string>
+    <string name="settings_reset_dialog_title">Alle Einstellungen zurücksetzen?</string>
+    <string name="settings_reset_dialog_desc">Dadurch werden die Standarddesigns, Rasterlayouts und Betrachter-Einstellungen wiederhergestellt. Deine Fotos, Alben und Favoriten bleiben erhalten.</string>
+    <string name="settings_reset_confirm">Auf Standard zurücksetzen</string>
+
+    <!-- App Lock & PIN Dialogs -->
+    <string name="app_lock_title">Iris Gallery entsperren</string>
+    <string name="app_lock_picker_title">Zum Auswählen von Medien entsperren</string>
+    <string name="app_lock_welcome_back">Willkommen zurück</string>
+    <string name="app_lock_select_media">Medien auswählen</string>
+    <string name="app_lock_unlocking">Wird entsperrt…</string>
+    <string name="app_lock_enter_pin_select">Galerie-PIN eingeben, um Fotos auszuwählen</string>
+    <string name="app_lock_enter_pin_unlock">Galerie-PIN zum Entsperren eingeben</string>
+    <string name="app_lock_subtitle">Galerie-PIN zum Entsperren eingeben</string>
+    <string name="app_lock_picker_subtitle">Galerie-PIN eingeben, um Fotos auszuwählen</string>
+    <string name="app_lock_wrong_pin">Falsche PIN. Bitte erneut versuchen.</string>
+    <string name="app_lock_biometric_title">Iris Gallery entsperren</string>
+    <string name="app_lock_biometric_subtitle">Fingerabdruck scannen, um fortzufahren</string>
+    <string name="app_lock_scan_fingerprint">Fingerabdruck scannen, um fortzufahren</string>
+    <string name="app_lock_biometric_negative">PIN verwenden</string>
+    <string name="app_lock_auth_cancelled">Authentifizierung abgebrochen</string>
+    <string name="app_lock_biometrics_unavailable">Biometrie nicht verfügbar</string>
+    <string name="pin_keypad_use_pin">PIN verwenden</string>
+    <string name="pin_setup_create_title">Galerie-PIN erstellen</string>
+    <string name="pin_setup_create_subtitle">4- bis 6-stellige PIN eingeben</string>
+    <string name="pin_setup_confirm_title">Galerie-PIN bestätigen</string>
+    <string name="pin_setup_confirm_subtitle">PIN zur Bestätigung erneut eingeben</string>
+    <string name="pin_setup_mismatch">PINs stimmen nicht überein. Bitte erneut versuchen.</string>
+    <string name="pin_change_verify_title">Aktuelle PIN eingeben</string>
+    <string name="pin_change_verify_subtitle">Bestätige deine Identität</string>
+    <string name="pin_change_new_title">Neue PIN eingeben</string>
+    <string name="pin_change_new_subtitle">4- bis 6-stellige PIN wählen</string>
+    <string name="pin_change_confirm_title">Neue PIN bestätigen</string>
+    <string name="pin_change_confirm_subtitle">Zur Bestätigung erneut eingeben</string>
+    <string name="pin_incorrect_current">Aktuelle PIN ist falsch</string>
+    <string name="pin_mismatch_new">Neue PINs stimmen nicht überein</string>
+    <string name="pin_incorrect">Falsche PIN</string>
+    <string name="pin_disable_title">App-Sperre deaktivieren</string>
+    <string name="pin_disable_subtitle">PIN eingeben, um die Galerie-App-Sperre zu deaktivieren</string>
+    <string name="pin_continue_with_digits">Mit %1$d Ziffern fortfahren</string>
+
+    <!-- Image Editor -->
+    <string name="editor_title">Kopie bearbeiten</string>
+    <string name="editor_close">Editor schließen</string>
+    <string name="editor_preparing">Editor wird vorbereitet…</string>
+    <string name="editor_tool_adjust">Anpassen</string>
+    <string name="editor_tool_crop">Zuschneiden</string>
+    <string name="editor_tool_transform">Transformieren</string>
+    <string name="editor_tool_resize">Größe ändern</string>
+    <string name="editor_tool_pixelate">Verpixeln</string>
+    <string name="editor_tool_blur">Weichzeichnen</string>
+    <string name="editor_rotate_flip">Drehen &amp; spiegeln</string>
+    <string name="editor_rotate_left">90° links</string>
+    <string name="editor_rotate_right">90° rechts</string>
+    <string name="editor_flip_h">Spiegeln ⇄</string>
+    <string name="editor_flip_v">Spiegeln ⇅</string>
+    <string name="editor_reset_orientation">Ausrichtung zurücksetzen</string>
+    <string name="editor_crop_manual_hint">Beliebige Ecke ziehen, um manuell zuzuschneiden</string>
+    <string name="editor_crop_help">Im Rahmen ziehen, um ihn zu verschieben. Weiße Griffe ändern die Größe.</string>
+    <string name="editor_crop_manual">Manuell</string>
+    <string name="editor_crop_square">Quadratisch</string>
+    <string name="editor_width_px">Breite px</string>
+    <string name="editor_height_px">Höhe px</string>
+    <string name="editor_lock_aspect">Seitenverhältnis beibehalten</string>
+    <string name="editor_original">Original</string>
+    <string name="editor_brush_hint">%1$s direkt auf das Foto zeichnen</string>
+    <string name="editor_brush_pixelation">Verpixelung</string>
+    <string name="editor_brush_blur">Weichzeichnung</string>
+    <string name="editor_brush_size">Pinselgröße · %1$d</string>
+    <string name="editor_strength">Stärke · %1$d</string>
+    <string name="editor_eraser_on">Radierer aktiv</string>
+    <string name="editor_erase">Radieren</string>
+    <string name="editor_undo_stroke">Strich rückgängig</string>
+    <string name="editor_redo_stroke">Strich wiederholen</string>
+    <string name="editor_clear_effects">Effekte löschen</string>
+    <string name="editor_brightness">Helligkeit</string>
+    <string name="editor_saturation">Sättigung</string>
+    <string name="editor_contrast">Kontrast</string>
+    <string name="editor_warmth">Wärme</string>
+
+    <!-- About Screen -->
+    <string name="about_title">Über Iris</string>
+    <string name="about_developer_project">Entwickler &amp; Projekt</string>
+    <string name="about_developer_label">Entwickler</string>
+    <string name="about_developer_name">Mohamad Oday (@MohamadOday)</string>
+    <string name="about_website_label">Website &amp; Portfolio</string>
+    <string name="about_source_label">Quellcode &amp; Repository</string>
+    <string name="about_source_url">github.com/MohamadOday/iris-gallery</string>
+    <string name="about_license_label">Lizenz</string>
+    <string name="about_license_name">Apache-Lizenz 2.0 (Open Source)</string>
+    <string name="about_general_info">Allgemeine Informationen</string>
+    <string name="about_arch_title">Architektur</string>
+    <string name="about_arch_desc">100 % Offline-First-Lokale Galerie ohne Netzwerkberechtigungen</string>
+    <string name="about_ui_title">Benutzeroberfläche &amp; Design</string>
+    <string name="about_ui_desc">Jetpack Compose, Material 3, dynamisches Material You &amp; AMOLED-Schwarz</string>
+    <string name="about_img_engine_title">Bild-Engine</string>
+    <string name="about_img_engine_desc">Hardwarebeschleunigte Coil 3-Pipeline mit Subsampling &amp; Bitmap-Caching</string>
+    <string name="about_vid_engine_title">Video-Engine</string>
+    <string name="about_vid_engine_desc">Media3 ExoPlayer mit Gestensteuerung, Autoplay und Sensor-Drehung</string>
+    <string name="about_features_title">Funktionen</string>
+    <string name="about_features_desc">Zoombares Raster, Exif-Editor, Papierkorb, geschützter Tresor, Duplikat-Scanner</string>
+
+    <!-- Notifications & Widgets -->
+    <string name="notification_channel_memories">Tägliche Erinnerungen</string>
+    <string name="notification_channel_desc">Fotos und Videos dieses Tages aus vergangenen Jahren</string>
+    <string name="notification_memory_waiting">%1$d Erinnerung wartet auf dich</string>
+    <string name="notification_memories_waiting">%1$d Erinnerungen warten auf dich</string>
+
+    <!-- Toasts -->
+    <string name="toast_items_vaulted">%1$d Element(e) in den Tresor verschoben</string>
+    <string name="toast_vault_items_moved">%1$d Element(e) in den Tresor verschoben</string>
+    <string name="toast_vault_items_locked_gallery">%1$d Element(e) in Iris Gallery verborgen</string>
+    <string name="toast_vault_items_restored">%1$d Element(e) aus dem Tresor wiederhergestellt</string>
+    <string name="toast_vault_items_deleted">%1$d Element(e) dauerhaft gelöscht</string>
+    <string name="toast_lock_cancelled">Sperren abgebrochen</string>
+    <string name="toast_could_not_request_removal">Löschen aus dem Speicher konnte nicht angefordert werden</string>
+    <string name="toast_could_not_request_metadata">Metadaten-Zugriff konnte nicht angefordert werden</string>
+    <string name="toast_error_storage_removal">Löschen aus dem Speicher konnte nicht angefordert werden</string>
+    <string name="toast_error_original_removal">Originaldatei konnte nicht aus dem Speicher gelöscht werden</string>
+    <string name="toast_cache_cleared">Vorschaubild-Cache geleert</string>
+    <string name="toast_settings_reset">Alle Einstellungen auf Standard zurückgesetzt</string>
+    <string name="toast_pin_enabled">Galerie-PIN aktiviert</string>
+    <string name="toast_pin_changed">Galerie-PIN aktualisiert</string>
+    <string name="toast_pin_disabled">Galerie-PIN entfernt</string>
+    <string name="toast_edited_saved">Bearbeitete Kopie in Pictures/Iris gespeichert</string>
+    <string name="toast_edited_failed">Bearbeitete Kopie konnte nicht gespeichert werden</string>
+    <string name="toast_editor_saved">Bearbeitete Kopie in Pictures/Iris gespeichert</string>
+    <string name="toast_editor_failed">Bearbeitete Kopie konnte nicht gespeichert werden</string>
+    <string name="toast_optics_unlocked">Optik von Ibn al-Haitham freigeschaltet!</string>
+    <string name="toast_easter_egg_hint">Noch %1$d-mal tippen für Easter Egg</string>
+    <string name="toast_easter_egg_hint_one">Noch 1-mal tippen für Easter Egg</string>
+</resources>

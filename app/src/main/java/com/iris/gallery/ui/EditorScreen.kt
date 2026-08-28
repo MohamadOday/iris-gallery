@@ -136,8 +136,8 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(topBar = { TopAppBar(title = { Text("Edit copy") }, navigationIcon = {
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Close editor") }
+            Scaffold(topBar = { TopAppBar(title = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_title)) }, navigationIcon = {
+                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_close)) }
             }, actions = {
                 Button(enabled = !saving && transformedPreview != null, onClick = {
                     val session = editorView?.session ?: return@Button
@@ -152,7 +152,7 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                         }.isSuccess
                         saving = false; onSaved(saved)
                     }
-                }) { Text(if (saving) "Saving…" else "Save copy") }
+                }) { Text(if (saving) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_saving) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_save_copy)) }
             }) }) { padding ->
                 Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -162,12 +162,18 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                 view.setSource(transformedPreview); view.tool = tool; view.brushRadius = brushSize
                                 view.effectStrength = strength.toInt(); view.erasing = erasing; view.colorFilter = androidFilter
                             }, modifier = Modifier.fillMaxSize())
-                        if (transformedPreview == null) Text("Preparing editor…", color = Color.White)
+                        if (transformedPreview == null) Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_preparing), color = Color.White)
                     }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        listOf(EditorTool.ADJUST to "Adjust", EditorTool.CROP to "Crop", EditorTool.TRANSFORM to "Transform",
-                            EditorTool.RESIZE to "Resize", EditorTool.PIXELATE to "Pixelate", EditorTool.BLUR to "Blur").forEach { (value, label) ->
-                            FilterChip(tool == value, onClick = { tool = value }, label = { Text(label) })
+                        listOf(
+                            EditorTool.ADJUST to com.iris.gallery.R.string.editor_tool_adjust,
+                            EditorTool.CROP to com.iris.gallery.R.string.editor_tool_crop,
+                            EditorTool.TRANSFORM to com.iris.gallery.R.string.editor_tool_transform,
+                            EditorTool.RESIZE to com.iris.gallery.R.string.editor_tool_resize,
+                            EditorTool.PIXELATE to com.iris.gallery.R.string.editor_tool_pixelate,
+                            EditorTool.BLUR to com.iris.gallery.R.string.editor_tool_blur
+                        ).forEach { (value, strRes) ->
+                            FilterChip(tool == value, onClick = { tool = value }, label = { Text(androidx.compose.ui.res.stringResource(strRes)) })
                         }
                     }
                     Column(Modifier.fillMaxWidth().height(if (landscape) 132.dp else 205.dp).verticalScroll(rememberScrollState()),
@@ -223,7 +229,7 @@ private fun TransformControls(
     onToggleFlipV: () -> Unit,
     onReset: () -> Unit,
 ) {
-    Text("Rotate & flip", style = MaterialTheme.typography.titleSmall)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_rotate_flip), style = MaterialTheme.typography.titleSmall)
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -231,11 +237,11 @@ private fun TransformControls(
     ) {
         OutlinedButton(onClick = onRotateLeft, modifier = Modifier.weight(1f)) {
             Icon(Icons.Outlined.RotateLeft, null, modifier = Modifier.size(18.dp))
-            Text(" 90° Left", maxLines = 1)
+            Text(" " + androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_rotate_left), maxLines = 1)
         }
         OutlinedButton(onClick = onRotateRight, modifier = Modifier.weight(1f)) {
             Icon(Icons.Outlined.RotateRight, null, modifier = Modifier.size(18.dp))
-            Text(" 90° Right", maxLines = 1)
+            Text(" " + androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_rotate_right), maxLines = 1)
         }
     }
     Row(
@@ -246,75 +252,85 @@ private fun TransformControls(
         FilterChip(
             selected = flipH,
             onClick = onToggleFlipH,
-            label = { Text("Flip ⇄") },
+            label = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_flip_h)) },
             modifier = Modifier.weight(1f),
         )
         FilterChip(
             selected = flipV,
             onClick = onToggleFlipV,
-            label = { Text("Flip ⇅") },
+            label = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_flip_v)) },
             modifier = Modifier.weight(1f),
         )
         if (rotation != 0 || flipH || flipV) {
             IconButton(onClick = onReset) {
-                Icon(Icons.Outlined.RestartAlt, "Reset orientation")
+                Icon(Icons.Outlined.RestartAlt, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_reset_orientation))
             }
         }
     }
 }
 
 @Composable private fun CropControls(selected: String, onSelect: (String, Float?) -> Unit) {
-    Text("Drag any corner to crop manually", style = MaterialTheme.typography.titleSmall)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_crop_manual_hint), style = MaterialTheme.typography.titleSmall)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("Manual" to null, "Square" to 1f, "4:3" to 4f/3f, "3:4" to 3f/4f, "16:9" to 16f/9f).forEach { (name, ratio) ->
             FilterChip(selected == name, onClick = { onSelect(name, ratio) }, label = { Text(name) })
         }
     }
-    Text("Drag inside the frame to reposition it. White handles resize it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_crop_help), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable private fun ResizeControls(baseWidth: Int, baseHeight: Int, width: String, height: String, locked: Boolean,
     onWidth: (String) -> Unit, onHeight: (String) -> Unit, onLock: (Boolean) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(width, onWidth, Modifier.weight(1f), label = { Text("Width px") }, singleLine = true)
+        OutlinedTextField(width, onWidth, Modifier.weight(1f), label = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_width_px)) }, singleLine = true)
         Text("×")
-        OutlinedTextField(height, onHeight, Modifier.weight(1f), label = { Text("Height px") }, singleLine = true)
+        OutlinedTextField(height, onHeight, Modifier.weight(1f), label = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_height_px)) }, singleLine = true)
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Switch(locked, onLock); Text("Lock aspect ratio")
-        TextButton(onClick = { onWidth(baseWidth.toString()); onHeight(baseHeight.toString()) }) { Text("Original") }
+        Switch(locked, onLock); Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_lock_aspect))
+        TextButton(onClick = { onWidth(baseWidth.toString()); onHeight(baseHeight.toString()) }) { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_original)) }
     }
 }
 
 @Composable private fun BrushControls(tool: EditorTool, size: Float, strength: Float, erasing: Boolean,
     onSize: (Float) -> Unit, onStrength: (Float) -> Unit, onErase: (Boolean) -> Unit,
     onUndo: () -> Unit, onRedo: () -> Unit, onClear: () -> Unit) {
-    Text("Draw ${if (tool == EditorTool.PIXELATE) "pixelation" else "blur"} directly on the photo",
+    val effectLabel = if (tool == EditorTool.PIXELATE) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_pixelation)
+                      else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_blur)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_hint, effectLabel),
         style = MaterialTheme.typography.titleSmall)
-    Text("Brush size · ${(size * 100).toInt()}"); Slider(size, onSize, valueRange = .015f.. .25f)
-    Text("Strength · ${strength.toInt()}"); Slider(strength, onStrength, valueRange = 4f..48f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_size, (size * 100).toInt())); Slider(size, onSize, valueRange = .015f.. .25f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_strength, strength.toInt())); Slider(strength, onStrength, valueRange = 4f..48f)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(erasing, onClick = { onErase(!erasing) }, label = { Text(if (erasing) "Eraser on" else "Erase") })
-        IconButton(onClick = onUndo) { Icon(Icons.Outlined.Undo, "Undo stroke") }
-        IconButton(onClick = onRedo) { Icon(Icons.Outlined.Redo, "Redo stroke") }
-        IconButton(onClick = onClear) { Icon(Icons.Outlined.DeleteSweep, "Clear effects") }
+        FilterChip(erasing, onClick = { onErase(!erasing) }, label = { Text(if (erasing) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_eraser_on) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_erase)) })
+        IconButton(onClick = onUndo) { Icon(Icons.Outlined.Undo, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_undo_stroke)) }
+        IconButton(onClick = onRedo) { Icon(Icons.Outlined.Redo, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_redo_stroke)) }
+        IconButton(onClick = onClear) { Icon(Icons.Outlined.DeleteSweep, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_clear_effects)) }
     }
 }
 
 @Composable private fun AdjustControls(brightness: Float, saturation: Float, contrast: Float, warmth: Float,
     onBrightness: (Float) -> Unit, onSaturation: (Float) -> Unit, onContrast: (Float) -> Unit, onWarmth: (Float) -> Unit) {
-    Text("Brightness"); Slider(brightness, onBrightness, valueRange = -.5f.. .5f)
-    Text("Saturation"); Slider(saturation, onSaturation, valueRange = 0f..2f)
-    Text("Contrast"); Slider(contrast, onContrast, valueRange = .5f..1.5f)
-    Text("Warmth"); Slider(warmth, onWarmth, valueRange = -1f..1f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brightness)); Slider(brightness, onBrightness, valueRange = -.5f.. .5f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_saturation)); Slider(saturation, onSaturation, valueRange = 0f..2f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_contrast)); Slider(contrast, onContrast, valueRange = .5f..1.5f)
+    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_warmth)); Slider(warmth, onWarmth, valueRange = -1f..1f)
 }
 
 private suspend fun loadPreview(context: Context, image: MediaImage): Bitmap? = withContext(Dispatchers.IO) {
-    if (Build.VERSION.SDK_INT >= 28) ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, image.uri)) { decoder, info, _ ->
-        val scale = minOf(1f, 1600f / maxOf(info.size.width, info.size.height))
-        decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
-        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-    } else context.contentResolver.openInputStream(image.uri).use(BitmapFactory::decodeStream)
+    val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
+    if (Build.VERSION.SDK_INT >= 28) {
+        val source = if (isFile) ImageDecoder.createSource(java.io.File(image.path))
+                     else ImageDecoder.createSource(context.contentResolver, image.uri)
+        ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val scale = minOf(1f, 1600f / maxOf(info.size.width, info.size.height))
+            decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    } else {
+        if (isFile) BitmapFactory.decodeFile(image.path)
+        else context.contentResolver.openInputStream(image.uri).use(BitmapFactory::decodeStream)
+    }
 }
 
 private suspend fun saveEditedCopy(
@@ -332,9 +348,17 @@ private suspend fun saveEditedCopy(
     requestedHeight: Int?,
     strokes: List<BrushStroke>
 ) = withContext(Dispatchers.IO) {
-    val rawSource = if (Build.VERSION.SDK_INT >= 28) ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, image.uri)) {
-        decoder, _, _ -> decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-    } else context.contentResolver.openInputStream(image.uri).use(BitmapFactory::decodeStream) ?: error("Could not decode image")
+    val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
+    val rawSource = if (Build.VERSION.SDK_INT >= 28) {
+        val source = if (isFile) ImageDecoder.createSource(java.io.File(image.path))
+                     else ImageDecoder.createSource(context.contentResolver, image.uri)
+        ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    } else {
+        if (isFile) BitmapFactory.decodeFile(image.path) ?: error("Could not decode image")
+        else context.contentResolver.openInputStream(image.uri).use(BitmapFactory::decodeStream) ?: error("Could not decode image")
+    }
 
     val matrix = Matrix()
     if (rotation != 0) matrix.postRotate(rotation.toFloat())

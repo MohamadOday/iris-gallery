@@ -29,6 +29,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.res.stringResource
+import com.iris.gallery.R
+
 @Composable
 fun LibraryScreen(
     padding: PaddingValues,
@@ -43,20 +46,20 @@ fun LibraryScreen(
     ) {
         item {
             Text(
-                "Organize and rediscover",
+                stringResource(R.string.library_header),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
         }
-        item { LibraryCard(Icons.Outlined.AutoAwesome, "Memories", "Highlights from this day and past years") { onOpen("memories") } }
-        item { LibraryCard(Icons.Outlined.ContentCopy, "Duplicates", "Find exact copies and visually similar photos") { onOpen("duplicates") } }
-        item { LibraryCard(Icons.Outlined.Lock, "Locked", "$lockedCount private items") { onOpen("locked") } }
-        item { LibraryCard(Icons.Outlined.DeleteOutline, "Trash", "$trashCount items · Android removes them after 30 days") { onOpen("trash") } }
-        item { LibraryCard(Icons.Outlined.Edit, "Editor", "Create a polished copy without touching the original") { onOpen("editor") } }
-        item { LibraryCard(Icons.Outlined.PhotoLibrary, "Media formats", "RAW, GIF, motion photos and panoramas") { onOpen("formats") } }
-        item { LibraryCard(Icons.Outlined.Settings, "Settings & Customization", "Themes, palettes, grid styles, and gestures") { onOpen("settings") } }
-        item { LibraryCard(Icons.Outlined.Info, "About", "Developer, open-source project, and app details") { onOpen("about") } }
+        item { LibraryCard(Icons.Outlined.AutoAwesome, stringResource(R.string.library_memories_title), stringResource(R.string.library_memories_subtitle)) { onOpen("memories") } }
+        item { LibraryCard(Icons.Outlined.ContentCopy, stringResource(R.string.library_duplicates_title), stringResource(R.string.library_duplicates_subtitle)) { onOpen("duplicates") } }
+        item { LibraryCard(Icons.Outlined.Lock, stringResource(R.string.library_locked_title), stringResource(R.string.library_locked_subtitle, lockedCount)) { onOpen("locked") } }
+        item { LibraryCard(Icons.Outlined.DeleteOutline, stringResource(R.string.library_trash_title), stringResource(R.string.library_trash_subtitle, trashCount)) { onOpen("trash") } }
+        item { LibraryCard(Icons.Outlined.Edit, stringResource(R.string.library_editor_title), stringResource(R.string.library_editor_subtitle)) { onOpen("editor") } }
+        item { LibraryCard(Icons.Outlined.PhotoLibrary, stringResource(R.string.library_formats_title), stringResource(R.string.library_formats_subtitle)) { onOpen("formats") } }
+        item { LibraryCard(Icons.Outlined.Settings, stringResource(R.string.library_settings_title), stringResource(R.string.library_settings_subtitle)) { onOpen("settings") } }
+        item { LibraryCard(Icons.Outlined.Info, stringResource(R.string.library_about_title), stringResource(R.string.library_about_subtitle)) { onOpen("about") } }
     }
 }
 

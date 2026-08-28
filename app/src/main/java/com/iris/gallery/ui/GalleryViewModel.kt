@@ -26,6 +26,7 @@ data class GalleryUiState(
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaRepository(application)
     private val libraryPreferences = LibraryPreferences(application)
+    private val vaultRepository = com.iris.gallery.data.VaultRepository(application)
     private val preferences = application.getSharedPreferences("gallery", 0)
     private val _uiState = MutableStateFlow(GalleryUiState(images = repository.loadSnapshot()))
     val uiState: StateFlow<GalleryUiState> = _uiState.asStateFlow()
@@ -34,6 +35,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     )
     val favorites: StateFlow<Set<Long>> = _favorites.asStateFlow()
     val libraryState: StateFlow<LibraryPreferencesState> = libraryPreferences.state
+    val vaultMedia: StateFlow<List<MediaImage>> = vaultRepository.vaultMedia
     private val duplicateDetector = DuplicateDetector(application)
     private var duplicateJob: Job? = null
     private val _duplicateState = MutableStateFlow(DuplicateScanState())
@@ -60,6 +62,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun cancelDuplicateScan() { duplicateJob?.cancel() }
 
     fun setLocked(ids: Collection<Long>, locked: Boolean) = libraryPreferences.setLocked(ids, locked)
+    fun hasAllFilesAccess(): Boolean = vaultRepository.hasAllFilesAccess()
+    suspend fun moveToVault(mediaList: List<MediaImage>): com.iris.gallery.data.VaultMoveResult = vaultRepository.moveToVault(mediaList)
+    suspend fun rollbackVaultMove(vaultedMedia: List<MediaImage>) = vaultRepository.rollbackVault(vaultedMedia)
+    suspend fun restoreFromVault(mediaList: List<MediaImage>): List<MediaImage> = vaultRepository.restoreFromVault(mediaList)
+    suspend fun deletePermanentlyFromVault(mediaList: List<MediaImage>) = vaultRepository.deletePermanently(mediaList)
+
     fun togglePinnedAlbum(id: Long) = libraryPreferences.togglePinnedAlbum(id)
     fun setAlbumCover(albumId: Long, mediaId: Long) = libraryPreferences.setAlbumCover(albumId, mediaId)
     fun setAlbumSort(sort: AlbumSort) = libraryPreferences.setAlbumSort(sort)
@@ -75,6 +83,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun refresh() {
         viewModelScope.launch {
+            vaultRepository.loadVaultItems()
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             val media = runCatching { repository.loadImages() }
             media.fold(

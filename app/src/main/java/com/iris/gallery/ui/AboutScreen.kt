@@ -120,11 +120,12 @@ fun AboutScreen(
                             activeToast?.cancel()
                             if (eggClicks >= 5) {
                                 eggClicks = 0
-                                activeToast = Toast.makeText(context, "Ibn al-Haytham Optics Unlocked!", Toast.LENGTH_SHORT).apply { show() }
+                                activeToast = Toast.makeText(context, context.getString(R.string.toast_optics_unlocked), Toast.LENGTH_SHORT).apply { show() }
                                 showEasterEggSheet = true
                             } else {
                                 val remaining = 5 - eggClicks
-                                val message = if (remaining == 1) "Press 1 time to show easter egg" else "Press $remaining times to show easter egg"
+                                val message = if (remaining == 1) context.getString(R.string.toast_easter_egg_hint_one)
+                                else context.getString(R.string.toast_easter_egg_hint, remaining)
                                 activeToast = Toast.makeText(context, message, Toast.LENGTH_SHORT).apply { show() }
                             }
                         },
@@ -139,17 +140,17 @@ fun AboutScreen(
 
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "Iris Gallery",
+                    androidx.compose.ui.res.stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Version 0.1.0 (Build 1)",
+                    androidx.compose.ui.res.stringResource(R.string.version_format, "0.1.0", 1),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Pure offline, botanical-inspired Android media gallery",
+                    androidx.compose.ui.res.stringResource(R.string.app_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -159,7 +160,7 @@ fun AboutScreen(
 
         item {
             Text(
-                "Developer & Project",
+                androidx.compose.ui.res.stringResource(R.string.about_developer_project),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -176,15 +177,15 @@ fun AboutScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     AboutLinkRow(
                         icon = Icons.Outlined.Psychology,
-                        title = "Developer",
-                        subtitle = "Mohamad Oday (@MohamadOday)"
+                        title = androidx.compose.ui.res.stringResource(R.string.about_developer_label),
+                        subtitle = androidx.compose.ui.res.stringResource(R.string.about_developer_name)
                     ) { openUrl("https://bn3di.is-a.dev") }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     AboutLinkRow(
                         icon = Icons.Outlined.Language,
-                        title = "Website & Portfolio",
+                        title = androidx.compose.ui.res.stringResource(R.string.about_website_label),
                         subtitle = "https://bn3di.is-a.dev"
                     ) { openUrl("https://bn3di.is-a.dev") }
 
@@ -192,16 +193,16 @@ fun AboutScreen(
 
                     AboutLinkRow(
                         icon = Icons.Outlined.Code,
-                        title = "Source Code & Repository",
-                        subtitle = "github.com/MohamadOday/iris-gallery"
+                        title = androidx.compose.ui.res.stringResource(R.string.about_source_label),
+                        subtitle = androidx.compose.ui.res.stringResource(R.string.about_source_url)
                     ) { openUrl("https://github.com/MohamadOday/iris-gallery") }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     AboutLinkRow(
                         icon = Icons.Outlined.VerifiedUser,
-                        title = "License",
-                        subtitle = "Apache License 2.0 (Open Source)"
+                        title = androidx.compose.ui.res.stringResource(R.string.about_license_label),
+                        subtitle = androidx.compose.ui.res.stringResource(R.string.about_license_name)
                     ) { openUrl("https://github.com/MohamadOday/iris-gallery/blob/main/LICENSE") }
                 }
             }
@@ -209,7 +210,7 @@ fun AboutScreen(
 
         item {
             Text(
-                "General Information",
+                androidx.compose.ui.res.stringResource(R.string.about_general_info),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -227,15 +228,30 @@ fun AboutScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AppInfoItem("Architecture", "100% Offline-first local gallery with zero network permissions")
+                    AppInfoItem(
+                        androidx.compose.ui.res.stringResource(R.string.about_arch_title),
+                        androidx.compose.ui.res.stringResource(R.string.about_arch_desc)
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    AppInfoItem("UI & Theming", "Jetpack Compose, Material 3, dynamic Material You & AMOLED black")
+                    AppInfoItem(
+                        androidx.compose.ui.res.stringResource(R.string.about_ui_title),
+                        androidx.compose.ui.res.stringResource(R.string.about_ui_desc)
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    AppInfoItem("Image Engine", "Coil 3 hardware-accelerated pipeline with sub-sampling & bitmap caching")
+                    AppInfoItem(
+                        androidx.compose.ui.res.stringResource(R.string.about_img_engine_title),
+                        androidx.compose.ui.res.stringResource(R.string.about_img_engine_desc)
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    AppInfoItem("Video Engine", "Media3 ExoPlayer with gesture seeking, auto-play, and sensor rotation")
+                    AppInfoItem(
+                        androidx.compose.ui.res.stringResource(R.string.about_vid_engine_title),
+                        androidx.compose.ui.res.stringResource(R.string.about_vid_engine_desc)
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    AppInfoItem("Features", "Pinch-zoom grid, Exif editor, trash bin, locked vault, duplicate scanner")
+                    AppInfoItem(
+                        androidx.compose.ui.res.stringResource(R.string.about_features_title),
+                        androidx.compose.ui.res.stringResource(R.string.about_features_desc)
+                    )
                 }
             }
         }
@@ -475,7 +491,7 @@ fun MesopotamiaOpticsSheet(onClose: () -> Unit) {
                 .fillMaxWidth()
                 .padding(top = 8.dp, bottom = 24.dp)
         ) {
-            Text("Close")
+            Text(androidx.compose.ui.res.stringResource(R.string.action_close))
         }
     }
 }

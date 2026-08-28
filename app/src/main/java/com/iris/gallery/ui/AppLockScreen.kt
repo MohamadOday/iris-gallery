@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,6 +55,7 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,6 +70,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -98,18 +101,20 @@ fun isBiometricHardwareAvailable(context: Context): Boolean {
 
 fun triggerBiometricPrompt(
     activity: Activity,
-    title: String = "Unlock Iris Gallery",
-    subtitle: String = "Scan your fingerprint to unlock",
+    title: String? = null,
+    subtitle: String? = null,
     onSuccess: () -> Unit,
     onError: (String) -> Unit = {}
 ) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         runCatching {
             val executor = ContextCompat.getMainExecutor(activity)
+            val promptTitle = title ?: activity.getString(R.string.app_lock_title)
+            val promptSubtitle = subtitle ?: activity.getString(R.string.app_lock_scan_fingerprint)
             val prompt = android.hardware.biometrics.BiometricPrompt.Builder(activity)
-                .setTitle(title)
-                .setSubtitle(subtitle)
-                .setNegativeButton("Use PIN", executor) { _, _ -> }
+                .setTitle(promptTitle)
+                .setSubtitle(promptSubtitle)
+                .setNegativeButton(activity.getString(R.string.pin_keypad_use_pin), executor) { _, _ -> }
                 .build()
             val cancellationSignal = CancellationSignal()
             prompt.authenticate(
@@ -121,12 +126,12 @@ fun triggerBiometricPrompt(
                     }
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
-                        onError(errString?.toString() ?: "Authentication cancelled")
+                        onError(errString?.toString() ?: activity.getString(R.string.app_lock_auth_cancelled))
                     }
                 }
             )
         }.onFailure { error ->
-            onError(error.message ?: "Biometrics unavailable")
+            onError(error.message ?: activity.getString(R.string.app_lock_biometrics_unavailable))
         }
     }
 }
@@ -161,8 +166,8 @@ fun AppLockScreen(
         if (activity != null && hasBiometrics && !activity.isFinishing && !activity.isDestroyed && !isUnlockedSuccess) {
             triggerBiometricPrompt(
                 activity = activity,
-                title = if (isPicker) "Unlock to Select Media" else "Unlock Iris Gallery",
-                subtitle = "Scan your fingerprint to continue",
+                title = if (isPicker) context.getString(R.string.app_lock_picker_title) else context.getString(R.string.app_lock_title),
+                subtitle = context.getString(R.string.app_lock_scan_fingerprint),
                 onSuccess = ::performUnlock,
                 onError = { /* stay on PIN screen gracefully */ }
             )
@@ -178,7 +183,7 @@ fun AppLockScreen(
     }
 
     fun triggerWrongPinAnimation() {
-        errorMessage = "Incorrect PIN. Please try again."
+        errorMessage = context.getString(R.string.app_lock_wrong_pin)
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         scope.launch {
             shakeOffset.animateTo(
@@ -228,18 +233,20 @@ fun AppLockScreen(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 28.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Header Section
             Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 420.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 24.dp)
+                verticalArrangement = Arrangement.Center
             ) {
+                // Botanical App Icon with Pulsing Halo on Unlock
                 val logoScale by animateFloatAsState(
                     targetValue = if (isUnlockedSuccess) 1.08f else 1f,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -248,8 +255,11 @@ fun AppLockScreen(
 
                 Box(
                     modifier = Modifier
-                        .size(84.dp)
-                        .graphicsLayer(scaleX = logoScale, scaleY = logoScale)
+                        .size(86.dp)
+                        .graphicsLayer {
+                            scaleX = logoScale
+                            scaleY = logoScale
+                        }
                         .clip(RoundedCornerShape(22.dp))
                         .background(
                             Brush.linearGradient(
@@ -261,7 +271,7 @@ fun AppLockScreen(
                 ) {
                     Image(
                         painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                        contentDescription = "Iris Logo",
+                        contentDescription = stringResource(R.string.app_name),
                         modifier = Modifier.size(68.dp)
                     )
                 }
@@ -269,14 +279,18 @@ fun AppLockScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Text(
-                    text = if (isUnlockedSuccess) "Welcome Back" else if (isPicker) "Select Media" else "Iris Gallery",
+                    text = if (isUnlockedSuccess) stringResource(R.string.app_lock_welcome_back)
+                    else if (isPicker) stringResource(R.string.app_lock_picker_title)
+                    else stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
-                    text = if (isUnlockedSuccess) "Unlocking..." else if (isPicker) "Enter Gallery PIN to select photos" else "Enter Gallery PIN to unlock",
+                    text = if (isUnlockedSuccess) stringResource(R.string.app_lock_unlocking)
+                    else if (isPicker) stringResource(R.string.app_lock_picker_subtitle)
+                    else stringResource(R.string.app_lock_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -406,7 +420,7 @@ fun PinKeypad(
                 ) {
                     Icon(
                         Icons.Outlined.Fingerprint,
-                        contentDescription = "Fingerprint",
+                        contentDescription = stringResource(R.string.settings_biometric_unlock_title),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(36.dp)
                     )
@@ -430,7 +444,7 @@ fun PinKeypad(
             ) {
                 Icon(
                     Icons.AutoMirrored.Outlined.Backspace,
-                    contentDescription = "Backspace",
+                    contentDescription = stringResource(R.string.action_backspace),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(28.dp)
                 )
@@ -475,6 +489,7 @@ fun PinSetupBottomSheet(
     onDismiss: () -> Unit,
     onPinConfirmed: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptic = LocalHapticFeedback.current
     var step by remember { mutableStateOf(1) } // 1: Enter, 2: Confirm
@@ -529,7 +544,7 @@ fun PinSetupBottomSheet(
                             onPinConfirmed(firstPin)
                         }
                     } else {
-                        triggerShake("PINs do not match. Try again.")
+                        triggerShake(context.getString(R.string.pin_setup_mismatch))
                         confirmPin = ""
                         firstPin = ""
                         step = 1
@@ -581,13 +596,15 @@ fun PinSetupBottomSheet(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = if (step == 1) "Create Gallery PIN" else "Confirm Gallery PIN",
+                text = if (step == 1) androidx.compose.ui.res.stringResource(R.string.pin_setup_create_title)
+                else androidx.compose.ui.res.stringResource(R.string.pin_setup_confirm_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = if (step == 1) "Enter a 4 to 6 digit PIN" else "Re-enter your PIN to confirm",
+                text = if (step == 1) androidx.compose.ui.res.stringResource(R.string.pin_setup_create_subtitle)
+                else androidx.compose.ui.res.stringResource(R.string.pin_setup_confirm_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
@@ -620,7 +637,7 @@ fun PinSetupBottomSheet(
                     onClick = { step = 2 },
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Text("Continue with ${firstPin.length} digits")
+                    Text(androidx.compose.ui.res.stringResource(R.string.pin_continue_with_digits, firstPin.length))
                 }
             }
 
@@ -640,9 +657,10 @@ fun PinChangeBottomSheet(
     onVerifyOldPin: (String) -> Boolean,
     onNewPinConfirmed: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptic = LocalHapticFeedback.current
-    var step by remember { mutableStateOf(1) } // 1: Old PIN, 2: New PIN, 3: Confirm New PIN
+    var step by remember { mutableIntStateOf(1) } // 1: Old PIN, 2: New PIN, 3: Confirm New PIN
     var oldPin by remember { mutableStateOf("") }
     var newPin by remember { mutableStateOf("") }
     var confirmNewPin by remember { mutableStateOf("") }
@@ -683,7 +701,7 @@ fun PinChangeBottomSheet(
                     if (next.length >= 4 && onVerifyOldPin(next)) {
                         step = 2
                     } else if (next.length == 6) {
-                        triggerShake("Incorrect current PIN")
+                        triggerShake(context.getString(R.string.pin_incorrect_current))
                         oldPin = ""
                     }
                 }
@@ -707,7 +725,7 @@ fun PinChangeBottomSheet(
                                 onNewPinConfirmed(newPin)
                             }
                         } else {
-                            triggerShake("New PINs do not match")
+                            triggerShake(context.getString(R.string.pin_mismatch_new))
                             confirmNewPin = ""
                             newPin = ""
                             step = 2
@@ -757,9 +775,9 @@ fun PinChangeBottomSheet(
 
             Text(
                 text = when (step) {
-                    1 -> "Enter Current PIN"
-                    2 -> "Enter New PIN"
-                    else -> "Confirm New PIN"
+                    1 -> androidx.compose.ui.res.stringResource(R.string.pin_change_verify_title)
+                    2 -> androidx.compose.ui.res.stringResource(R.string.pin_change_new_title)
+                    else -> androidx.compose.ui.res.stringResource(R.string.pin_change_confirm_title)
                 },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
@@ -767,9 +785,9 @@ fun PinChangeBottomSheet(
 
             Text(
                 text = when (step) {
-                    1 -> "Verify your identity"
-                    2 -> "Choose a 4 to 6 digit PIN"
-                    else -> "Re-enter to confirm"
+                    1 -> androidx.compose.ui.res.stringResource(R.string.pin_change_verify_subtitle)
+                    2 -> androidx.compose.ui.res.stringResource(R.string.pin_change_new_subtitle)
+                    else -> androidx.compose.ui.res.stringResource(R.string.pin_change_confirm_subtitle)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -813,7 +831,7 @@ fun PinChangeBottomSheet(
                     onClick = { step = 3 },
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Text("Continue with ${newPin.length} digits")
+                    Text(androidx.compose.ui.res.stringResource(R.string.pin_continue_with_digits, newPin.length))
                 }
             }
 
@@ -833,6 +851,7 @@ fun PinDisableBottomSheet(
     onVerifyPin: (String) -> Boolean,
     onSuccess: () -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val haptic = LocalHapticFeedback.current
     var pin by remember { mutableStateOf("") }
@@ -875,7 +894,7 @@ fun PinDisableBottomSheet(
                     onSuccess()
                 }
             } else if (next.length == 6) {
-                triggerShake("Incorrect PIN")
+                triggerShake(context.getString(R.string.pin_incorrect))
                 pin = ""
             }
         }
@@ -915,13 +934,13 @@ fun PinDisableBottomSheet(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = "Turn Off App Lock",
+                text = androidx.compose.ui.res.stringResource(R.string.pin_disable_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "Enter your current PIN to disable Gallery App Lock",
+                text = androidx.compose.ui.res.stringResource(R.string.pin_disable_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)

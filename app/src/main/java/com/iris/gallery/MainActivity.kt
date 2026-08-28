@@ -14,6 +14,7 @@ import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import android.app.KeyguardManager
 import android.widget.Toast
@@ -109,14 +110,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -130,6 +135,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -166,6 +176,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.res.stringResource
 import coil3.compose.AsyncImage
 import coil3.compose.rememberAsyncImagePainter
 import coil3.compose.AsyncImagePainter
@@ -218,6 +229,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -245,6 +258,9 @@ class MainActivity : ComponentActivity() {
         val requestedType = intent.type
         val viewUri = intent.data.takeIf { isViewAction }
         val settingsPreferences = SettingsPreferences(this)
+        if (settingsPreferences.state.value.language.isNotEmpty()) {
+            com.iris.gallery.ui.setAppLanguage(this, settingsPreferences.state.value.language)
+        }
         setContent {
             val settings by settingsPreferences.state.collectAsStateWithLifecycle()
             IrisTheme(
@@ -346,7 +362,27 @@ private fun GalleryApp(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val libraryState by viewModel.libraryState.collectAsStateWithLifecycle()
+    val vaultMedia by viewModel.vaultMedia.collectAsStateWithLifecycle()
     val duplicateState by viewModel.duplicateState.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
+
+    var pendingVaultMove by remember { mutableStateOf<com.iris.gallery.data.VaultMoveResult?>(null) }
+    val vaultDeleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val pending = pendingVaultMove
+        pendingVaultMove = null
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.refresh()
+            val count = pending?.vaultedMedia?.size ?: 0
+            Toast.makeText(context, context.getString(R.string.toast_items_vaulted, count), Toast.LENGTH_SHORT).show()
+        } else {
+            pending?.let { moveResult ->
+                coroutineScope.launch {
+                    viewModel.rollbackVaultMove(moveResult.vaultedMedia)
+                }
+            }
+            Toast.makeText(context, context.getString(R.string.toast_lock_cancelled), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(permitted) { if (permitted) viewModel.refresh() }
     LaunchedEffect(Unit) {
@@ -391,87 +427,264 @@ private fun GalleryApp(
                     }
                     requested.filterNot { it.id in libraryState.lockedMedia }
                 }
-                GalleryScaffold(
-                    settings = settings,
-                    settingsPreferences = settingsPreferences,
-                    images = visibleMedia,
-                    trashed = state.trashed,
-                    lockedIds = libraryState.lockedMedia,
-                    lockedMedia = state.images.filter { it.id in libraryState.lockedMedia },
-                    pinnedAlbums = libraryState.pinnedAlbums,
-                    albumCovers = libraryState.albumCovers,
-                    albumSort = libraryState.albumSort,
-                    albumOrder = libraryState.albumOrder,
-                    lockedAuthorized = lockedAuthorized,
-                    loading = state.loading,
-                    error = state.error,
-                    favorites = favorites,
-                    onToggleFavorite = viewModel::toggleFavorite,
-                    onSetLocked = viewModel::setLocked,
-                    onTogglePinnedAlbum = viewModel::togglePinnedAlbum,
-                    onSetAlbumCover = viewModel::setAlbumCover,
-                    onSetAlbumSort = viewModel::setAlbumSort,
-                    onSetAlbumOrder = viewModel::setAlbumOrder,
-                    onRequestUnlock = {
-                        if (!settings.biometricLockEnabled) {
-                            lockedAuthorized = true
+                val allLockedMedia = remember(vaultMedia, state.images, libraryState.lockedMedia) {
+                    val galleryLocked = state.images.filter { it.id in libraryState.lockedMedia }
+                    vaultMedia + galleryLocked
+                }
+                var showAllFilesAccessPromptDialog by remember { mutableStateOf(false) }
+                var pendingVaultItems by remember { mutableStateOf<List<MediaImage>?>(null) }
+
+                fun executeVaultMove(mediaList: List<MediaImage>) {
+                    coroutineScope.launch {
+                        val moveResult = viewModel.moveToVault(mediaList)
+                        if (moveResult.vaultedMedia.isNotEmpty()) {
+                            if (moveResult.silentSuccess) {
+                                viewModel.refresh()
+                                Toast.makeText(context, context.getString(R.string.toast_items_vaulted, moveResult.vaultedMedia.size), Toast.LENGTH_SHORT).show()
+                            } else if (Build.VERSION.SDK_INT >= 30) {
+                                runCatching {
+                                    pendingVaultMove = moveResult
+                                    val request = MediaStore.createDeleteRequest(
+                                        context.contentResolver,
+                                        moveResult.originalMedia.map { canonicalMediaUri(it) }
+                                    )
+                                    vaultDeleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                                }.onFailure {
+                                    pendingVaultMove = null
+                                    viewModel.rollbackVaultMove(moveResult.vaultedMedia)
+                                    Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                val allDeleted = moveResult.originalMedia.all { item ->
+                                    runCatching {
+                                        context.contentResolver.delete(canonicalMediaUri(item), null, null) > 0 ||
+                                        java.io.File(item.path).delete()
+                                    }.getOrDefault(false)
+                                }
+                                if (allDeleted) {
+                                    viewModel.refresh()
+                                    Toast.makeText(context, context.getString(R.string.toast_items_vaulted, moveResult.vaultedMedia.size), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.rollbackVaultMove(moveResult.vaultedMedia)
+                                    Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val onLockMedia: (List<MediaImage>) -> Unit = { mediaList ->
+                    if (mediaList.isNotEmpty()) {
+                        if (settings.vaultHideFromStorage) {
+                            val hasAccess = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+                            if (hasAccess) {
+                                executeVaultMove(mediaList)
+                            } else {
+                                pendingVaultItems = mediaList
+                                showAllFilesAccessPromptDialog = true
+                            }
                         } else {
-                            val keyguard = context.getSystemService(KeyguardManager::class.java)
-                            val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
-                            if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
+                            viewModel.setLocked(mediaList.map { it.id }, true)
+                            Toast.makeText(context, "${mediaList.size} item(s) hidden in Iris Gallery", Toast.LENGTH_SHORT).show()
                         }
-                    },
-                    onPick = onPick,
-                    onTrash = { media ->
-                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                            val request = MediaStore.createTrashRequest(context.contentResolver,
-                                media.map { canonicalMediaUri(it) }, true)
-                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                        }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
-                    },
-                    onRestore = { media ->
-                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                            val request = MediaStore.createTrashRequest(context.contentResolver,
-                                media.map { canonicalMediaUri(it) }, false)
-                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                        }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
-                    },
-                    onDeletePermanently = { media ->
-                        if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                            val request = MediaStore.createDeleteRequest(context.contentResolver,
-                                media.map { canonicalMediaUri(it) })
-                            deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                        }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
-                    },
-                    onEditMetadata = { media, name, title, captured, orientation ->
-                        val values = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                            put(MediaStore.MediaColumns.TITLE, title)
-                            put(MediaStore.Images.Media.DATE_TAKEN, captured)
-                            put(MediaStore.Images.Media.ORIENTATION, orientation)
+                    }
+                }
+                val onUnlockMedia: (List<MediaImage>) -> Unit = { mediaList ->
+                    if (mediaList.isNotEmpty()) {
+                        val vaultItems = mediaList.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
+                        val galleryLockedIds = mediaList.filter { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }.map { it.id }
+                        coroutineScope.launch {
+                            if (vaultItems.isNotEmpty()) {
+                                viewModel.restoreFromVault(vaultItems)
+                            }
+                            if (galleryLockedIds.isNotEmpty()) {
+                                viewModel.setLocked(galleryLockedIds, false)
+                            }
+                            viewModel.refresh()
+                            Toast.makeText(context, "${mediaList.size} item(s) restored from vault", Toast.LENGTH_SHORT).show()
                         }
-                        if (Build.VERSION.SDK_INT >= 30) runCatching {
-                            pendingMetadata = media to values
-                            val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
-                            metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                        }.onFailure { pendingMetadata = null; Toast.makeText(context, "Could not request metadata access", Toast.LENGTH_LONG).show() }
-                        else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
+                    }
+                }
+                val onDeleteFromLocked: (List<MediaImage>) -> Unit = { mediaList ->
+                    if (mediaList.isNotEmpty()) {
+                        val vaultItems = mediaList.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
+                        val galleryLockedItems = mediaList.filter { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }
+                        if (vaultItems.isNotEmpty()) {
+                            coroutineScope.launch {
+                                viewModel.deletePermanentlyFromVault(vaultItems)
+                                viewModel.refresh()
+                                Toast.makeText(context, "${vaultItems.size} item(s) permanently deleted", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        if (galleryLockedItems.isNotEmpty()) {
+                            if (Build.VERSION.SDK_INT >= 30) runCatching {
+                                val request = MediaStore.createDeleteRequest(context.contentResolver,
+                                    galleryLockedItems.map { canonicalMediaUri(it) })
+                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                            }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                            else runCatching {
+                                galleryLockedItems.forEach { context.contentResolver.delete(canonicalMediaUri(it), null, null) }
+                                viewModel.refresh()
+                            }
+                        }
+                    }
+                }
+                AnimatedContent(
+                    targetState = settings.language,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)) +
+                         scaleIn(initialScale = 0.98f, animationSpec = tween(280, easing = FastOutSlowInEasing)))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+                                scaleOut(targetScale = 1.01f, animationSpec = tween(180, easing = FastOutSlowInEasing))
+                            )
                     },
-                    duplicateState = duplicateState,
-                    onScanDuplicates = viewModel::scanDuplicates,
-                    onCancelDuplicateScan = viewModel::cancelDuplicateScan,
-                    initialMemories = initialMemories,
-                    initialViewUri = initialViewUri,
-                )
+                    label = "language_transition"
+                ) { _ ->
+                    GalleryScaffold(
+                        settings = settings,
+                        settingsPreferences = settingsPreferences,
+                        images = visibleMedia,
+                        trashed = state.trashed,
+                        lockedIds = libraryState.lockedMedia,
+                        lockedMedia = allLockedMedia,
+                        pinnedAlbums = libraryState.pinnedAlbums,
+                        albumCovers = libraryState.albumCovers,
+                        albumSort = libraryState.albumSort,
+                        albumOrder = libraryState.albumOrder,
+                        lockedAuthorized = lockedAuthorized,
+                        loading = state.loading,
+                        error = state.error,
+                        favorites = favorites,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onLockMedia = onLockMedia,
+                        onUnlockMedia = onUnlockMedia,
+                        onDeleteFromLocked = onDeleteFromLocked,
+                        onTogglePinnedAlbum = viewModel::togglePinnedAlbum,
+                        onSetAlbumCover = viewModel::setAlbumCover,
+                        onSetAlbumSort = viewModel::setAlbumSort,
+                        onSetAlbumOrder = viewModel::setAlbumOrder,
+                        onRequestUnlock = {
+                            if (!settings.biometricLockEnabled) {
+                                lockedAuthorized = true
+                            } else {
+                                val keyguard = context.getSystemService(KeyguardManager::class.java)
+                                val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
+                                if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
+                            }
+                        },
+                        onPick = onPick,
+                        onTrash = { media ->
+                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                                val request = MediaStore.createTrashRequest(context.contentResolver,
+                                    media.map { canonicalMediaUri(it) }, true)
+                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                            }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                        },
+                        onRestore = { media ->
+                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                                val request = MediaStore.createTrashRequest(context.contentResolver,
+                                    media.map { canonicalMediaUri(it) }, false)
+                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                            }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
+                        },
+                        onDeletePermanently = { media ->
+                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
+                                val request = MediaStore.createDeleteRequest(context.contentResolver,
+                                    media.map { canonicalMediaUri(it) })
+                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                            }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                        },
+                        onEditMetadata = { media, name, title, captured, orientation ->
+                            val values = ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                                put(MediaStore.MediaColumns.TITLE, title)
+                                put(MediaStore.Images.Media.DATE_TAKEN, captured)
+                                put(MediaStore.Images.Media.ORIENTATION, orientation)
+                            }
+                            if (Build.VERSION.SDK_INT >= 30) runCatching {
+                                pendingMetadata = media to values
+                                val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
+                                metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                            }.onFailure { pendingMetadata = null; Toast.makeText(context, context.getString(R.string.toast_could_not_request_metadata), Toast.LENGTH_LONG).show() }
+                            else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
+                        },
+                        duplicateState = duplicateState,
+                        onScanDuplicates = viewModel::scanDuplicates,
+                        onCancelDuplicateScan = viewModel::cancelDuplicateScan,
+                        initialMemories = initialMemories,
+                        initialViewUri = initialViewUri,
+                    )
+                }
+
+                if (showAllFilesAccessPromptDialog) {
+                    val pending = pendingVaultItems
+                    AlertDialog(
+                        onDismissRequest = { showAllFilesAccessPromptDialog = false; pendingVaultItems = null },
+                        icon = { Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                        title = { Text(stringResource(R.string.prompt_free_vault_title)) },
+                        text = {
+                            Text(stringResource(R.string.prompt_free_vault_desc))
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                showAllFilesAccessPromptDialog = false
+                                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                runCatching { context.startActivity(intent) }
+                                    .onFailure {
+                                        runCatching {
+                                            context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                        }
+                                    }
+                            }) {
+                                Text(stringResource(R.string.action_grant_access))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showAllFilesAccessPromptDialog = false
+                                pending?.let { executeVaultMove(it) }
+                                pendingVaultItems = null
+                            }) {
+                                Text(stringResource(R.string.action_use_system_popup))
+                            }
+                        }
+                    )
+                }
             }
         }
+    }
+
+    if (!settings.firstLaunchLanguageSetupDone) {
+        com.iris.gallery.ui.FirstLaunchLanguageBottomSheet(
+            onConfirm = { selectedLang ->
+                settingsPreferences.setLanguage(selectedLang)
+                settingsPreferences.setFirstLaunchLanguageSetupDone(true)
+                com.iris.gallery.ui.setAppLanguage(context, selectedLang)
+            }
+        )
     }
 }
 
 private fun canonicalMediaUri(item: MediaImage): Uri {
+    if (item.uri.scheme == "file" || item.id < 0) return item.uri
     val collection = if (item.isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
     else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
     return ContentUris.withAppendedId(collection, item.id)
+}
+
+private fun getShareUri(context: android.content.Context, item: MediaImage): Uri {
+    return if (item.uri.scheme == "file" || item.path.startsWith(context.filesDir.absolutePath)) {
+        androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            java.io.File(item.path)
+        )
+    } else {
+        item.uri
+    }
 }
 
 @Composable
@@ -482,9 +695,9 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(Icons.Outlined.PhotoLibrary, null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
-        Text("Your gallery, beautifully yours", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Allow photo access to browse your library. Iris never uploads or analyzes your photos.", modifier = Modifier.padding(vertical = 16.dp))
-        Button(onClick = onGrant) { Text("Choose photos") }
+        Text(stringResource(R.string.permission_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.permission_desc), modifier = Modifier.padding(vertical = 16.dp))
+        Button(onClick = onGrant) { Text(stringResource(R.string.permission_button)) }
     }
 }
 
@@ -506,7 +719,9 @@ private fun GalleryScaffold(
     error: String?,
     favorites: Set<Long>,
     onToggleFavorite: (Long) -> Unit,
-    onSetLocked: (Collection<Long>, Boolean) -> Unit,
+    onLockMedia: (List<MediaImage>) -> Unit,
+    onUnlockMedia: (List<MediaImage>) -> Unit,
+    onDeleteFromLocked: (List<MediaImage>) -> Unit,
     onTogglePinnedAlbum: (Long) -> Unit,
     onSetAlbumCover: (Long, Long) -> Unit,
     onSetAlbumSort: (com.iris.gallery.data.AlbumSort) -> Unit,
@@ -562,7 +777,11 @@ private fun GalleryScaffold(
     val albumPhotoGridState = rememberLazyGridState()
     val favoriteGridState = rememberLazyGridState()
     val libraryGridState = rememberLazyGridState()
-    val labels = remember { listOf("Photos", "Albums", "Favorites", "Library") }
+    val photoTabLabel = stringResource(R.string.tab_photos)
+    val albumsTabLabel = stringResource(R.string.tab_albums)
+    val favoritesTabLabel = stringResource(R.string.tab_favorites)
+    val libraryTabLabel = stringResource(R.string.tab_library)
+    val labels = listOf(photoTabLabel, albumsTabLabel, favoritesTabLabel, libraryTabLabel)
     val icons = remember { listOf(Icons.Outlined.PhotoLibrary, Icons.Outlined.PhotoAlbum, Icons.Outlined.FavoriteBorder, Icons.Outlined.Dashboard) }
     val photoCellSize = customCellSize
     val onCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
@@ -610,74 +829,93 @@ private fun GalleryScaffold(
     fun shareSelection() {
         val selected = activeMedia.filter { it.id in selectedIds }
         if (selected.isEmpty()) return
-        val uris = ArrayList(selected.map { it.uri })
+        val uris = ArrayList(selected.map { getShareUri(context, it) })
         val intent = Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
             type = if (uris.size == 1) selected.first().mimeType.ifBlank { "*/*" } else "*/*"
             if (uris.size == 1) putExtra(Intent.EXTRA_STREAM, uris.first())
             else putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Share media"))
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    val count = if (selectedIds.isNotEmpty()) "${selectedIds.size} selected"
+                    val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
                         else when {
                             destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
-                            destination == 3 && librarySection == "settings" -> "Settings"
-                            destination == 3 && librarySection == "about" -> "About Iris"
+                            destination == 3 && librarySection == "settings" -> stringResource(R.string.section_settings)
+                            destination == 3 && librarySection == "about" -> stringResource(R.string.section_about)
+                            destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
+                            destination == 3 && librarySection == "locked" -> stringResource(R.string.section_locked)
+                            destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
+                            destination == 3 && librarySection == "memories" -> stringResource(R.string.section_memories)
                             destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
-                            destination == 2 -> "Favorites"
-                            destination == 1 -> "Albums"
-                            destination == 3 -> "Library"
-                            else -> "Photos"
+                            destination == 2 -> favoritesTabLabel
+                            destination == 1 -> albumsTabLabel
+                            destination == 3 -> libraryTabLabel
+                            else -> photoTabLabel
                         }
                     AnimatedContent(count, label = "topbar title") { text -> Text(text,
                         maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 },
                 navigationIcon = {
                     if (selectedIds.isNotEmpty()) {
-                        IconButton(onClick = ::clearSelection) { Icon(Icons.Outlined.Close, "Clear selection") }
+                        IconButton(onClick = ::clearSelection) { Icon(Icons.Outlined.Close, stringResource(R.string.action_clear_selection)) }
                     } else if (destination == 1 && selectedAlbum != null) {
-                        IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.Outlined.ArrowBack, "Albums") }
+                        IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.Outlined.ArrowBack, albumsTabLabel) }
                     } else if (destination == 3 && librarySection != null) {
-                        IconButton(onClick = { librarySection = null }) { Icon(Icons.Outlined.ArrowBack, "Library") }
+                        IconButton(onClick = { librarySection = null }) { Icon(Icons.Outlined.ArrowBack, libraryTabLabel) }
                     }
                 },
                 actions = {
                     if (selectedIds.isNotEmpty()) {
                         if (destination == 3 && librarySection == "trash") {
                             IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onRestore(selected) }) {
-                                Icon(Icons.Outlined.RestoreFromTrash, "Restore selected")
+                                Icon(Icons.Outlined.RestoreFromTrash, stringResource(R.string.action_restore))
                             }
                         }
-                        IconButton(onClick = ::shareSelection) { Icon(Icons.Outlined.Share, "Share selected") }
+                        IconButton(onClick = ::shareSelection) { Icon(Icons.Outlined.Share, stringResource(R.string.action_share)) }
                         IconButton(onClick = {
                             val selected = activeMedia.filter { it.id in selectedIds }
-                            clearSelection(); if (destination == 3 && librarySection == "trash") onDeletePermanently(selected) else onTrash(selected)
-                        }) { Icon(Icons.Outlined.DeleteOutline, "Delete selected") }
+                            clearSelection()
+                            when {
+                                destination == 3 && librarySection == "trash" -> onDeletePermanently(selected)
+                                destination == 3 && librarySection == "locked" -> onDeleteFromLocked(selected)
+                                else -> onTrash(selected)
+                            }
+                        }) { Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.action_delete)) }
                         Box {
                             IconButton(onClick = { selectionMenuExpanded = true }) {
-                                Icon(Icons.Outlined.MoreVert, "More selection actions")
+                                Icon(Icons.Outlined.MoreVert, stringResource(R.string.action_more))
                             }
                             DropdownMenu(selectionMenuExpanded, onDismissRequest = { selectionMenuExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Select all") }, leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
+                                DropdownMenuItem(text = { Text(stringResource(R.string.action_select_all)) }, leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
                                     onClick = { selectionMenuExpanded = false; selectedIds = activeMedia.mapTo(mutableSetOf()) { it.id } })
                                 if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
-                                    DropdownMenuItem(text = { Text("Set as album cover") }, leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_set_album_cover)) }, leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
                                         onClick = { selectionMenuExpanded = false; onSetAlbumCover(selectedAlbum!!.id, selectedIds.first()); clearSelection() })
                                 }
                                 if (destination == 3 && librarySection == "locked") {
-                                    DropdownMenuItem(text = { Text("Remove from Locked") }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
-                                        onClick = { selectionMenuExpanded = false; val ids = selectedIds; clearSelection(); onSetLocked(ids, false) })
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_remove_from_locked)) }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            val selected = activeMedia.filter { it.id in selectedIds }
+                                            clearSelection()
+                                            onUnlockMedia(selected)
+                                        })
                                 } else if (!(destination == 3 && librarySection == "trash")) {
-                                    DropdownMenuItem(text = { Text("Move to Locked") }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
-                                        onClick = { selectionMenuExpanded = false; val ids = selectedIds; clearSelection(); onSetLocked(ids, true) })
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_move_to_locked)) }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            val selected = activeMedia.filter { it.id in selectedIds }
+                                            clearSelection()
+                                            onLockMedia(selected)
+                                        })
                                 }
-                                DropdownMenuItem(text = { Text("Favorite") }, leadingIcon = { Icon(Icons.Outlined.FavoriteBorder, null) },
+                                DropdownMenuItem(text = { Text(stringResource(R.string.action_favorite)) }, leadingIcon = { Icon(Icons.Outlined.FavoriteBorder, null) },
                                     onClick = {
                                         selectionMenuExpanded = false
                                         val makeFavorite = selectedIds.any { it !in favorites }
@@ -691,12 +929,12 @@ private fun GalleryScaffold(
                             TextButton(onClick = { confirmEmptyTrash = true }) {
                                 Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Empty", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
                         if (destination == 3 && librarySection == null) {
                             IconButton(onClick = { librarySection = "settings" }) {
-                                Icon(Icons.Outlined.Settings, "Settings")
+                                Icon(Icons.Outlined.Settings, stringResource(R.string.section_settings))
                             }
                         }
                         if (destination != 1 || selectedAlbum != null) {
@@ -705,7 +943,7 @@ private fun GalleryScaffold(
                                 customCellSize = if (compactGrid) 80.dp else 112.dp
                                 settingsPreferences.setPhotoGridSize(customCellSize.value)
                             }) {
-                                Icon(Icons.Outlined.GridView, if (compactGrid) "Comfortable grid" else "Compact grid")
+                                Icon(Icons.Outlined.GridView, if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid))
                             }
                         }
                     }
@@ -795,26 +1033,50 @@ private fun GalleryScaffold(
                             onBack = { librarySection = null }
                         )
                         "trash" -> if (trashed.isEmpty()) EmptyState("Trash is empty", padding) else PhotoGrid(
-                            trashed, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                            images = trashed,
+                            padding = padding,
+                            gridState = libraryGridState,
+                            cellSize = photoCellSize,
+                            onCellSizeChange = onCellSizeChange,
                             cornerStyle = settings.cornerStyle,
                             gridSpacing = settings.gridSpacing,
                             showVideoDuration = settings.showVideoDurationBadge,
                             showFormatBadge = settings.showMediaFormatBadge,
                             selectedIds = selectedIds,
-                            onSetSelection = ::setSelection) { toggleSelection(it.id) }
+                            onToggleSelection = ::toggleSelection,
+                            onSetSelection = ::setSelection,
+                        ) {
+                            if (selectedIds.isNotEmpty()) toggleSelection(it.id)
+                            else {
+                                viewerImages = trashed
+                                selectedId = it.id
+                            }
+                        }
                         "locked" -> if (!lockedAuthorized) {
                             LaunchedEffect(Unit) { onRequestUnlock() }
                             EmptyState("Unlock to view private items", padding)
                         } else {
                             val locked = lockedMedia
                             if (locked.isEmpty()) EmptyState("No locked items", padding) else PhotoGrid(
-                                locked, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                                images = locked,
+                                padding = padding,
+                                gridState = libraryGridState,
+                                cellSize = photoCellSize,
+                                onCellSizeChange = onCellSizeChange,
                                 cornerStyle = settings.cornerStyle,
                                 gridSpacing = settings.gridSpacing,
                                 showVideoDuration = settings.showVideoDurationBadge,
                                 showFormatBadge = settings.showMediaFormatBadge,
                                 selectedIds = selectedIds,
-                                onSetSelection = ::setSelection) { toggleSelection(it.id) }
+                                onToggleSelection = ::toggleSelection,
+                                onSetSelection = ::setSelection,
+                            ) {
+                                if (selectedIds.isNotEmpty()) toggleSelection(it.id)
+                                else {
+                                    viewerImages = locked
+                                    selectedId = it.id
+                                }
+                            }
                         }
                         "memories" -> {
                             val today = LocalDate.now()
@@ -850,7 +1112,7 @@ private fun GalleryScaffold(
                             }
 
                             if (allSpecial.isEmpty()) {
-                                EmptyState("No RAW, GIF, motion photos or panoramas found", padding)
+                                EmptyState(stringResource(R.string.empty_special_formats), padding)
                             } else {
                                 Column(Modifier.fillMaxSize().padding(padding)) {
                                     LazyRow(
@@ -861,40 +1123,40 @@ private fun GalleryScaffold(
                                             FilterChip(
                                                 selected = formatFilter == MediaFormatFilter.ALL,
                                                 onClick = { formatFilter = MediaFormatFilter.ALL },
-                                                label = { Text("All (${allSpecial.size})") },
+                                                label = { Text(stringResource(R.string.filter_all_count, allSpecial.size)) },
                                             )
                                         }
                                         if (allRaw.isNotEmpty()) item {
                                             FilterChip(
                                                 selected = formatFilter == MediaFormatFilter.RAW,
                                                 onClick = { formatFilter = MediaFormatFilter.RAW },
-                                                label = { Text("RAW (${allRaw.size})") },
+                                                label = { Text(stringResource(R.string.filter_raw_count, allRaw.size)) },
                                             )
                                         }
                                         if (allGifs.isNotEmpty()) item {
                                             FilterChip(
                                                 selected = formatFilter == MediaFormatFilter.GIF,
                                                 onClick = { formatFilter = MediaFormatFilter.GIF },
-                                                label = { Text("GIFs (${allGifs.size})") },
+                                                label = { Text(stringResource(R.string.filter_gifs_count, allGifs.size)) },
                                             )
                                         }
                                         if (allPanos.isNotEmpty()) item {
                                             FilterChip(
                                                 selected = formatFilter == MediaFormatFilter.PANORAMA,
                                                 onClick = { formatFilter = MediaFormatFilter.PANORAMA },
-                                                label = { Text("Panoramas (${allPanos.size})") },
+                                                label = { Text(stringResource(R.string.filter_panoramas_count, allPanos.size)) },
                                             )
                                         }
                                         if (allMotion.isNotEmpty()) item {
                                             FilterChip(
                                                 selected = formatFilter == MediaFormatFilter.MOTION,
                                                 onClick = { formatFilter = MediaFormatFilter.MOTION },
-                                                label = { Text("Motion Photos (${allMotion.size})") },
+                                                label = { Text(stringResource(R.string.filter_motion_count, allMotion.size)) },
                                             )
                                         }
                                     }
                                     if (currentFiltered.isEmpty()) {
-                                        EmptyState("No ${formatFilter.label} found", PaddingValues(0.dp))
+                                        EmptyState(stringResource(R.string.empty_format_type, formatFilter.label), PaddingValues(0.dp))
                                     } else {
                                         PhotoGrid(
                                             images = currentFiltered,
@@ -920,7 +1182,7 @@ private fun GalleryScaffold(
                         }
                         "editor" -> {
                             val editable = remember(images) { images.filterNot { it.isVideo } }
-                            if (editable.isEmpty()) EmptyState("No editable images", padding)
+                            if (editable.isEmpty()) EmptyState(stringResource(R.string.empty_editable), padding)
                             else PhotoGrid(
                                 editable, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
                                 cornerStyle = settings.cornerStyle,
@@ -937,13 +1199,13 @@ private fun GalleryScaffold(
                             onOpen = { group, media -> viewerImages = group.items; selectedId = media.id },
                             onTrash = onTrash,
                         )
-                        else -> LibraryScreen(padding, trashed.size, lockedIds.size) {
+                        else -> LibraryScreen(padding, trashed.size, lockedMedia.size) {
                             librarySection = it
                         }
                     }
                     return@HorizontalPager
                 }
-                if (favoriteImages.isEmpty()) EmptyState("Favorite photos appear here", padding)
+                if (favoriteImages.isEmpty()) EmptyState(stringResource(R.string.empty_favorites), padding)
                 else PhotoGrid(
                     images = favoriteImages,
                     padding = padding,
@@ -971,18 +1233,18 @@ private fun GalleryScaffold(
     if (confirmEmptyTrash) {
         AlertDialog(
             onDismissRequest = { confirmEmptyTrash = false },
-            title = { Text("Empty Trash?") },
-            text = { Text("Permanently delete all ${trashed.size} item${if (trashed.size != 1) "s" else ""} from your device? This cannot be undone.") },
+            title = { Text(stringResource(R.string.empty_trash_dialog_title)) },
+            text = { Text(stringResource(R.string.empty_trash_dialog_desc, trashed.size, if (trashed.size != 1) "s" else "")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmEmptyTrash = false
                     onDeletePermanently(trashed)
                 }) {
-                    Text("Empty Trash", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmEmptyTrash = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmEmptyTrash = false }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -995,6 +1257,7 @@ private fun GalleryScaffold(
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
         val index = activeImages.indexOfFirst { it.id == id }
+        val isViewingLocked = (destination == 3 && librarySection == "locked") || id < 0 || id in lockedIds
         if (index >= 0 && activeImages.isNotEmpty()) PhotoViewer(
             images = activeImages,
             initialPage = index,
@@ -1002,21 +1265,29 @@ private fun GalleryScaffold(
             autoPlay = settings.autoPlayVideo,
             loop = settings.loopVideo,
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
+            isLocked = isViewingLocked,
             onToggleFavorite = onToggleFavorite,
             onClose = { selectedId = null },
             onDelete = {
                 selectedId = null
-                onTrash(listOf(it))
+                if (isViewingLocked || it.id < 0) {
+                    onDeleteFromLocked(listOf(it))
+                } else if (destination == 3 && librarySection == "trash") {
+                    onDeletePermanently(listOf(it))
+                } else {
+                    onTrash(listOf(it))
+                }
             },
             onEditMetadata = onEditMetadata,
             onEdit = { editorImage = it; selectedId = null },
-            onLock = { onSetLocked(listOf(it.id), true); selectedId = null },
+            onLock = { onLockMedia(listOf(it)); selectedId = null },
+            onUnlock = { onUnlockMedia(listOf(it)); selectedId = null },
         )
     }
     editorImage?.let { image ->
         EditorScreen(image, onClose = { editorImage = null }, onSaved = { saved ->
             if (saved) editorImage = null
-            Toast.makeText(context, if (saved) "Edited copy saved to Pictures/Iris" else "Could not save edited copy",
+            Toast.makeText(context, if (saved) context.getString(R.string.toast_edited_saved) else context.getString(R.string.toast_edited_failed),
                 Toast.LENGTH_SHORT).show()
         })
     }
@@ -1042,8 +1313,8 @@ private fun DuplicateReviewScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Clean up with confidence", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Iris compares files and small on-device visual fingerprints. Photos never leave your phone, and nothing is removed without Android's confirmation.",
+                    Text(stringResource(R.string.duplicates_hero_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.duplicates_hero_desc),
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     when {
                         state.scanning -> {
@@ -1051,18 +1322,18 @@ private fun DuplicateReviewScreen(
                             LinearProgressIndicator({ progress }, Modifier.fillMaxWidth())
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Text("Comparing ${state.done} of ${state.total}", style = MaterialTheme.typography.labelLarge)
-                                TextButton(onClick = onCancel) { Text("Cancel") }
+                                Text(stringResource(R.string.duplicates_comparing_progress, state.done, state.total), style = MaterialTheme.typography.labelLarge)
+                                TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
                             }
                         }
-                        else -> Button(onClick = onScan) { Text(if (state.hasScanned) "Scan again" else "Scan library") }
+                        else -> Button(onClick = onScan) { Text(if (state.hasScanned) stringResource(R.string.duplicates_scan_again) else stringResource(R.string.duplicates_scan_library)) }
                     }
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             }
         }
         if (state.hasScanned && state.groups.isEmpty() && state.error == null) {
-            item { Text("Your library looks clean — no convincing duplicates found.",
+            item { Text(stringResource(R.string.duplicates_empty_state),
                 modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium) }
         }
         if (state.groups.isNotEmpty()) {
@@ -1071,11 +1342,11 @@ private fun DuplicateReviewScreen(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Text("${state.groups.size} groups", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("${selected.size} suggested for removal · ${formatBytes(selected.sumOf { it.sizeBytes })}",
+                        Text(stringResource(R.string.duplicates_groups_count, state.groups.size), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.duplicates_suggested_removal, selected.size, formatBytes(selected.sumOf { it.sizeBytes })),
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Button(enabled = selected.isNotEmpty(), onClick = { onTrash(selected) }) { Text("Review delete") }
+                    Button(enabled = selected.isNotEmpty(), onClick = { onTrash(selected) }) { Text(stringResource(R.string.duplicates_review_delete)) }
                 }
             }
             items(state.groups, key = { group -> group.items.joinToString { it.id.toString() } }) { group ->
@@ -1083,8 +1354,8 @@ private fun DuplicateReviewScreen(
                     Column(Modifier.padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (group.exact) "Exact copies" else "Similar photos", fontWeight = FontWeight.SemiBold)
-                            Text("Save up to ${formatBytes(group.reclaimableBytes)}",
+                            Text(if (group.exact) stringResource(R.string.duplicates_exact_copies) else stringResource(R.string.duplicates_similar_photos), fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.duplicates_save_up_to, formatBytes(group.reclaimableBytes)),
                                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                         }
                         LazyRow(contentPadding = PaddingValues(horizontal = 14.dp),
@@ -1100,12 +1371,12 @@ private fun DuplicateReviewScreen(
                                         shape = RoundedCornerShape(50),
                                         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = .86f)) {
                                         Icon(if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Close,
-                                            if (selected) "Remove" else "Keep", Modifier.padding(5.dp).size(18.dp),
+                                            if (selected) stringResource(R.string.duplicates_remove) else stringResource(R.string.duplicates_keep), Modifier.padding(5.dp).size(18.dp),
                                             tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                                     }
                                     TextButton(onClick = { onOpen(group, media) },
                                         modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))) { Text("Preview") }
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))) { Text(stringResource(R.string.duplicates_preview)) }
                                 }
                             }
                         }
@@ -1436,12 +1707,14 @@ private fun PhotoViewer(
     autoPlay: Boolean = true,
     loop: Boolean = true,
     doubleTapZoomLevel: Float = 2.5f,
+    isLocked: Boolean = false,
     onToggleFavorite: (Long) -> Unit,
     onClose: () -> Unit,
     onDelete: (MediaImage) -> Unit,
     onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
     onEdit: (MediaImage) -> Unit,
     onLock: (MediaImage) -> Unit,
+    onUnlock: (MediaImage) -> Unit = {},
 ) {
     val context = LocalContext.current
     val activity = remember(context) {
@@ -1518,52 +1791,105 @@ private fun PhotoViewer(
                 modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
               ) {
-                IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
                 Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     Text(current.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${pagerState.currentPage + 1} of ${images.size}", color = Color.White.copy(alpha = .7f),
+                    Text(stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size), color = Color.White.copy(alpha = .7f),
                         style = MaterialTheme.typography.labelMedium)
                 }
-                IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, "Details", tint = Color.White) }
+                IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.details_title), tint = Color.White) }
               }
               }
             }
             AnimatedVisibility(
               visible = controlsVisible,
               modifier = Modifier.align(Alignment.BottomCenter),
-              enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 5 },
-              exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 5 },
+              enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                      slideInVertically(
+                          animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                          initialOffsetY = { it }
+                      ) +
+                      scaleIn(
+                          animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                          initialScale = 0.90f
+                      ),
+              exit = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
+                     slideOutVertically(
+                         animationSpec = tween(180, easing = FastOutSlowInEasing),
+                         targetOffsetY = { it / 2 }
+                     ) +
+                     scaleOut(
+                         animationSpec = tween(160, easing = FastOutSlowInEasing),
+                         targetScale = 0.92f
+                     ),
             ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 560.dp)
+                    .widthIn(max = 520.dp)
                     .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .94f),
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .96f),
                 shape = RoundedCornerShape(32.dp),
                 tonalElevation = 8.dp,
             ) {
+              val isFav = current.id in favorites
+              val favScale by animateFloatAsState(
+                  targetValue = if (isFav) 1.25f else 1.0f,
+                  animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                  label = "fav_scale"
+              )
               Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
               ) {
-                ViewerAction(Icons.Outlined.Share, "Share") {
+                ViewerIconButton(
+                    icon = Icons.Outlined.Share,
+                    label = stringResource(R.string.action_share),
+                    modifier = Modifier.weight(1f),
+                ) {
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = if (current.isVideo) "video/*" else "image/*"
-                        putExtra(Intent.EXTRA_STREAM, current.uri)
+                        val shareUri = getShareUri(context, current)
+                        putExtra(Intent.EXTRA_STREAM, shareUri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(intent, "Share photo"))
+                    context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
                 }
-                ViewerAction(
-                    if (current.id in favorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    if (current.id in favorites) "Favorited" else "Favorite",
+                ViewerIconButton(
+                    icon = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    label = if (isFav) stringResource(R.string.action_favorited) else stringResource(R.string.action_favorite),
+                    tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    scaleEffect = favScale,
+                    modifier = Modifier.weight(1f),
                 ) { onToggleFavorite(current.id) }
-                if (!current.isVideo) ViewerAction(Icons.Outlined.Edit, "Edit") { onEdit(current) }
-                ViewerAction(Icons.Outlined.Lock, "Lock") { onLock(current) }
-                ViewerAction(Icons.Outlined.DeleteOutline, "Delete") { confirmDelete = true }
+                if (!current.isVideo) {
+                    ViewerIconButton(
+                        icon = Icons.Outlined.Edit,
+                        label = stringResource(R.string.action_edit),
+                        modifier = Modifier.weight(1f),
+                    ) { onEdit(current) }
+                }
+                if (isLocked || current.id < 0) {
+                    ViewerIconButton(
+                        icon = Icons.Outlined.LockOpen,
+                        label = stringResource(R.string.action_unlock),
+                        modifier = Modifier.weight(1f),
+                    ) { onUnlock(current) }
+                } else {
+                    ViewerIconButton(
+                        icon = Icons.Outlined.Lock,
+                        label = stringResource(R.string.action_lock),
+                        modifier = Modifier.weight(1f),
+                    ) { onLock(current) }
+                }
+                ViewerIconButton(
+                    icon = Icons.Outlined.DeleteOutline,
+                    label = stringResource(R.string.action_delete),
+                    modifier = Modifier.weight(1f),
+                ) { confirmDelete = true }
               }
             }
             }
@@ -1575,12 +1901,30 @@ private fun PhotoViewer(
         onEditMetadata(current, name, title, captured, orientation); showInfo = false
     })
     if (confirmDelete) {
+        val isItemLocked = isLocked || current.id < 0
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Move ${if (current.isVideo) "video" else "photo"} to trash?") },
-            text = { Text("Android will ask you to confirm this change.") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(current) }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            title = {
+                Text(
+                    if (isItemLocked) {
+                        if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
+                        else stringResource(R.string.delete_permanent_photo_title)
+                    } else {
+                        if (current.isVideo) stringResource(R.string.delete_trash_video_title)
+                        else stringResource(R.string.delete_trash_photo_title)
+                    }
+                )
+            },
+            text = {
+                Text(
+                    if (isItemLocked) stringResource(R.string.delete_permanent_desc)
+                    else stringResource(R.string.delete_trash_desc)
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(current) }) {
+                Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+            } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -1749,10 +2093,26 @@ private fun ZoomablePhoto(
 }
 
 @Composable
-private fun ViewerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick = onClick) { Icon(icon, label, tint = MaterialTheme.colorScheme.onSurface) }
-        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelMedium)
+private fun ViewerIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    scaleEffect: Float = 1f,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.height(48.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier
+                .size(24.dp)
+                .scale(scaleEffect)
+        )
     }
 }
 
@@ -1777,7 +2137,7 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(image.name.ifBlank { "Photo details" }, style = MaterialTheme.typography.headlineSmall,
+            Text(image.name.ifBlank { stringResource(R.string.details_photo_details) }, style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
 
             exif?.let { data ->
@@ -1790,8 +2150,8 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Outlined.CameraAlt, "Camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Text(data.cameraModel ?: "Camera Capture", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Icon(Icons.Outlined.CameraAlt, stringResource(R.string.details_camera), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Text(data.cameraModel ?: stringResource(R.string.details_camera_capture), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
                             val specs = listOfNotNull(data.aperture, data.shutterSpeed, data.focalLength, data.iso).joinToString(" · ")
                             if (specs.isNotBlank()) {
@@ -1817,8 +2177,8 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
                         ) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Icon(Icons.Outlined.LocationOn, "Location", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                    Text("Location", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Icon(Icons.Outlined.LocationOn, stringResource(R.string.details_location), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Text(stringResource(R.string.details_location), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 }
                                 Text("%.4f, %.4f".format(Locale.US, data.latitude, data.longitude),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1830,38 +2190,38 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
                             }) {
                                 Icon(Icons.Outlined.Map, null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Map")
+                                Text(stringResource(R.string.details_map))
                             }
                         }
                     }
                 }
             }
 
-            if (image.title.isNotBlank()) DetailBlock("Title", image.title)
-            if (image.description.isNotBlank()) DetailBlock("Description", image.description)
-            DetailItem("Captured", DateFormat.getDateTimeInstance().format(Date(image.dateTaken)))
-            DetailItem("Resolution", "${image.width} × ${image.height}")
-            DetailItem("Type", image.mimeType.ifBlank { if (image.isVideo) "Video" else "Image" })
-            DetailItem("Size", formatFileSize(image.sizeBytes))
-            if (image.orientation != 0) DetailItem("Orientation", "${image.orientation}°")
-            if (image.isVideo) DetailItem("Duration", formatMediaDuration(image.durationMs))
-            DetailBlock("Path", image.path)
-            if (!image.isVideo) Button(onClick = { editing = true }, Modifier.fillMaxWidth()) { Text("Edit metadata") }
+            if (image.title.isNotBlank()) DetailBlock(stringResource(R.string.details_title_field), image.title)
+            if (image.description.isNotBlank()) DetailBlock(stringResource(R.string.details_desc_field), image.description)
+            DetailItem(stringResource(R.string.details_captured), DateFormat.getDateTimeInstance().format(Date(image.dateTaken)))
+            DetailItem(stringResource(R.string.details_resolution), "${image.width} × ${image.height}")
+            DetailItem(stringResource(R.string.details_type), image.mimeType.ifBlank { if (image.isVideo) stringResource(R.string.format_video) else stringResource(R.string.format_image) })
+            DetailItem(stringResource(R.string.details_size), formatFileSize(image.sizeBytes))
+            if (image.orientation != 0) DetailItem(stringResource(R.string.details_orientation), "${image.orientation}°")
+            if (image.isVideo) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
+            DetailBlock(stringResource(R.string.details_path), image.path)
+            if (!image.isVideo) Button(onClick = { editing = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.details_edit_metadata)) }
         }
     }
     if (editing) AlertDialog(
         onDismissRequest = { editing = false },
-        title = { Text("Edit metadata") },
+        title = { Text(stringResource(R.string.details_edit_metadata)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             androidx.compose.material3.OutlinedTextField(editedName, { editedName = it },
-                label = { Text("File name") }, singleLine = true)
+                label = { Text(stringResource(R.string.details_edit_filename)) }, singleLine = true)
             androidx.compose.material3.OutlinedTextField(editedTitle, { editedTitle = it },
-                label = { Text("Title") }, singleLine = true)
+                label = { Text(stringResource(R.string.details_edit_title)) }, singleLine = true)
             androidx.compose.material3.OutlinedTextField(editedDate, { editedDate = it },
-                label = { Text("Captured · yyyy-MM-dd HH:mm") }, singleLine = true)
+                label = { Text(stringResource(R.string.details_edit_captured_hint)) }, singleLine = true)
             androidx.compose.material3.OutlinedTextField(editedOrientation, { editedOrientation = it.filter(Char::isDigit) },
-                label = { Text("Orientation · 0, 90, 180 or 270") }, singleLine = true)
-            Text("Android will ask before changing media owned by another app.",
+                label = { Text(stringResource(R.string.details_edit_orientation_hint)) }, singleLine = true)
+            Text(stringResource(R.string.details_edit_permission_note),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } },
         confirmButton = { TextButton(onClick = {
@@ -1870,8 +2230,8 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
             if (editedName.isNotBlank() && timestamp != null && orientation in listOf(0, 90, 180, 270)) {
                 editing = false; onSave(editedName.trim(), editedTitle.trim(), timestamp, orientation!!)
             }
-        }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
+        }) { Text(stringResource(R.string.action_save)) } },
+        dismissButton = { TextButton(onClick = { editing = false }) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 

@@ -11,6 +11,34 @@ enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCL
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
 enum class StartupTab(val pageIndex: Int) { PHOTOS(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
 
+data class AppLanguage(
+    val code: String, // "" for system, or "en", "ar", "es", etc.
+    val displayName: String,
+    val nativeName: String,
+    val flag: String,
+)
+
+val SUPPORTED_LANGUAGES = listOf(
+    AppLanguage("", "System Default", "Default / النظام", "🌐"),
+    AppLanguage("en", "English", "English", "🇺🇸"),
+    AppLanguage("ar", "Arabic", "العربية", "🇮🇶"),
+    AppLanguage("es", "Spanish", "Español", "🇪🇸"),
+    AppLanguage("fr", "French", "Français", "🇫🇷"),
+    AppLanguage("de", "German", "Deutsch", "🇩🇪"),
+    AppLanguage("zh", "Chinese (Simplified)", "简体中文", "🇨🇳"),
+    AppLanguage("pt", "Portuguese", "Português", "🇧🇷"),
+    AppLanguage("it", "Italian", "Italiano", "🇮🇹"),
+    AppLanguage("ja", "Japanese", "日本語", "🇯🇵"),
+    AppLanguage("ru", "Russian", "Русский", "🇷🇺"),
+    AppLanguage("tr", "Turkish", "Türkçe", "🇹🇷"),
+)
+
+fun detectBestLanguage(): String {
+    val systemLang = java.util.Locale.getDefault().language.lowercase()
+    val match = SUPPORTED_LANGUAGES.firstOrNull { it.code.isNotEmpty() && it.code == systemLang }
+    return match?.code ?: "en"
+}
+
 data class SettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val amoledBlack: Boolean = false,
@@ -28,10 +56,13 @@ data class SettingsState(
     val doubleTapZoomLevel: Float = 2.5f,
     val startupTab: StartupTab = StartupTab.PHOTOS,
     val biometricLockEnabled: Boolean = true,
+    val vaultHideFromStorage: Boolean = true,
     val appLockEnabled: Boolean = false,
     val appLockPinHash: String = "",
     val appLockPinSalt: String = "",
     val appLockBiometricsEnabled: Boolean = true,
+    val language: String = "",
+    val firstLaunchLanguageSetupDone: Boolean = false,
 ) {
     val hasPin: Boolean get() = appLockPinHash.isNotEmpty()
 }
@@ -42,6 +73,8 @@ class SettingsPreferences(context: Context) {
     val state: StateFlow<SettingsState> = _state.asStateFlow()
 
     fun setThemeMode(mode: ThemeMode) = update { copy(themeMode = mode) }
+    fun setLanguage(lang: String) = update { copy(language = lang) }
+    fun setFirstLaunchLanguageSetupDone(done: Boolean) = update { copy(firstLaunchLanguageSetupDone = done) }
     fun setAmoledBlack(enabled: Boolean) = update { copy(amoledBlack = enabled) }
     fun setAccentColor(color: AccentColor) = update { copy(accentColor = color) }
     fun setCornerStyle(style: CornerStyle) = update { copy(cornerStyle = style) }
@@ -57,6 +90,7 @@ class SettingsPreferences(context: Context) {
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
+    fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
     fun setAppLockBiometricsEnabled(enabled: Boolean) = update { copy(appLockBiometricsEnabled = enabled) }
 
@@ -117,10 +151,13 @@ class SettingsPreferences(context: Context) {
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.PHOTOS),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
+            vaultHideFromStorage = prefs.getBoolean("vault_hide_from_storage", true),
             appLockEnabled = prefs.getBoolean("app_lock_enabled", false),
             appLockPinHash = prefs.getString("app_lock_pin_hash", "").orEmpty(),
             appLockPinSalt = prefs.getString("app_lock_pin_salt", "").orEmpty(),
             appLockBiometricsEnabled = prefs.getBoolean("app_lock_biometrics_enabled", true),
+            language = prefs.getString("app_language", "").orEmpty(),
+            firstLaunchLanguageSetupDone = prefs.getBoolean("first_launch_lang_done", false),
         )
     }
 
@@ -142,10 +179,13 @@ class SettingsPreferences(context: Context) {
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putString("startup_tab", state.startupTab.name)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)
+            .putBoolean("vault_hide_from_storage", state.vaultHideFromStorage)
             .putBoolean("app_lock_enabled", state.appLockEnabled)
             .putString("app_lock_pin_hash", state.appLockPinHash)
             .putString("app_lock_pin_salt", state.appLockPinSalt)
             .putBoolean("app_lock_biometrics_enabled", state.appLockBiometricsEnabled)
+            .putString("app_language", state.language)
+            .putBoolean("first_launch_lang_done", state.firstLaunchLanguageSetupDone)
             .apply()
     }
 }

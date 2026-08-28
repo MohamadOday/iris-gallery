@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">Iris Gallery</string>
+    <string name="app_description">Pure offline, botanical-inspired Android media gallery</string>
+    <string name="version_format">Version %1$s (Build %2$d)</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_photos">Photos</string>
+    <string name="tab_albums">Albums</string>
+    <string name="tab_favorites">Favorites</string>
+    <string name="tab_library">Library</string>
+
+    <!-- Sections -->
+    <string name="section_settings">Settings</string>
+    <string name="section_about">About Iris</string>
+    <string name="section_trash">Trash</string>
+    <string name="section_locked">Locked</string>
+    <string name="section_duplicates">Duplicates</string>
+    <string name="section_memories">Memories</string>
+
+    <!-- Top Bar & Selection -->
+    <string name="selected_count">%1$d selected</string>
+    <string name="selected_count_format">%1$d selected</string>
+    <string name="action_clear_selection">Clear selection</string>
+    <string name="action_restore">Restore selected</string>
+    <string name="action_restore_selected">Restore selected</string>
+    <string name="action_share">Share</string>
+    <string name="action_share_selected">Share selected</string>
+    <string name="action_share_media">Share media</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_delete_selected">Delete selected</string>
+    <string name="action_more">More selection actions</string>
+    <string name="action_more_options">More options</string>
+    <string name="action_select_all">Select all</string>
+    <string name="action_set_album_cover">Set as album cover</string>
+    <string name="action_remove_from_locked">Remove from Locked</string>
+    <string name="action_move_to_locked">Move to Locked</string>
+    <string name="action_favorite">Favorite</string>
+    <string name="action_favorited">Favorited</string>
+    <string name="action_empty_trash">Empty</string>
+    <string name="action_comfortable_grid">Comfortable grid</string>
+    <string name="action_compact_grid">Compact grid</string>
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_save_copy">Save copy</string>
+    <string name="action_saving">Saving…</string>
+    <string name="action_grant">Grant</string>
+    <string name="action_grant_access">Grant Access</string>
+    <string name="action_use_system_popup">Use System Popup</string>
+    <string name="action_close">Close</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_unlock">Unlock</string>
+    <string name="action_lock">Lock</string>
+    <string name="action_details">Details</string>
+    <string name="action_backspace">Backspace</string>
+
+    <!-- Language & First Launch -->
+    <string name="settings_section_language">Language &amp; Region</string>
+    <string name="settings_language_title">App Language</string>
+    <string name="settings_language_desc">Select your preferred display language</string>
+    <string name="first_launch_lang_title">App Language</string>
+    <string name="first_launch_lang_subtitle">Select your language to continue</string>
+    <string name="first_launch_lang_detected">System language</string>
+
+    <!-- Permission Screen -->
+    <string name="permission_title">Your gallery, beautifully yours</string>
+    <string name="permission_desc">Allow photo access to browse your library. Iris never uploads or analyzes your photos.</string>
+    <string name="permission_button">Choose photos</string>
+
+    <!-- Empty States -->
+    <string name="empty_photos">No photos found</string>
+    <string name="empty_favorites">Favorite photos appear here</string>
+    <string name="empty_trash">Trash is empty</string>
+    <string name="empty_locked">No locked items</string>
+    <string name="empty_locked_locked_state">Unlock to view private items</string>
+    <string name="empty_memories">No memories for today yet</string>
+    <string name="empty_editable">No editable images</string>
+    <string name="empty_formats">No RAW, GIF, motion photos or panoramas found</string>
+    <string name="empty_special_formats">No RAW, GIF, motion photos or panoramas found</string>
+    <string name="empty_format_filter">No %1$s found</string>
+    <string name="empty_format_type">No %1$s found</string>
+    <string name="empty_search_albums">No albums matching \"%1$s\"</string>
+    <string name="empty_duplicates">No duplicate photos found</string>
+
+    <!-- Dialogs -->
+    <string name="empty_trash_dialog_title">Empty Trash?</string>
+    <string name="empty_trash_dialog_desc">Permanently delete all %1$d item%2$s from your device? This cannot be undone.</string>
+    <string name="dialog_empty_trash_title">Empty Trash?</string>
+    <string name="dialog_empty_trash_message">Permanently delete all %1$d item(s) from your device? This cannot be undone.</string>
+    <string name="dialog_empty_trash_confirm">Empty Trash</string>
+    <string name="dialog_delete_item_title">Move %1$s to trash?</string>
+    <string name="dialog_delete_item_message">Android will ask you to confirm this change.</string>
+    <string name="delete_trash_video_title">Move video to trash?</string>
+    <string name="delete_trash_photo_title">Move photo to trash?</string>
+    <string name="delete_trash_desc">Android will ask you to confirm this change.</string>
+    <string name="delete_permanent_video_title">Permanently delete video?</string>
+    <string name="delete_permanent_photo_title">Permanently delete photo?</string>
+    <string name="delete_permanent_desc">This item will be permanently removed from your private vault.</string>
+    <string name="dialog_delete_vault_item_title">Permanently delete %1$s?</string>
+    <string name="dialog_delete_vault_item_message">This item will be permanently removed from your private vault.</string>
+    <string name="prompt_free_vault_title">Prompt-Free Vault</string>
+    <string name="prompt_free_vault_desc">Granting \'All Files Access\' allows Iris Gallery to move and hide photos in your private vault silently without Android asking for delete confirmation each time.\n\nIris is 100% offline with zero internet access, so your files never leave your device.</string>
+    <string name="dialog_prompt_free_vault_title">Prompt-Free Vault</string>
+    <string name="dialog_prompt_free_vault_message">Granting \'All Files Access\' allows Iris Gallery to move and hide photos in your private vault silently without Android asking for delete confirmation each time.\n\nIris is 100% offline with zero internet access, so your files never leave your device.</string>
+
+    <!-- Media Types & Titles -->
+    <string name="media_type_photo">photo</string>
+    <string name="media_type_video">video</string>
+    <string name="format_image">Image</string>
+    <string name="format_video">Video</string>
+    <string name="media_page_indicator">%1$d of %2$d</string>
+    <string name="viewer_page_count">%1$d of %2$d</string>
+
+    <!-- Albums Screen -->
+    <string name="search_albums_placeholder">Search %1$d albums…</string>
+    <string name="clear_search">Clear search</string>
+    <string name="sort_recent">Recent</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_size">Size</string>
+    <string name="sort_custom">Custom</string>
+    <string name="album_items_count">%1$d items</string>
+    <string name="album_pin">Pin album</string>
+    <string name="album_unpin">Unpin album</string>
+    <string name="action_move_up">Move up</string>
+    <string name="action_move_down">Move down</string>
+
+    <!-- Library Screen Cards -->
+    <string name="library_header">Organize and rediscover</string>
+    <string name="library_memories_title">Memories</string>
+    <string name="library_memories_subtitle">Highlights from this day and past years</string>
+    <string name="library_duplicates_title">Duplicates</string>
+    <string name="library_duplicates_subtitle">Find exact copies and visually similar photos</string>
+    <string name="library_locked_title">Locked</string>
+    <string name="library_locked_subtitle">%1$d private items</string>
+    <string name="library_trash_title">Trash</string>
+    <string name="library_trash_subtitle">%1$d items · Android removes them after 30 days</string>
+    <string name="library_editor_title">Editor</string>
+    <string name="library_editor_subtitle">Create a polished copy without touching the original</string>
+    <string name="library_formats_title">Media formats</string>
+    <string name="library_formats_subtitle">RAW, GIF, motion photos and panoramas</string>
+    <string name="library_settings_title">Settings &amp; Customization</string>
+    <string name="library_settings_subtitle">Themes, palettes, grid styles, and gestures</string>
+    <string name="library_about_title">About</string>
+    <string name="library_about_subtitle">Developer, open-source project, and app details</string>
+
+    <!-- Media Formats Filters -->
+    <string name="format_all">All (%1$d)</string>
+    <string name="format_raw">RAW (%1$d)</string>
+    <string name="format_gif">GIFs (%1$d)</string>
+    <string name="format_panorama">Panoramas (%1$d)</string>
+    <string name="format_motion">Motion Photos (%1$d)</string>
+    <string name="filter_all_count">All (%1$d)</string>
+    <string name="filter_raw_count">RAW (%1$d)</string>
+    <string name="filter_gifs_count">GIFs (%1$d)</string>
+    <string name="filter_panoramas_count">Panoramas (%1$d)</string>
+    <string name="filter_motion_count">Motion Photos (%1$d)</string>
+
+    <!-- Duplicates Review Screen -->
+    <string name="duplicates_title">Duplicates &amp; Similar Photos</string>
+    <string name="duplicates_desc">Scan for exact copies and visually similar shots</string>
+    <string name="duplicates_scan_now">Scan now</string>
+    <string name="duplicates_scanning">Scanning…</string>
+    <string name="duplicates_summary">%1$d groups (%2$d photos)</string>
+    <string name="duplicates_keep_best_delete">Keep best, delete %1$d selected</string>
+    <string name="duplicates_scan_count">%1$d of %2$d</string>
+    <string name="duplicates_hero_title">Clean up with confidence</string>
+    <string name="duplicates_hero_desc">Iris compares files and small on-device visual fingerprints. Photos never leave your phone, and nothing is removed without Android\'s confirmation.</string>
+    <string name="duplicates_comparing_progress">Comparing %1$d of %2$d</string>
+    <string name="duplicates_scan_again">Scan again</string>
+    <string name="duplicates_scan_library">Scan library</string>
+    <string name="duplicates_empty_state">Your library looks clean — no convincing duplicates found.</string>
+    <string name="duplicates_groups_count">%1$d groups</string>
+    <string name="duplicates_suggested_removal">%1$d suggested for removal · %2$s</string>
+    <string name="duplicates_review_delete">Review delete</string>
+    <string name="duplicates_exact_copies">Exact copies</string>
+    <string name="duplicates_similar_photos">Similar photos</string>
+    <string name="duplicates_save_up_to">Save up to %1$s</string>
+    <string name="duplicates_remove">Remove</string>
+    <string name="duplicates_keep">Keep</string>
+    <string name="duplicates_preview">Preview</string>
+
+    <!-- Timeline Labels -->
+    <string name="timeline_today">Today</string>
+    <string name="timeline_yesterday">Yesterday</string>
+
+    <!-- Details Sheet -->
+    <string name="details_title">Details</string>
+    <string name="details_photo_details">Photo details</string>
+    <string name="details_file_name">File name</string>
+    <string name="details_title_label">Title</string>
+    <string name="details_title_field">Title</string>
+    <string name="details_desc_field">Description</string>
+    <string name="details_date_taken">Date taken</string>
+    <string name="details_captured">Captured</string>
+    <string name="details_time">Time</string>
+    <string name="details_resolution">Resolution</string>
+    <string name="details_file_size">File size</string>
+    <string name="details_size">Size</string>
+    <string name="details_location">Location</string>
+    <string name="details_open_in_map">Open in map</string>
+    <string name="details_map">Map</string>
+    <string name="details_camera">Camera</string>
+    <string name="details_camera_capture">Camera Capture</string>
+    <string name="details_camera_lens">Camera &amp; lens</string>
+    <string name="details_aperture">Aperture</string>
+    <string name="details_shutter">Shutter</string>
+    <string name="details_iso">ISO</string>
+    <string name="details_focal_length">Focal length</string>
+    <string name="details_dimensions">Dimensions</string>
+    <string name="details_orientation">Orientation</string>
+    <string name="details_duration">Duration</string>
+    <string name="details_format">Format</string>
+    <string name="details_type">Type</string>
+    <string name="details_path">Path</string>
+    <string name="details_edit_metadata">Edit metadata</string>
+    <string name="details_edit_filename">File name</string>
+    <string name="details_edit_title">Title</string>
+    <string name="details_edit_captured_hint">Captured · yyyy-MM-dd HH:mm</string>
+    <string name="details_edit_orientation_hint">Orientation · 0, 90, 180 or 270</string>
+    <string name="details_edit_permission_note">Android will ask before changing media owned by another app.</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">Appearance &amp; Theme</string>
+    <string name="settings_theme_mode">Theme Mode</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_amoled_black_title">AMOLED Pure Black</string>
+    <string name="settings_amoled_black_desc">Pitch-black background for OLED displays and maximum contrast</string>
+    <string name="settings_material_you_title">Material You Dynamic Colors</string>
+    <string name="settings_material_you_desc">Extract accent colors automatically from your device wallpaper</string>
+    <string name="settings_custom_accents">Custom Accent Palettes</string>
+
+    <string name="settings_section_layout">Layout &amp; Grid Styling</string>
+    <string name="settings_corner_style">Thumbnail Corner Style</string>
+    <string name="settings_corner_sharp">Sharp (0dp)</string>
+    <string name="settings_corner_subtle">Subtle (8dp)</string>
+    <string name="settings_corner_rounded">Rounded (16dp)</string>
+    <string name="settings_corner_pill">Pill (28dp)</string>
+    <string name="settings_grid_spacing">Grid Spacing</string>
+    <string name="settings_spacing_compact">Compact (2dp)</string>
+    <string name="settings_spacing_standard">Standard (4dp)</string>
+    <string name="settings_spacing_relaxed">Relaxed (8dp)</string>
+    <string name="settings_show_timeline_title">Timeline Group Headers</string>
+    <string name="settings_show_timeline_desc">Group photos by date taken with floating day headers</string>
+
+    <string name="settings_section_badges">Badges &amp; Indicators</string>
+    <string name="settings_badge_duration_title">Video Duration Badge</string>
+    <string name="settings_badge_duration_desc">Overlay length on video tiles in grid view</string>
+    <string name="settings_badge_formats_title">Special Format Badges</string>
+    <string name="settings_badge_formats_desc">Show indicator on GIF, RAW, panorama, and motion photos</string>
+    <string name="settings_album_count_title">Album Item Count</string>
+    <string name="settings_album_count_desc">Display item numbers under album names</string>
+
+    <string name="settings_section_viewer">Viewer &amp; Playback</string>
+    <string name="settings_autoplay_video_title">Auto-Play Videos</string>
+    <string name="settings_autoplay_video_desc">Start playing immediately when opening video in viewer</string>
+    <string name="settings_loop_video_title">Loop Videos</string>
+    <string name="settings_loop_video_desc">Repeat video playback continuously</string>
+    <string name="settings_zoom_scale_title">Double-Tap Zoom Scale</string>
+
+    <string name="settings_section_behavior">Behavior &amp; Security</string>
+    <string name="settings_startup_tab">Default Startup Tab</string>
+    <string name="settings_app_lock_title">Gallery App Lock</string>
+    <string name="settings_app_lock_desc">Require custom PIN to open Iris Gallery and Image Picker</string>
+    <string name="settings_change_pin">Change Gallery PIN</string>
+    <string name="settings_biometric_unlock_title">Fingerprint / Biometric Unlock</string>
+    <string name="settings_biometric_unlock_desc">Allow unlocking Iris Gallery with your fingerprint</string>
+    <string name="settings_hide_vault_title">Hide Vault Media from Storage</string>
+    <string name="settings_hide_vault_desc">Moves locked photos and videos to private app storage so other apps and file managers cannot see them. When disabled, items are only hidden within Iris Gallery.</string>
+    <string name="settings_silent_vault_title">Prompt-Free Vault Management</string>
+    <string name="settings_silent_vault_desc_granted">All Files Access granted — vault operations are silent with zero system confirmation popups.</string>
+    <string name="settings_silent_vault_desc_prompt">Grant \'All Files Access\' so Iris can move and hide photos in the vault without Android confirmation popups.</string>
+    <string name="settings_vault_biometric_title">Biometric Lock for Private Vault</string>
+    <string name="settings_vault_biometric_desc">Require device credential/PIN when viewing locked vault items</string>
+
+    <string name="settings_section_storage">Storage &amp; Reset</string>
+    <string name="settings_clear_cache">Clear Image &amp; Video Thumbnail Cache</string>
+    <string name="settings_reset_all">Reset All Settings to Defaults</string>
+    <string name="settings_reset_dialog_title">Reset All Settings?</string>
+    <string name="settings_reset_dialog_desc">This will restore default themes, grid layouts, and viewer preferences. Your photos, albums, and favorites will not be affected.</string>
+    <string name="settings_reset_confirm">Reset to Defaults</string>
+
+    <!-- App Lock & PIN Dialogs -->
+    <string name="app_lock_title">Unlock Iris Gallery</string>
+    <string name="app_lock_picker_title">Unlock to Select Media</string>
+    <string name="app_lock_welcome_back">Welcome Back</string>
+    <string name="app_lock_select_media">Select Media</string>
+    <string name="app_lock_unlocking">Unlocking…</string>
+    <string name="app_lock_enter_pin_select">Enter Gallery PIN to select photos</string>
+    <string name="app_lock_enter_pin_unlock">Enter Gallery PIN to unlock</string>
+    <string name="app_lock_subtitle">Enter Gallery PIN to unlock</string>
+    <string name="app_lock_picker_subtitle">Enter Gallery PIN to select photos</string>
+    <string name="app_lock_wrong_pin">Incorrect PIN. Please try again.</string>
+    <string name="app_lock_biometric_title">Unlock Iris Gallery</string>
+    <string name="app_lock_biometric_subtitle">Scan your fingerprint to continue</string>
+    <string name="app_lock_scan_fingerprint">Scan your fingerprint to continue</string>
+    <string name="app_lock_biometric_negative">Use PIN</string>
+    <string name="app_lock_auth_cancelled">Authentication cancelled</string>
+    <string name="app_lock_biometrics_unavailable">Biometrics unavailable</string>
+    <string name="pin_keypad_use_pin">Use PIN</string>
+    <string name="pin_setup_create_title">Create Gallery PIN</string>
+    <string name="pin_setup_create_subtitle">Enter a 4 to 6 digit PIN</string>
+    <string name="pin_setup_confirm_title">Confirm Gallery PIN</string>
+    <string name="pin_setup_confirm_subtitle">Re-enter your PIN to confirm</string>
+    <string name="pin_setup_mismatch">PINs do not match. Try again.</string>
+    <string name="pin_change_verify_title">Enter Current PIN</string>
+    <string name="pin_change_verify_subtitle">Verify your identity</string>
+    <string name="pin_change_new_title">Enter New PIN</string>
+    <string name="pin_change_new_subtitle">Choose a 4 to 6 digit PIN</string>
+    <string name="pin_change_confirm_title">Confirm New PIN</string>
+    <string name="pin_change_confirm_subtitle">Re-enter to confirm</string>
+    <string name="pin_incorrect_current">Incorrect current PIN</string>
+    <string name="pin_mismatch_new">New PINs do not match</string>
+    <string name="pin_incorrect">Incorrect PIN</string>
+    <string name="pin_disable_title">Turn Off App Lock</string>
+    <string name="pin_disable_subtitle">Enter your PIN to disable gallery app lock</string>
+    <string name="pin_continue_with_digits">Continue with %1$d digits</string>
+
+    <!-- Image Editor -->
+    <string name="editor_title">Edit copy</string>
+    <string name="editor_close">Close editor</string>
+    <string name="editor_preparing">Preparing editor…</string>
+    <string name="editor_tool_adjust">Adjust</string>
+    <string name="editor_tool_crop">Crop</string>
+    <string name="editor_tool_transform">Transform</string>
+    <string name="editor_tool_resize">Resize</string>
+    <string name="editor_tool_pixelate">Pixelate</string>
+    <string name="editor_tool_blur">Blur</string>
+    <string name="editor_rotate_flip">Rotate &amp; flip</string>
+    <string name="editor_rotate_left">90° Left</string>
+    <string name="editor_rotate_right">90° Right</string>
+    <string name="editor_flip_h">Flip ⇄</string>
+    <string name="editor_flip_v">Flip ⇅</string>
+    <string name="editor_reset_orientation">Reset orientation</string>
+    <string name="editor_crop_manual_hint">Drag any corner to crop manually</string>
+    <string name="editor_crop_help">Drag inside the frame to reposition it. White handles resize it.</string>
+    <string name="editor_crop_manual">Manual</string>
+    <string name="editor_crop_square">Square</string>
+    <string name="editor_width_px">Width px</string>
+    <string name="editor_height_px">Height px</string>
+    <string name="editor_lock_aspect">Lock aspect ratio</string>
+    <string name="editor_original">Original</string>
+    <string name="editor_brush_hint">Draw %1$s directly on the photo</string>
+    <string name="editor_brush_pixelation">pixelation</string>
+    <string name="editor_brush_blur">blur</string>
+    <string name="editor_brush_size">Brush size · %1$d</string>
+    <string name="editor_strength">Strength · %1$d</string>
+    <string name="editor_eraser_on">Eraser on</string>
+    <string name="editor_erase">Erase</string>
+    <string name="editor_undo_stroke">Undo stroke</string>
+    <string name="editor_redo_stroke">Redo stroke</string>
+    <string name="editor_clear_effects">Clear effects</string>
+    <string name="editor_brightness">Brightness</string>
+    <string name="editor_saturation">Saturation</string>
+    <string name="editor_contrast">Contrast</string>
+    <string name="editor_warmth">Warmth</string>
+
+    <!-- About Screen -->
+    <string name="about_title">About Iris</string>
+    <string name="about_developer_project">Developer &amp; Project</string>
+    <string name="about_developer_label">Developer</string>
+    <string name="about_developer_name">Mohamad Oday (@MohamadOday)</string>
+    <string name="about_website_label">Website &amp; Portfolio</string>
+    <string name="about_source_label">Source Code &amp; Repository</string>
+    <string name="about_source_url">github.com/MohamadOday/iris-gallery</string>
+    <string name="about_license_label">License</string>
+    <string name="about_license_name">Apache License 2.0 (Open Source)</string>
+    <string name="about_general_info">General Information</string>
+    <string name="about_arch_title">Architecture</string>
+    <string name="about_arch_desc">100% Offline-first local gallery with zero network permissions</string>
+    <string name="about_ui_title">UI &amp; Theming</string>
+    <string name="about_ui_desc">Jetpack Compose, Material 3, dynamic Material You &amp; AMOLED black</string>
+    <string name="about_img_engine_title">Image Engine</string>
+    <string name="about_img_engine_desc">Coil 3 hardware-accelerated pipeline with sub-sampling &amp; bitmap caching</string>
+    <string name="about_vid_engine_title">Video Engine</string>
+    <string name="about_vid_engine_desc">Media3 ExoPlayer with gesture seeking, auto-play, and sensor rotation</string>
+    <string name="about_features_title">Features</string>
+    <string name="about_features_desc">Pinch-zoom grid, Exif editor, trash bin, locked vault, duplicate scanner</string>
+
+    <!-- Notifications & Widgets -->
+    <string name="notification_channel_memories">Daily memories</string>
+    <string name="notification_channel_desc">Photos and videos from this day in past years</string>
+    <string name="notification_memory_waiting">%1$d memory waiting for you</string>
+    <string name="notification_memories_waiting">%1$d memories waiting for you</string>
+
+    <!-- Toasts -->
+    <string name="toast_items_vaulted">%1$d item(s) moved to hidden vault</string>
+    <string name="toast_vault_items_moved">%1$d item(s) moved to hidden vault</string>
+    <string name="toast_vault_items_locked_gallery">%1$d item(s) hidden in Iris Gallery</string>
+    <string name="toast_vault_items_restored">%1$d item(s) restored from vault</string>
+    <string name="toast_vault_items_deleted">%1$d item(s) permanently deleted</string>
+    <string name="toast_lock_cancelled">Lock cancelled</string>
+    <string name="toast_could_not_request_removal">Could not request storage removal</string>
+    <string name="toast_could_not_request_metadata">Could not request metadata access</string>
+    <string name="toast_error_storage_removal">Could not request storage removal</string>
+    <string name="toast_error_original_removal">Could not remove original file from storage</string>
+    <string name="toast_cache_cleared">Thumbnail cache cleared</string>
+    <string name="toast_settings_reset">All settings reset to defaults</string>
+    <string name="toast_pin_enabled">Gallery PIN enabled</string>
+    <string name="toast_pin_changed">Gallery PIN updated</string>
+    <string name="toast_pin_disabled">Gallery PIN removed</string>
+    <string name="toast_edited_saved">Edited copy saved to Pictures/Iris</string>
+    <string name="toast_edited_failed">Could not save edited copy</string>
+    <string name="toast_editor_saved">Edited copy saved to Pictures/Iris</string>
+    <string name="toast_editor_failed">Could not save edited copy</string>
+    <string name="toast_optics_unlocked">Ibn al-Haytham Optics Unlocked!</string>
+    <string name="toast_easter_egg_hint">Press %1$d times to show easter egg</string>
+    <string name="toast_easter_egg_hint_one">Press 1 time to show easter egg</string>
+</resources>

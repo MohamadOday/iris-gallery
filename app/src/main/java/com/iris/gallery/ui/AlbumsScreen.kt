@@ -155,12 +155,12 @@ fun AlbumsGrid(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search ${albums.size} albums…") },
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.search_albums_placeholder, albums.size)) },
                         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                                    Icon(Icons.Filled.Clear, contentDescription = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.clear_search))
                                 }
                             }
                         },
@@ -180,18 +180,18 @@ fun AlbumsGrid(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         listOf(
-                            AlbumSort.NEWEST to "Recent",
-                            AlbumSort.NAME to "Name",
-                            AlbumSort.ITEM_COUNT to "Size",
-                            AlbumSort.CUSTOM to "Custom"
-                        ).forEach { (value, label) ->
+                            AlbumSort.NEWEST to com.iris.gallery.R.string.sort_recent,
+                            AlbumSort.NAME to com.iris.gallery.R.string.sort_name,
+                            AlbumSort.ITEM_COUNT to com.iris.gallery.R.string.sort_size,
+                            AlbumSort.CUSTOM to com.iris.gallery.R.string.sort_custom
+                        ).forEach { (value, strRes) ->
                             FilterChip(
                                 selected = sort == value,
                                 onClick = {
                                     if (value == AlbumSort.CUSTOM && customOrder.isEmpty()) onOrderChanged(albums.map { it.id })
                                     onSortChanged(value)
                                 },
-                                label = { Text(label) }
+                                label = { Text(androidx.compose.ui.res.stringResource(strRes)) }
                             )
                         }
                     }
@@ -208,13 +208,13 @@ fun AlbumsGrid(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            "No albums matching \"$searchQuery\"",
+                            androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.empty_search_albums, searchQuery),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                         TextButton(onClick = { searchQuery = "" }) {
-                            Text("Clear search")
+                            Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.clear_search))
                         }
                     }
                 }
@@ -246,7 +246,7 @@ fun AlbumsGrid(
                             )
                             if (showCount) {
                                 Text(
-                                    "${album.images.size} items",
+                                    androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_items_count, album.images.size),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -262,7 +262,7 @@ fun AlbumsGrid(
                                     onOrderChanged(next)
                                 }
                             ) {
-                                Icon(Icons.Outlined.ArrowUpward, "Move up")
+                                Icon(Icons.Outlined.ArrowUpward, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_move_up))
                             }
                             IconButton(
                                 enabled = index in 0 until effectiveOrder.lastIndex,
@@ -272,13 +272,14 @@ fun AlbumsGrid(
                                     onOrderChanged(next)
                                 }
                             ) {
-                                Icon(Icons.Outlined.ArrowDownward, "Move down")
+                                Icon(Icons.Outlined.ArrowDownward, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_move_down))
                             }
                         } else {
                             IconButton(onClick = { onTogglePinned(album.id) }) {
                                 Icon(
                                     if (album.id in pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                    if (album.id in pinned) "Unpin album" else "Pin album"
+                                    if (album.id in pinned) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_unpin)
+                                    else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_pin)
                                 )
                             }
                         }

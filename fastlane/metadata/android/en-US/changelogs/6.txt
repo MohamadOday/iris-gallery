@@ -1,0 +1,6 @@
+• Added translations for 10 languages: Arabic, Spanish, French, German, Chinese, Portuguese, Italian, Japanese, Russian, and Turkish
+• Added first-launch language selector and Settings language picker
+• Updated media viewer bottom toolbar to a clean icon-only layout
+• Added smooth transitions for language switching and viewer controls
+• Added support for viewing media directly inside the locked vault
+• Restored items now return to their original directory and file name

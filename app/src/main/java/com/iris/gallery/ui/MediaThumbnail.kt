@@ -54,7 +54,28 @@ internal object ThumbnailCache {
 private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
     ThumbnailCache.get(image.id)?.let { return it }
     val bitmap = try {
-        if (Build.VERSION.SDK_INT >= 29) {
+        val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
+        if (isFile) {
+            val file = java.io.File(image.path)
+            if (Build.VERSION.SDK_INT >= 29) {
+                if (image.isVideo) {
+                    android.media.ThumbnailUtils.createVideoThumbnail(file, Size(256, 256), null)
+                } else {
+                    android.media.ThumbnailUtils.createImageThumbnail(file, Size(256, 256), null)
+                }
+            } else {
+                if (image.isVideo) {
+                    @Suppress("DEPRECATION")
+                    android.media.ThumbnailUtils.createVideoThumbnail(image.path, MediaStore.Images.Thumbnails.MINI_KIND)
+                } else {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(image.path, opts)
+                    val sample = maxOf(opts.outWidth / 256, opts.outHeight / 256, 1)
+                    val opts2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+                    android.graphics.BitmapFactory.decodeFile(image.path, opts2)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= 29) {
             context.contentResolver.loadThumbnail(image.uri, Size(256, 256), null)
         } else {
             @Suppress("DEPRECATION")

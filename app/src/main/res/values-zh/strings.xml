@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">Iris Gallery</string>
+    <string name="app_description">纯离线、植物灵感设计的 Android 媒体相册</string>
+    <string name="version_format">版本 %1$s (构建号 %2$d)</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_photos">照片</string>
+    <string name="tab_albums">相册</string>
+    <string name="tab_favorites">收藏</string>
+    <string name="tab_library">媒体库</string>
+
+    <!-- Sections -->
+    <string name="section_settings">设置</string>
+    <string name="section_about">关于 Iris</string>
+    <string name="section_trash">回收站</string>
+    <string name="section_locked">私密相册</string>
+    <string name="section_duplicates">重复项</string>
+    <string name="section_memories">回忆</string>
+
+    <!-- Top Bar & Selection -->
+    <string name="selected_count">已选择 %1$d 项</string>
+    <string name="selected_count_format">已选择 %1$d 项</string>
+    <string name="action_clear_selection">清除选择</string>
+    <string name="action_restore">恢复所选</string>
+    <string name="action_restore_selected">恢复所选</string>
+    <string name="action_share">分享</string>
+    <string name="action_share_selected">分享所选</string>
+    <string name="action_share_media">分享媒体</string>
+    <string name="action_delete">删除</string>
+    <string name="action_delete_selected">删除所选</string>
+    <string name="action_more">更多选择操作</string>
+    <string name="action_more_options">更多选项</string>
+    <string name="action_select_all">全选</string>
+    <string name="action_set_album_cover">设为相册封面</string>
+    <string name="action_remove_from_locked">移出私密相册</string>
+    <string name="action_move_to_locked">移至私密相册</string>
+    <string name="action_favorite">收藏</string>
+    <string name="action_favorited">已收藏</string>
+    <string name="action_empty_trash">清空</string>
+    <string name="action_comfortable_grid">舒适网格</string>
+    <string name="action_compact_grid">紧凑网格</string>
+    <string name="action_back">返回</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_save">保存</string>
+    <string name="action_save_copy">保存副本</string>
+    <string name="action_saving">正在保存…</string>
+    <string name="action_grant">授权</string>
+    <string name="action_grant_access">授予权限</string>
+    <string name="action_use_system_popup">使用系统弹窗</string>
+    <string name="action_close">关闭</string>
+    <string name="action_continue">继续</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_unlock">解锁</string>
+    <string name="action_lock">锁定</string>
+    <string name="action_details">详情</string>
+    <string name="action_backspace">删除</string>
+
+    <!-- Language & First Launch -->
+    <string name="settings_section_language">语言与地区</string>
+    <string name="settings_language_title">应用语言</string>
+    <string name="settings_language_desc">选择你偏好的显示语言</string>
+    <string name="first_launch_lang_title">应用语言</string>
+    <string name="first_launch_lang_subtitle">请选择你的语言以继续</string>
+    <string name="first_launch_lang_detected">系统默认语言</string>
+
+    <!-- Permission Screen -->
+    <string name="permission_title">你的相册，尽享优雅</string>
+    <string name="permission_desc">请授予照片访问权限以浏览你的媒体库。Iris 绝不会上传或分析你的照片。</string>
+    <string name="permission_button">选择照片</string>
+
+    <!-- Empty States -->
+    <string name="empty_photos">未找到照片</string>
+    <string name="empty_favorites">收藏的照片将显示在此处</string>
+    <string name="empty_trash">回收站为空</string>
+    <string name="empty_locked">暂无私密项目</string>
+    <string name="empty_locked_locked_state">解锁以查看私密项目</string>
+    <string name="empty_memories">今天暂无回忆</string>
+    <string name="empty_editable">没有可编辑的图片</string>
+    <string name="empty_formats">未找到 RAW、GIF、动态照片或全景照片</string>
+    <string name="empty_special_formats">未找到 RAW、GIF、动态照片或全景照片</string>
+    <string name="empty_format_filter">未找到 %1$s</string>
+    <string name="empty_format_type">未找到 %1$s</string>
+    <string name="empty_search_albums">未找到与“%1$s”匹配的相册</string>
+    <string name="empty_duplicates">未找到重复照片</string>
+
+    <!-- Dialogs -->
+    <string name="empty_trash_dialog_title">清空回收站？</string>
+    <string name="empty_trash_dialog_desc">是否从设备中永久删除全部 %1$d 个项目%2$s？此操作无法撤销。</string>
+    <string name="dialog_empty_trash_title">清空回收站？</string>
+    <string name="dialog_empty_trash_message">是否从设备中永久删除全部 %1$d 个项目？此操作无法撤销。</string>
+    <string name="dialog_empty_trash_confirm">清空回收站</string>
+    <string name="dialog_delete_item_title">将 %1$s 移至回收站？</string>
+    <string name="dialog_delete_item_message">Android 系统将提示您确认此更改。</string>
+    <string name="delete_trash_video_title">将视频移至回收站？</string>
+    <string name="delete_trash_photo_title">将照片移至回收站？</string>
+    <string name="delete_trash_desc">Android 系统将提示您确认此更改。</string>
+    <string name="delete_permanent_video_title">永久删除视频？</string>
+    <string name="delete_permanent_photo_title">永久删除照片？</string>
+    <string name="delete_permanent_desc">该项目将从您的私密相册中永久移除。</string>
+    <string name="dialog_delete_vault_item_title">永久删除 %1$s？</string>
+    <string name="dialog_delete_vault_item_message">该项目将从您的私密相册中永久移除。</string>
+    <string name="prompt_free_vault_title">免提示私密相册</string>
+    <string name="prompt_free_vault_desc">授予“所有文件访问权限”后，Iris Gallery 可以在将照片移入私密相册并隐藏时无需 Android 系统每次弹出删除确认提示。\n\nIris 是一款 100% 离线应用，完全没有网络访问权限，您的文件绝不会离开您的设备。</string>
+    <string name="dialog_prompt_free_vault_title">免提示私密相册</string>
+    <string name="dialog_prompt_free_vault_message">授予“所有文件访问权限”后，Iris Gallery 可以在将照片移入私密相册并隐藏时无需 Android 系统每次弹出删除确认提示。\n\nIris 是一款 100% 离线应用，完全没有网络访问权限，您的文件绝不会离开您的设备。</string>
+
+    <!-- Media Types & Titles -->
+    <string name="media_type_photo">照片</string>
+    <string name="media_type_video">视频</string>
+    <string name="format_image">图片</string>
+    <string name="format_video">视频</string>
+    <string name="media_page_indicator">%1$d / %2$d</string>
+    <string name="viewer_page_count">%1$d / %2$d</string>
+
+    <!-- Albums Screen -->
+    <string name="search_albums_placeholder">搜索 %1$d 个相册…</string>
+    <string name="clear_search">清除搜索</string>
+    <string name="sort_recent">最近</string>
+    <string name="sort_name">名称</string>
+    <string name="sort_size">大小</string>
+    <string name="sort_custom">自定义</string>
+    <string name="album_items_count">%1$d 项</string>
+    <string name="album_pin">置顶相册</string>
+    <string name="album_unpin">取消置顶</string>
+    <string name="action_move_up">上移</string>
+    <string name="action_move_down">下移</string>
+
+    <!-- Library Screen Cards -->
+    <string name="library_header">整理与重温</string>
+    <string name="library_memories_title">回忆</string>
+    <string name="library_memories_subtitle">重温今天与往年同日的精彩瞬间</string>
+    <string name="library_duplicates_title">重复项</string>
+    <string name="library_duplicates_subtitle">查找完全相同的副本和视觉相似的照片</string>
+    <string name="library_locked_title">私密相册</string>
+    <string name="library_locked_subtitle">%1$d 个私密项目</string>
+    <string name="library_trash_title">回收站</string>
+    <string name="library_trash_subtitle">%1$d 个项目 · Android 会在 30 天后自动清除</string>
+    <string name="library_editor_title">编辑器</string>
+    <string name="library_editor_subtitle">在不改变原图的前提下生成精美副本</string>
+    <string name="library_formats_title">媒体格式</string>
+    <string name="library_formats_subtitle">RAW、GIF、动态照片和全景照片</string>
+    <string name="library_settings_title">设置与个性化</string>
+    <string name="library_settings_subtitle">主题、调色板、网格样式及手势</string>
+    <string name="library_about_title">关于</string>
+    <string name="library_about_subtitle">开发者、开源项目与应用详情</string>
+
+    <!-- Media Formats Filters -->
+    <string name="format_all">全部 (%1$d)</string>
+    <string name="format_raw">RAW (%1$d)</string>
+    <string name="format_gif">GIF (%1$d)</string>
+    <string name="format_panorama">全景 (%1$d)</string>
+    <string name="format_motion">动态照片 (%1$d)</string>
+    <string name="filter_all_count">全部 (%1$d)</string>
+    <string name="filter_raw_count">RAW (%1$d)</string>
+    <string name="filter_gifs_count">GIF (%1$d)</string>
+    <string name="filter_panoramas_count">全景 (%1$d)</string>
+    <string name="filter_motion_count">动态照片 (%1$d)</string>
+
+    <!-- Duplicates Review Screen -->
+    <string name="duplicates_title">重复与相似照片</string>
+    <string name="duplicates_desc">扫描完全相同的副本和视觉相似的照片</string>
+    <string name="duplicates_scan_now">立即扫描</string>
+    <string name="duplicates_scanning">正在扫描…</string>
+    <string name="duplicates_summary">%1$d 组 (%2$d 张照片)</string>
+    <string name="duplicates_keep_best_delete">保留最佳，删除选中的 %1$d 项</string>
+    <string name="duplicates_scan_count">%1$d / %2$d</string>
+    <string name="duplicates_hero_title">放心清理存储空间</string>
+    <string name="duplicates_hero_desc">Iris 会比对文件及设备端生成的紧凑视觉指纹。照片绝不会离开您的手机，且未经 Android 系统确认绝不会删除任何内容。</string>
+    <string name="duplicates_comparing_progress">正在比对 %1$d / %2$d</string>
+    <string name="duplicates_scan_again">重新扫描</string>
+    <string name="duplicates_scan_library">扫描媒体库</string>
+    <string name="duplicates_empty_state">媒体库非常整洁 —— 未发现明显的重复照片。</string>
+    <string name="duplicates_groups_count">%1$d 组</string>
+    <string name="duplicates_suggested_removal">建议清理 %1$d 项 · %2$s</string>
+    <string name="duplicates_review_delete">查看并删除</string>
+    <string name="duplicates_exact_copies">完全相同副本</string>
+    <string name="duplicates_similar_photos">相似照片</string>
+    <string name="duplicates_save_up_to">最多可释放 %1$s</string>
+    <string name="duplicates_remove">移除</string>
+    <string name="duplicates_keep">保留</string>
+    <string name="duplicates_preview">预览</string>
+
+    <!-- Timeline Labels -->
+    <string name="timeline_today">今天</string>
+    <string name="timeline_yesterday">昨天</string>
+
+    <!-- Details Sheet -->
+    <string name="details_title">详情</string>
+    <string name="details_photo_details">照片详情</string>
+    <string name="details_file_name">文件名</string>
+    <string name="details_title_label">标题</string>
+    <string name="details_title_field">标题</string>
+    <string name="details_desc_field">描述</string>
+    <string name="details_date_taken">拍摄日期</string>
+    <string name="details_captured">拍摄时间</string>
+    <string name="details_time">时间</string>
+    <string name="details_resolution">分辨率</string>
+    <string name="details_file_size">文件大小</string>
+    <string name="details_size">大小</string>
+    <string name="details_location">位置</string>
+    <string name="details_open_in_map">在地图中打开</string>
+    <string name="details_map">地图</string>
+    <string name="details_camera">相机</string>
+    <string name="details_camera_capture">拍摄参数</string>
+    <string name="details_camera_lens">相机与镜头</string>
+    <string name="details_aperture">光圈</string>
+    <string name="details_shutter">快门</string>
+    <string name="details_iso">ISO</string>
+    <string name="details_focal_length">焦距</string>
+    <string name="details_dimensions">尺寸</string>
+    <string name="details_orientation">方向</string>
+    <string name="details_duration">时长</string>
+    <string name="details_format">格式</string>
+    <string name="details_type">类型</string>
+    <string name="details_path">路径</string>
+    <string name="details_edit_metadata">编辑元数据</string>
+    <string name="details_edit_filename">文件名</string>
+    <string name="details_edit_title">标题</string>
+    <string name="details_edit_captured_hint">拍摄时间 · yyyy-MM-dd HH:mm</string>
+    <string name="details_edit_orientation_hint">方向 · 0、90、180 或 270</string>
+    <string name="details_edit_permission_note">修改属于其他应用的媒体文件前，Android 系统会提示确认。</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_appearance">外观与主题</string>
+    <string name="settings_theme_mode">主题模式</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_amoled_black_title">AMOLED 纯黑</string>
+    <string name="settings_amoled_black_desc">专为 OLED 屏幕设计的纯黑背景，呈现最高对比度</string>
+    <string name="settings_material_you_title">Material You 动态色彩</string>
+    <string name="settings_material_you_desc">自动从设备壁纸中提取主题强调色</string>
+    <string name="settings_custom_accents">自定义强调色调色板</string>
+
+    <string name="settings_section_layout">布局与网格样式</string>
+    <string name="settings_corner_style">缩略图圆角样式</string>
+    <string name="settings_corner_sharp">直角 (0dp)</string>
+    <string name="settings_corner_subtle">微圆角 (8dp)</string>
+    <string name="settings_corner_rounded">圆角 (16dp)</string>
+    <string name="settings_corner_pill">胶囊圆角 (28dp)</string>
+    <string name="settings_grid_spacing">网格间距</string>
+    <string name="settings_spacing_compact">紧凑 (2dp)</string>
+    <string name="settings_spacing_standard">标准 (4dp)</string>
+    <string name="settings_spacing_relaxed">宽松 (8dp)</string>
+    <string name="settings_show_timeline_title">时间线分组标题</string>
+    <string name="settings_show_timeline_desc">按拍摄日期分组照片并显示悬浮日期标题</string>
+
+    <string name="settings_section_badges">角标与指示器</string>
+    <string name="settings_badge_duration_title">视频时长角标</string>
+    <string name="settings_badge_duration_desc">在网格视图的视频缩略图上叠加显示时长</string>
+    <string name="settings_badge_formats_title">特殊格式角标</string>
+    <string name="settings_badge_formats_desc">在 GIF、RAW、全景和动态照片上显示标识</string>
+    <string name="settings_album_count_title">相册项目计数</string>
+    <string name="settings_album_count_desc">在相册名称下方显示项目数量</string>
+
+    <string name="settings_section_viewer">浏览与播放</string>
+    <string name="settings_autoplay_video_title">自动播放视频</string>
+    <string name="settings_autoplay_video_desc">在查看器中打开视频时立即开始播放</string>
+    <string name="settings_loop_video_title">循环播放视频</string>
+    <string name="settings_loop_video_desc">连续循环播放视频</string>
+    <string name="settings_zoom_scale_title">双击缩放倍数</string>
+
+    <string name="settings_section_behavior">行为与安全</string>
+    <string name="settings_startup_tab">启动默认标签页</string>
+    <string name="settings_app_lock_title">相册应用锁</string>
+    <string name="settings_app_lock_desc">打开 Iris Gallery 和图片选择器时需要输入自定义 PIN 码</string>
+    <string name="settings_change_pin">修改相册 PIN 码</string>
+    <string name="settings_biometric_unlock_title">指纹 / 生物识别解锁</string>
+    <string name="settings_biometric_unlock_desc">允许使用指纹解锁 Iris Gallery</string>
+    <string name="settings_hide_vault_title">从存储中隐藏私密媒体</string>
+    <string name="settings_hide_vault_desc">将锁定的照片和视频移至私有应用存储空间，其他应用和文件管理器将无法查看。禁用时，项目仅在 Iris Gallery 内隐藏。</string>
+    <string name="settings_silent_vault_title">免提示私密相册管理</string>
+    <string name="settings_silent_vault_desc_granted">已授予所有文件访问权限 —— 私密相册操作静默完成，无系统确认弹窗。</string>
+    <string name="settings_silent_vault_desc_prompt">授予“所有文件访问权限”，使 Iris 将照片移入私密相册并隐藏时无需 Android 系统确认弹窗。</string>
+    <string name="settings_vault_biometric_title">私密相册生物识别锁</string>
+    <string name="settings_vault_biometric_desc">查看已锁定的私密项目时需要验证设备凭据/PIN 码</string>
+
+    <string name="settings_section_storage">存储与重置</string>
+    <string name="settings_clear_cache">清除图片与视频缩略图缓存</string>
+    <string name="settings_reset_all">恢复所有设置到默认值</string>
+    <string name="settings_reset_dialog_title">重置所有设置？</string>
+    <string name="settings_reset_dialog_desc">这将恢复默认主题、网格布局及查看器偏好设置。您的照片、相册和收藏夹不会受到影响。</string>
+    <string name="settings_reset_confirm">恢复默认设置</string>
+
+    <!-- App Lock & PIN Dialogs -->
+    <string name="app_lock_title">解锁 Iris Gallery</string>
+    <string name="app_lock_picker_title">解锁以选择媒体</string>
+    <string name="app_lock_welcome_back">欢迎回来</string>
+    <string name="app_lock_select_media">选择媒体</string>
+    <string name="app_lock_unlocking">正在解锁…</string>
+    <string name="app_lock_enter_pin_select">请输入相册 PIN 码以选择照片</string>
+    <string name="app_lock_enter_pin_unlock">请输入相册 PIN 码以解锁</string>
+    <string name="app_lock_subtitle">请输入相册 PIN 码以解锁</string>
+    <string name="app_lock_picker_subtitle">请输入相册 PIN 码以选择照片</string>
+    <string name="app_lock_wrong_pin">PIN 码错误，请重试。</string>
+    <string name="app_lock_biometric_title">解锁 Iris Gallery</string>
+    <string name="app_lock_biometric_subtitle">请验证指纹以继续</string>
+    <string name="app_lock_scan_fingerprint">请验证指纹以继续</string>
+    <string name="app_lock_biometric_negative">使用 PIN 码</string>
+    <string name="app_lock_auth_cancelled">身份验证已取消</string>
+    <string name="app_lock_biometrics_unavailable">生物识别不可用</string>
+    <string name="pin_keypad_use_pin">使用 PIN 码</string>
+    <string name="pin_setup_create_title">创建相册 PIN 码</string>
+    <string name="pin_setup_create_subtitle">请输入 4 至 6 位数字 PIN 码</string>
+    <string name="pin_setup_confirm_title">确认相册 PIN 码</string>
+    <string name="pin_setup_confirm_subtitle">请再次输入 PIN 码以确认</string>
+    <string name="pin_setup_mismatch">两次输入的 PIN 码不一致，请重试。</string>
+    <string name="pin_change_verify_title">输入当前 PIN 码</string>
+    <string name="pin_change_verify_subtitle">验证您的身份</string>
+    <string name="pin_change_new_title">输入新 PIN 码</string>
+    <string name="pin_change_new_subtitle">请设置 4 至 6 位数字 PIN 码</string>
+    <string name="pin_change_confirm_title">确认新 PIN 码</string>
+    <string name="pin_change_confirm_subtitle">请再次输入以确认</string>
+    <string name="pin_incorrect_current">当前 PIN 码错误</string>
+    <string name="pin_mismatch_new">新 PIN 码不匹配</string>
+    <string name="pin_incorrect">PIN 码错误</string>
+    <string name="pin_disable_title">关闭应用锁</string>
+    <string name="pin_disable_subtitle">请输入 PIN 码以关闭相册应用锁</string>
+    <string name="pin_continue_with_digits">使用 %1$d 位数字继续</string>
+
+    <!-- Image Editor -->
+    <string name="editor_title">编辑副本</string>
+    <string name="editor_close">关闭编辑器</string>
+    <string name="editor_preparing">正在准备编辑器…</string>
+    <string name="editor_tool_adjust">调节</string>
+    <string name="editor_tool_crop">裁剪</string>
+    <string name="editor_tool_transform">变换</string>
+    <string name="editor_tool_resize">调整大小</string>
+    <string name="editor_tool_pixelate">像素化</string>
+    <string name="editor_tool_blur">模糊</string>
+    <string name="editor_rotate_flip">旋转与翻转</string>
+    <string name="editor_rotate_left">向左旋转 90°</string>
+    <string name="editor_rotate_right">向右旋转 90°</string>
+    <string name="editor_flip_h">水平翻转 ⇄</string>
+    <string name="editor_flip_v">垂直翻转 ⇅</string>
+    <string name="editor_reset_orientation">重置方向</string>
+    <string name="editor_crop_manual_hint">拖动任意角以手动裁剪</string>
+    <string name="editor_crop_help">在选框内拖动可调整位置，拖动白色手柄可缩放大小。</string>
+    <string name="editor_crop_manual">自由</string>
+    <string name="editor_crop_square">正方形</string>
+    <string name="editor_width_px">宽度 px</string>
+    <string name="editor_height_px">高度 px</string>
+    <string name="editor_lock_aspect">锁定宽高比</string>
+    <string name="editor_original">原图</string>
+    <string name="editor_brush_hint">直接在照片上涂抹以应用%1$s效果</string>
+    <string name="editor_brush_pixelation">像素化</string>
+    <string name="editor_brush_blur">模糊</string>
+    <string name="editor_brush_size">画笔大小 · %1$d</string>
+    <string name="editor_strength">强度 · %1$d</string>
+    <string name="editor_eraser_on">橡皮擦已开启</string>
+    <string name="editor_erase">擦除</string>
+    <string name="editor_undo_stroke">撤销笔触</string>
+    <string name="editor_redo_stroke">重做笔触</string>
+    <string name="editor_clear_effects">清除效果</string>
+    <string name="editor_brightness">亮度</string>
+    <string name="editor_saturation">饱和度</string>
+    <string name="editor_contrast">对比度</string>
+    <string name="editor_warmth">色温</string>
+
+    <!-- About Screen -->
+    <string name="about_title">关于 Iris</string>
+    <string name="about_developer_project">开发者与项目</string>
+    <string name="about_developer_label">开发者</string>
+    <string name="about_developer_name">Mohamad Oday (@MohamadOday)</string>
+    <string name="about_website_label">个人网站与作品集</string>
+    <string name="about_source_label">源代码与仓库</string>
+    <string name="about_source_url">github.com/MohamadOday/iris-gallery</string>
+    <string name="about_license_label">开源许可协议</string>
+    <string name="about_license_name">Apache License 2.0 (开源)</string>
+    <string name="about_general_info">通用信息</string>
+    <string name="about_arch_title">架构设计</string>
+    <string name="about_arch_desc">100% 离线优先的本地相册，零网络权限</string>
+    <string name="about_ui_title">界面与主题</string>
+    <string name="about_ui_desc">Jetpack Compose、Material 3、Material You 动态取色及 AMOLED 纯黑</string>
+    <string name="about_img_engine_title">图像引擎</string>
+    <string name="about_img_engine_desc">Coil 3 硬件加速管线，支持二次采样与位图缓存</string>
+    <string name="about_vid_engine_title">视频引擎</string>
+    <string name="about_vid_engine_desc">Media3 ExoPlayer，支持手势快进快退、自动播放与传感器旋转</string>
+    <string name="about_features_title">功能特性</string>
+    <string name="about_features_desc">双指缩放网格、Exif 编辑、回收站、私密相册、重复项扫描</string>
+
+    <!-- Notifications & Widgets -->
+    <string name="notification_channel_memories">每日回忆</string>
+    <string name="notification_channel_desc">往年今日拍摄的照片和视频</string>
+    <string name="notification_memory_waiting">有 %1$d 条回忆等待重温</string>
+    <string name="notification_memories_waiting">有 %1$d 条回忆等待重温</string>
+
+    <!-- Toasts -->
+    <string name="toast_items_vaulted">%1$d 个项目已移至私密相册</string>
+    <string name="toast_vault_items_moved">%1$d 个项目已移至私密相册</string>
+    <string name="toast_vault_items_locked_gallery">%1$d 个项目已在 Iris Gallery 中隐藏</string>
+    <string name="toast_vault_items_restored">%1$d 个项目已从私密相册中恢复</string>
+    <string name="toast_vault_items_deleted">%1$d 个项目已永久删除</string>
+    <string name="toast_lock_cancelled">已取消锁定</string>
+    <string name="toast_could_not_request_removal">无法请求存储删除权限</string>
+    <string name="toast_could_not_request_metadata">无法请求元数据访问权限</string>
+    <string name="toast_error_storage_removal">无法请求存储删除权限</string>
+    <string name="toast_error_original_removal">无法从存储中删除原始文件</string>
+    <string name="toast_cache_cleared">缩略图缓存已清除</string>
+    <string name="toast_settings_reset">所有设置已恢复为默认值</string>
+    <string name="toast_pin_enabled">相册 PIN 码已启用</string>
+    <string name="toast_pin_changed">相册 PIN 码已更新</string>
+    <string name="toast_pin_disabled">相册 PIN 码已移除</string>
+    <string name="toast_edited_saved">已将编辑后的副本保存至 Pictures/Iris</string>
+    <string name="toast_edited_failed">无法保存编辑后的副本</string>
+    <string name="toast_editor_saved">已将编辑后的副本保存至 Pictures/Iris</string>
+    <string name="toast_editor_failed">无法保存编辑后的副本</string>
+    <string name="toast_optics_unlocked">已解锁海什木光学！</string>
+    <string name="toast_easter_egg_hint">再按 %1$d 次即可显示彩蛋</string>
+    <string name="toast_easter_egg_hint_one">再按 1 次即可显示彩蛋</string>
+</resources>

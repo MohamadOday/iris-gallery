@@ -1,6 +1,9 @@
 package com.iris.gallery.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,15 +24,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.ViewDay
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -38,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,13 +62,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.iris.gallery.R
 import com.iris.gallery.data.AccentColor
 import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.GridSpacing
 import com.iris.gallery.data.SettingsPreferences
 import com.iris.gallery.data.SettingsState
 import com.iris.gallery.data.StartupTab
+import com.iris.gallery.data.SUPPORTED_LANGUAGES
 import com.iris.gallery.data.ThemeMode
+import com.iris.gallery.ui.LanguageSelectionBottomSheet
+import com.iris.gallery.ui.setAppLanguage
 import kotlin.math.roundToInt
 
 @Composable
@@ -76,13 +88,19 @@ fun SettingsScreen(
     var showSetPinDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var showDisablePinDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
 
     fun clearCache() {
         runCatching {
             context.cacheDir.deleteRecursively()
             context.externalCacheDir?.deleteRecursively()
         }
-        Toast.makeText(context, "Thumbnail cache cleared", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.toast_cache_cleared), Toast.LENGTH_SHORT).show()
+    }
+
+    val currentLang = remember(settings.language) {
+        SUPPORTED_LANGUAGES.firstOrNull { it.code == settings.language }
+            ?: SUPPORTED_LANGUAGES.first()
     }
 
     LazyColumn(
@@ -92,9 +110,55 @@ fun SettingsScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Section: Language & Region
+        item {
+            SettingsSectionHeader(Icons.Outlined.Language, stringResource(R.string.settings_section_language))
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showLanguageDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_language_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${currentLang.flag} ${currentLang.nativeName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+
         // Section 1: Appearance & Theme
         item {
-            SettingsSectionHeader(Icons.Outlined.Palette, "Theme & Colors")
+            SettingsSectionHeader(Icons.Outlined.Palette, stringResource(R.string.settings_section_appearance))
         }
 
         item {
@@ -104,7 +168,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Theme Mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_theme_mode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -117,9 +181,9 @@ fun SettingsScreen(
                                 label = {
                                     Text(
                                         when (mode) {
-                                            ThemeMode.SYSTEM -> "System"
-                                            ThemeMode.LIGHT -> "Light"
-                                            ThemeMode.DARK -> "Dark"
+                                            ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_system)
+                                            ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
+                                            ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
@@ -132,8 +196,8 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "AMOLED Pure Black",
-                        subtitle = "Pitch-black background for OLED displays and maximum contrast",
+                        title = stringResource(R.string.settings_amoled_black_title),
+                        subtitle = stringResource(R.string.settings_amoled_black_desc),
                         checked = settings.amoledBlack,
                         onCheckedChange = { preferences.setAmoledBlack(it) }
                     )
@@ -143,8 +207,8 @@ fun SettingsScreen(
                     // Material You dynamic color selector
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         SettingsSwitchRow(
-                            title = "Material You Dynamic Colors",
-                            subtitle = "Extract accent colors automatically from your device wallpaper",
+                            title = stringResource(R.string.settings_material_you_title),
+                            subtitle = stringResource(R.string.settings_material_you_desc),
                             checked = settings.accentColor == AccentColor.MATERIAL_YOU,
                             onCheckedChange = { isChecked ->
                                 preferences.setAccentColor(if (isChecked) AccentColor.MATERIAL_YOU else AccentColor.IRIS)
@@ -154,7 +218,7 @@ fun SettingsScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
 
-                    Text("Custom Accent Palettes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_custom_accents), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -197,7 +261,7 @@ fun SettingsScreen(
 
         // Section 2: Layout & Grid Customization
         item {
-            SettingsSectionHeader(Icons.Outlined.GridView, "Layout & Grid Styling")
+            SettingsSectionHeader(Icons.Outlined.GridView, stringResource(R.string.settings_section_layout))
         }
 
         item {
@@ -207,7 +271,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Thumbnail Corner Style", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_corner_style), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     
                     // 2x2 grid for symmetrical, perfect alignment
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -216,13 +280,13 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.SHARP,
                                 onClick = { preferences.setCornerStyle(CornerStyle.SHARP) },
-                                label = { Text("Sharp (0dp)", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.settings_corner_sharp), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.CLASSIC,
                                 onClick = { preferences.setCornerStyle(CornerStyle.CLASSIC) },
-                                label = { Text("Classic (4dp)", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.settings_corner_subtle), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -230,20 +294,20 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.ROUNDED,
                                 onClick = { preferences.setCornerStyle(CornerStyle.ROUNDED) },
-                                label = { Text("Rounded (12dp)", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.settings_corner_rounded), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.SQUIRCLE,
                                 onClick = { preferences.setCornerStyle(CornerStyle.SQUIRCLE) },
-                                label = { Text("Squircle (18dp)", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.settings_corner_pill), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Text("Grid Spacing", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_grid_spacing), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -256,9 +320,9 @@ fun SettingsScreen(
                                 label = {
                                     Text(
                                         when (spacing) {
-                                            GridSpacing.COMPACT -> "Compact (2dp)"
-                                            GridSpacing.STANDARD -> "Standard (4dp)"
-                                            GridSpacing.RELAXED -> "Relaxed (8dp)"
+                                            GridSpacing.COMPACT -> stringResource(R.string.settings_spacing_compact)
+                                            GridSpacing.STANDARD -> stringResource(R.string.settings_spacing_standard)
+                                            GridSpacing.RELAXED -> stringResource(R.string.settings_spacing_relaxed)
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
@@ -299,7 +363,7 @@ fun SettingsScreen(
 
         // Section 3: Media Badges & Timeline
         item {
-            SettingsSectionHeader(Icons.Outlined.ViewDay, "Media Display & Badges")
+            SettingsSectionHeader(Icons.Outlined.ViewDay, stringResource(R.string.settings_section_badges))
         }
 
         item {
@@ -310,8 +374,8 @@ fun SettingsScreen(
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = "Timeline Date Headers",
-                        subtitle = "Group photos by day with interactive sticky date headers",
+                        title = stringResource(R.string.settings_show_timeline_title),
+                        subtitle = stringResource(R.string.settings_show_timeline_desc),
                         checked = settings.showTimelineHeaders,
                         onCheckedChange = { preferences.setShowTimelineHeaders(it) }
                     )
@@ -319,8 +383,8 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "Video Duration Badge",
-                        subtitle = "Overlay length on video tiles in grid view",
+                        title = stringResource(R.string.settings_badge_duration_title),
+                        subtitle = stringResource(R.string.settings_badge_duration_desc),
                         checked = settings.showVideoDurationBadge,
                         onCheckedChange = { preferences.setShowVideoDurationBadge(it) }
                     )
@@ -328,8 +392,8 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "Special Format Badges",
-                        subtitle = "Show indicator on GIF, RAW, panorama, and motion photos",
+                        title = stringResource(R.string.settings_badge_formats_title),
+                        subtitle = stringResource(R.string.settings_badge_formats_desc),
                         checked = settings.showMediaFormatBadge,
                         onCheckedChange = { preferences.setShowMediaFormatBadge(it) }
                     )
@@ -337,8 +401,8 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "Album Item Count",
-                        subtitle = "Display item numbers under album names",
+                        title = stringResource(R.string.settings_album_count_title),
+                        subtitle = stringResource(R.string.settings_album_count_desc),
                         checked = settings.showAlbumCount,
                         onCheckedChange = { preferences.setShowAlbumCount(it) }
                     )
@@ -348,7 +412,7 @@ fun SettingsScreen(
 
         // Section 4: Viewer & Playback
         item {
-            SettingsSectionHeader(Icons.Outlined.PlayCircle, "Viewer & Playback")
+            SettingsSectionHeader(Icons.Outlined.PlayCircle, stringResource(R.string.settings_section_viewer))
         }
 
         item {
@@ -359,8 +423,8 @@ fun SettingsScreen(
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = "Auto-Play Videos",
-                        subtitle = "Start playing immediately when opening video in viewer",
+                        title = stringResource(R.string.settings_autoplay_video_title),
+                        subtitle = stringResource(R.string.settings_autoplay_video_desc),
                         checked = settings.autoPlayVideo,
                         onCheckedChange = { preferences.setAutoPlayVideo(it) }
                     )
@@ -368,15 +432,15 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "Loop Videos",
-                        subtitle = "Repeat video playback continuously",
+                        title = stringResource(R.string.settings_loop_video_title),
+                        subtitle = stringResource(R.string.settings_loop_video_desc),
                         checked = settings.loopVideo,
                         onCheckedChange = { preferences.setLoopVideo(it) }
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Text("Double-Tap Zoom Scale", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_zoom_scale_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -396,7 +460,7 @@ fun SettingsScreen(
 
         // Section 5: Startup & Security
         item {
-            SettingsSectionHeader(Icons.Outlined.Dashboard, "Behavior & Security")
+            SettingsSectionHeader(Icons.Outlined.Dashboard, stringResource(R.string.settings_section_behavior))
         }
 
         item {
@@ -406,7 +470,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Default Startup Tab", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_startup_tab), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     
                     // 2x2 grid for symmetrical, perfect alignment
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -415,13 +479,13 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.PHOTOS,
                                 onClick = { preferences.setStartupTab(StartupTab.PHOTOS) },
-                                label = { Text("Photos", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.tab_photos), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.ALBUMS,
                                 onClick = { preferences.setStartupTab(StartupTab.ALBUMS) },
-                                label = { Text("Albums", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.tab_albums), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -429,24 +493,24 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.FAVORITES,
                                 onClick = { preferences.setStartupTab(StartupTab.FAVORITES) },
-                                label = { Text("Favorites", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.tab_favorites), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.LIBRARY,
                                 onClick = { preferences.setStartupTab(StartupTab.LIBRARY) },
-                                label = { Text("Library", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.tab_library), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Text("App Lock & Security", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_app_lock_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                     SettingsSwitchRow(
-                        title = "Gallery App Lock",
-                        subtitle = "Require custom PIN to open Iris Gallery and Image Picker",
+                        title = stringResource(R.string.settings_app_lock_title),
+                        subtitle = stringResource(R.string.settings_app_lock_desc),
                         checked = settings.appLockEnabled && settings.hasPin,
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
@@ -470,15 +534,15 @@ fun SettingsScreen(
                             onClick = { showChangePinDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Change Gallery PIN")
+                            Text(stringResource(R.string.settings_change_pin))
                         }
 
                         if (isBiometricHardwareAvailable(context)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                             SettingsSwitchRow(
-                                title = "Fingerprint / Biometric Unlock",
-                                subtitle = "Allow unlocking Iris Gallery with your fingerprint",
+                                title = stringResource(R.string.settings_biometric_unlock_title),
+                                subtitle = stringResource(R.string.settings_biometric_unlock_desc),
                                 checked = settings.appLockBiometricsEnabled,
                                 onCheckedChange = { preferences.setAppLockBiometricsEnabled(it) }
                             )
@@ -488,8 +552,74 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     SettingsSwitchRow(
-                        title = "Biometric Lock for Private Vault",
-                        subtitle = "Require device credential/PIN when viewing locked vault items",
+                        title = stringResource(R.string.settings_hide_vault_title),
+                        subtitle = stringResource(R.string.settings_hide_vault_desc),
+                        checked = settings.vaultHideFromStorage,
+                        onCheckedChange = { preferences.setVaultHideFromStorage(it) }
+                    )
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && settings.vaultHideFromStorage) {
+                        val hasAllFiles = remember(context) { Environment.isExternalStorageManager() }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text(
+                                    stringResource(R.string.settings_silent_vault_title),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    if (hasAllFiles) stringResource(R.string.settings_silent_vault_desc_granted)
+                                    else stringResource(R.string.settings_silent_vault_desc_prompt),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (hasAllFiles) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                        runCatching { context.startActivity(intent) }
+                                            .onFailure {
+                                                runCatching {
+                                                    context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                                }
+                                            }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(stringResource(R.string.action_grant), style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_vault_biometric_title),
+                        subtitle = stringResource(R.string.settings_vault_biometric_desc),
                         checked = settings.biometricLockEnabled,
                         onCheckedChange = { preferences.setBiometricLockEnabled(it) }
                     )
@@ -499,7 +629,7 @@ fun SettingsScreen(
 
         // Section 6: Cache & Reset
         item {
-            SettingsSectionHeader(Icons.Outlined.CleaningServices, "Storage & Reset")
+            SettingsSectionHeader(Icons.Outlined.CleaningServices, stringResource(R.string.settings_section_storage))
         }
 
         item {
@@ -515,7 +645,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.CleaningServices, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Clear Image & Video Thumbnail Cache")
+                        Text(stringResource(R.string.settings_clear_cache))
                     }
 
                     OutlinedButton(
@@ -524,7 +654,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.RestartAlt, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Reset All Settings to Defaults")
+                        Text(stringResource(R.string.settings_reset_all))
                     }
                 }
             }
@@ -537,7 +667,7 @@ fun SettingsScreen(
             onPinConfirmed = { pin ->
                 preferences.setPin(pin)
                 showSetPinDialog = false
-                Toast.makeText(context, "Gallery PIN enabled", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_pin_enabled), Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -549,7 +679,7 @@ fun SettingsScreen(
             onNewPinConfirmed = { pin ->
                 preferences.setPin(pin)
                 showChangePinDialog = false
-                Toast.makeText(context, "Gallery PIN updated", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_pin_changed), Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -561,7 +691,7 @@ fun SettingsScreen(
             onSuccess = {
                 preferences.removePin()
                 showDisablePinDialog = false
-                Toast.makeText(context, "App Lock disabled", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_pin_disabled), Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -569,21 +699,32 @@ fun SettingsScreen(
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset settings?") },
-            text = { Text("All your customization, theme preferences, and grid layouts will be restored to their factory defaults.") },
+            title = { Text(stringResource(R.string.settings_reset_dialog_title)) },
+            text = { Text(stringResource(R.string.settings_reset_dialog_desc)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         preferences.resetToDefaults()
                         showResetDialog = false
-                        Toast.makeText(context, "Settings reset to defaults", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_settings_reset), Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("Reset")
+                    Text(stringResource(R.string.settings_reset_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showResetDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageSelectionBottomSheet(
+            currentLanguageCode = settings.language,
+            onDismiss = { showLanguageDialog = false },
+            onLanguageSelected = { code ->
+                preferences.setLanguage(code)
+                setAppLanguage(context, code)
             }
         )
     }
