@@ -2,8 +2,13 @@ name: Build and Release APK
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -65,6 +70,13 @@ jobs:
           else
             cp "$RAW_APK" "build-artifacts/Iris-Gallery-v${{ env.APP_VERSION }}-unsigned.apk"
           fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Iris-Gallery-v${{ env.APP_VERSION }}-CI
+          path: build-artifacts/*.apk
+          retention-days: 14
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
