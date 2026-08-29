@@ -195,7 +195,10 @@ class AlbumRepository(private val context: Context) {
         if (item.path.isNotBlank()) {
             val file = File(item.path)
             if (file.exists()) {
-                runCatching { file.delete() }
+                val fDel = runCatching { file.delete() }.getOrDefault(false)
+                if (!fDel && file.exists()) {
+                    runCatching { file.canonicalFile.delete() }
+                }
             }
         }
         val mediaStoreUri = if (item.id > 0) {
@@ -205,6 +208,12 @@ class AlbumRepository(private val context: Context) {
             item.uri
         }
         runCatching { context.contentResolver.delete(mediaStoreUri, null, null) }
+        if (item.id > 0) {
+            val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            runCatching {
+                context.contentResolver.delete(table, "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
+            }
+        }
         if (item.uri != mediaStoreUri) {
             runCatching { context.contentResolver.delete(item.uri, null, null) }
         }
@@ -212,6 +221,9 @@ class AlbumRepository(private val context: Context) {
             val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             runCatching {
                 context.contentResolver.delete(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
+            }
+            runCatching {
+                context.contentResolver.delete(MediaStore.Files.getContentUri("external"), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
             }
             MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
         }

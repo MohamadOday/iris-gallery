@@ -325,7 +325,7 @@ private fun requiredPermissions(): Array<String> = when {
         Manifest.permission.READ_MEDIA_IMAGES,
         Manifest.permission.READ_MEDIA_VIDEO,
     )
-    Build.VERSION.SDK_INT <= 28 -> arrayOf(
+    Build.VERSION.SDK_INT <= 29 -> arrayOf(
         Manifest.permission.READ_EXTERNAL_STORAGE,
         Manifest.permission.WRITE_EXTERNAL_STORAGE,
     )
@@ -707,8 +707,9 @@ private fun GalleryApp(
 }
 
 private fun canonicalMediaUri(item: MediaImage): Uri {
-    return if (item.uri.scheme == "file") {
-        item.uri
+    return if (item.id > 0) {
+        if (item.isVideo) ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.id)
+        else ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.id)
     } else {
         item.uri
     }

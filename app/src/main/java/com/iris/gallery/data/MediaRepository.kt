@@ -89,23 +89,38 @@ class MediaRepository(private val context: Context) {
                     else MediaStore.Images.Media.DATA,
                 )
                 while (cursor.moveToNext()) {
+                    val mediaId = cursor.getLong(id)
+                    val isVid = cursor.getInt(mediaType) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                    val filePath = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                        "/storage/emulated/0/${cursor.getString(path).orEmpty()}${cursor.getString(name).orEmpty()}"
+                    } else {
+                        cursor.getString(path).orEmpty()
+                    }
+                    val mediaUri = if (isVid) {
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+                    } else {
+                        ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+                    }
+                    if (android.os.Build.VERSION.SDK_INT <= 28 && filePath.isNotBlank()) {
+                        val file = File(filePath)
+                        if (!file.exists()) {
+                            runCatching { context.contentResolver.delete(mediaUri, null, null) }
+                            continue
+                        }
+                    }
                     add(
                         MediaImage(
-                            id = cursor.getLong(id),
-                            uri = ContentUris.withAppendedId(collection, cursor.getLong(id)),
+                            id = mediaId,
+                            uri = mediaUri,
                             name = cursor.getString(name).orEmpty(),
                             dateTaken = cursor.getLong(taken).takeIf { it > 0 }
                                 ?: cursor.getLong(added) * 1_000,
                             width = cursor.getInt(width),
                             height = cursor.getInt(height),
-                            path = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                                "/storage/emulated/0/${cursor.getString(path).orEmpty()}${cursor.getString(name).orEmpty()}"
-                            } else {
-                                cursor.getString(path).orEmpty()
-                            },
+                            path = filePath,
                             bucketId = cursor.getLong(bucketId),
                             bucketName = cursor.getString(bucketName).orEmpty().ifBlank { "Other" },
-                            isVideo = cursor.getInt(mediaType) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO,
+                            isVideo = isVid,
                             durationMs = cursor.getLong(duration),
                             mimeType = cursor.getString(mimeType).orEmpty(),
                             sizeBytes = cursor.getLong(size),

@@ -1,5 +1,6 @@
 package com.iris.gallery.data
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -169,19 +170,60 @@ class VaultRepository(private val context: Context) {
             }
         }
 
+    fun deleteFromStorage(item: MediaImage): Boolean {
+        var deleted = false
+        if (item.path.isNotBlank()) {
+            val file = File(item.path)
+            if (file.exists()) {
+                val fDel = runCatching { file.delete() }.getOrDefault(false)
+                val cDel = if (!fDel && file.exists()) runCatching { file.canonicalFile.delete() }.getOrDefault(false) else false
+                deleted = fDel || cDel
+            }
+        }
+        val mediaStoreUri = if (item.id > 0) {
+            if (item.isVideo) ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.id)
+            else ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.id)
+        } else {
+            item.uri
+        }
+        val contentDeleted = runCatching {
+            context.contentResolver.delete(mediaStoreUri, null, null) > 0
+        }.getOrDefault(false)
+        deleted = deleted || contentDeleted
+
+        if (item.id > 0) {
+            val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val idDeleted = runCatching {
+                context.contentResolver.delete(table, "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString())) > 0
+            }.getOrDefault(false)
+            deleted = deleted || idDeleted
+        }
+
+        if (item.uri != mediaStoreUri) {
+            val genericDeleted = runCatching {
+                context.contentResolver.delete(item.uri, null, null) > 0
+            }.getOrDefault(false)
+            deleted = deleted || genericDeleted
+        }
+
+        if (item.path.isNotBlank()) {
+            val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val pathDeleted = runCatching {
+                context.contentResolver.delete(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path)) > 0
+            }.getOrDefault(false)
+            deleted = deleted || pathDeleted
+            runCatching {
+                context.contentResolver.delete(MediaStore.Files.getContentUri("external"), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
+            }
+            MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
+        }
+        return deleted
+    }
+
         var silentSuccess = false
         if (hasManagerAccess && vaultedList.isNotEmpty()) {
             val allDeleted = originalList.all { item ->
-                val deletedFile = runCatching {
-                    if (item.path.isNotBlank()) File(item.path).delete() else false
-                }.getOrDefault(false)
-                val deletedResolver = runCatching {
-                    context.contentResolver.delete(item.uri, null, null) > 0
-                }.getOrDefault(false)
-                if (item.path.isNotBlank()) {
-                    MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
-                }
-                deletedFile || deletedResolver
+                deleteFromStorage(item)
             }
             if (allDeleted) {
                 silentSuccess = true
