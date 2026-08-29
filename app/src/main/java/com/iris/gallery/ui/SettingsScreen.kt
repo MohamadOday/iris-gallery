@@ -623,6 +623,15 @@ fun SettingsScreen(
                         checked = settings.biometricLockEnabled,
                         onCheckedChange = { preferences.setBiometricLockEnabled(it) }
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_confirm_delete_title),
+                        subtitle = stringResource(R.string.settings_confirm_delete_desc),
+                        checked = settings.confirmDelete,
+                        onCheckedChange = { preferences.setConfirmDelete(it) }
+                    )
                 }
             }
         }

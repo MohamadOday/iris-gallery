@@ -145,7 +145,11 @@ fun AboutScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    androidx.compose.ui.res.stringResource(R.string.version_format, "0.1.0", 1),
+                    androidx.compose.ui.res.stringResource(
+                        R.string.version_format,
+                        com.iris.gallery.BuildConfig.VERSION_NAME,
+                        com.iris.gallery.BuildConfig.VERSION_CODE
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

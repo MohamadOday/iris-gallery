@@ -56,6 +56,17 @@
     <string name="action_lock">Bloquear</string>
     <string name="action_details">Detalles</string>
     <string name="action_backspace">Borrar</string>
+    <string name="action_mute">Silenciar</string>
+    <string name="action_unmute">Activar sonido</string>
+    <string name="action_play">Reproducir</string>
+    <string name="action_pause">Pausar</string>
+    <string name="action_rotate_screen">Girar pantalla</string>
+    <string name="action_delete_permanently">Eliminar definitivamente</string>
+    <string name="delete_permanently_checkbox">Eliminar permanentemente</string>
+    <string name="delete_multiple_trash_title">¿Mover %1$d elementos a la papelera?</string>
+    <string name="delete_permanent_dialog_title">¿Eliminar permanentemente %1$d elementos?</string>
+    <string name="video_muted">Silenciado</string>
+    <string name="video_unmuted">Sonido activado</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Idioma y región</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android te pedirá confirmación para realizar este cambio.</string>
     <string name="delete_permanent_video_title">¿Eliminar video permanentemente?</string>
     <string name="delete_permanent_photo_title">¿Eliminar foto permanentemente?</string>
-    <string name="delete_permanent_desc">Este elemento se eliminará permanentemente de tu bóveda privada.</string>
+    <string name="delete_permanent_desc">Este elemento se eliminará permanentemente de tu dispositivo. Esta acción no se puede deshacer.</string>
+    <string name="delete_vault_desc">Este elemento se eliminará permanentemente de tu bóveda privada.</string>
     <string name="dialog_delete_vault_item_title">¿Eliminar permanentemente %1$s?</string>
     <string name="dialog_delete_vault_item_message">Este elemento se eliminará permanentemente de tu bóveda privada.</string>
     <string name="prompt_free_vault_title">Bóveda sin confirmaciones</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Concede \'Acceso a todos los archivos\' para que Iris pueda mover y ocultar fotos en la bóveda sin ventanas de confirmación de Android.</string>
     <string name="settings_vault_biometric_title">Bloqueo biométrico para la bóveda privada</string>
     <string name="settings_vault_biometric_desc">Requerir credencial o PIN del dispositivo al ver elementos bloqueados en la bóveda</string>
+    <string name="settings_confirm_delete_title">Confirmar antes de eliminar</string>
+    <string name="settings_confirm_delete_desc">Mostrar confirmación antes de mover a la papelera o eliminar definitivamente</string>
 
     <string name="settings_section_storage">Almacenamiento &amp; Restablecimiento</string>
     <string name="settings_clear_cache">Borrar caché de miniaturas de imágenes &amp; videos</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Copia editada guardada en Pictures/Iris</string>
     <string name="toast_editor_failed">No se pudo guardar la copia editada</string>
     <string name="toast_optics_unlocked">¡Óptica de Ibn al-Haytham desbloqueada!</string>
+    <string name="toast_item_moved_to_trash">Movido a la papelera (se conserva 30 días)</string>
+    <string name="toast_items_moved_to_trash">%1$d elementos movidos a la papelera (se conservan 30 días)</string>
+    <string name="toast_item_restored_from_trash">Elemento restaurado a la galería</string>
+    <string name="toast_items_restored_from_trash">%1$d elementos restaurados a la galería</string>
+    <string name="toast_item_permanently_deleted">Elemento eliminado permanentemente</string>
+    <string name="toast_items_permanently_deleted">%1$d elementos eliminados permanentemente</string>
     <string name="toast_easter_egg_hint">Pulsa %1$d veces para ver la sorpresa</string>
     <string name="toast_easter_egg_hint_one">Pulsa 1 vez para ver la sorpresa</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Mover a álbum</string>
+    <string name="action_copy_to_album">Copiar a álbum</string>
+    <string name="action_create_album">Nuevo álbum</string>
+    <string name="create_album_title">Crear nuevo álbum</string>
+    <string name="create_album_name_hint">Nombre del álbum</string>
+    <string name="create_album_button">Crear</string>
+    <string name="move_to_album_title">Mover a álbum</string>
+    <string name="copy_to_album_title">Copiar a álbum</string>
+    <string name="toast_moved_to_album_single">Elemento movido a %1$s</string>
+    <string name="toast_moved_to_album_multiple">%1$d elementos movidos a %2$s</string>
+    <string name="toast_copied_to_album_single">Elemento copiado a %1$s</string>
+    <string name="toast_copied_to_album_multiple">%1$d elementos copiados a %2$s</string>
 </resources>

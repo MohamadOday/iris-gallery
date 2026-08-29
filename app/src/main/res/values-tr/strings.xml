@@ -56,6 +56,17 @@
     <string name="action_lock">Kilitle</string>
     <string name="action_details">Ayrıntılar</string>
     <string name="action_backspace">Sil</string>
+    <string name="action_mute">Sesi kapat</string>
+    <string name="action_unmute">Sesi aç</string>
+    <string name="action_play">Oynat</string>
+    <string name="action_pause">Duraklat</string>
+    <string name="action_rotate_screen">Ekranı döndür</string>
+    <string name="action_delete_permanently">Kalıcı olarak sil</string>
+    <string name="delete_permanently_checkbox">Kalıcı olarak sil</string>
+    <string name="delete_multiple_trash_title">%1$d öğe çöp kutusuna taşınsın mı?</string>
+    <string name="delete_permanent_dialog_title">%1$d öğe kalıcı olarak silinsin mi?</string>
+    <string name="video_muted">Ses kapalı</string>
+    <string name="video_unmuted">Ses açık</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Dil ve Bölge</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android bu değişikliği onaylamanızı isteyecek.</string>
     <string name="delete_permanent_video_title">Video kalıcı olarak silinsin mi?</string>
     <string name="delete_permanent_photo_title">Fotoğraf kalıcı olarak silinsin mi?</string>
-    <string name="delete_permanent_desc">Bu öge gizli kasanızdan kalıcı olarak kaldırılacaktır.</string>
+    <string name="delete_permanent_desc">Bu öge cihazınızdan kalıcı olarak silinecektir. Bu işlem geri alınamaz.</string>
+    <string name="delete_vault_desc">Bu öge gizli kasanızdan kalıcı olarak kaldırılacaktır.</string>
     <string name="dialog_delete_vault_item_title">%1$s kalıcı olarak silinsin mi?</string>
     <string name="dialog_delete_vault_item_message">Bu öge gizli kasanızdan kalıcı olarak kaldırılacaktır.</string>
     <string name="prompt_free_vault_title">Onaysız Kasa</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Iris\'in fotoğrafları Android onay pencereleri olmadan kasaya taşıyıp gizleyebilmesi için \'Tüm Dosyalara Erişim\' izni verin.</string>
     <string name="settings_vault_biometric_title">Özel Kasa İçin Biyometrik Kilit</string>
     <string name="settings_vault_biometric_desc">Kilitli kasa ögelerini görüntülerken cihaz kimlik doğrulaması/PIN iste</string>
+    <string name="settings_confirm_delete_title">Silmeden Önce Onayla</string>
+    <string name="settings_confirm_delete_desc">Çöp kutusuna taşımadan veya kalıcı olarak silmeden önce onay penceresi göster</string>
 
     <string name="settings_section_storage">Depolama &amp; Sıfırlama</string>
     <string name="settings_clear_cache">Görsel &amp; Video Küçük Resim Önbelleğini Temizle</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Düzenlenen kopya Pictures/Iris konumuna kaydedildi</string>
     <string name="toast_editor_failed">Düzenlenen kopya kaydedilemedi</string>
     <string name="toast_optics_unlocked">İbn-i Heysem Optiği Açıldı!</string>
+    <string name="toast_item_moved_to_trash">Çöp kutusuna taşındı (30 gün saklanır)</string>
+    <string name="toast_items_moved_to_trash">%1$d öğe çöp kutusuna taşındı (30 gün saklanır)</string>
+    <string name="toast_item_restored_from_trash">Öğe galeriye geri yüklendi</string>
+    <string name="toast_items_restored_from_trash">%1$d öğe galeriye geri yüklendi</string>
+    <string name="toast_item_permanently_deleted">Öğe kalıcı olarak silindi</string>
+    <string name="toast_items_permanently_deleted">%1$d öğe kalıcı olarak silindi</string>
     <string name="toast_easter_egg_hint">Sürpriz yumurtayı görmek için %1$d kez basın</string>
     <string name="toast_easter_egg_hint_one">Sürpriz yumurtayı görmek için 1 kez basın</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Albüme taşı</string>
+    <string name="action_copy_to_album">Albüme kopyala</string>
+    <string name="action_create_album">Yeni albüm</string>
+    <string name="create_album_title">Yeni albüm oluştur</string>
+    <string name="create_album_name_hint">Albüm adı</string>
+    <string name="create_album_button">Oluştur</string>
+    <string name="move_to_album_title">Albüme Taşı</string>
+    <string name="copy_to_album_title">Albüme Kopyala</string>
+    <string name="toast_moved_to_album_single">Öğe %1$s konumuna taşındı</string>
+    <string name="toast_moved_to_album_multiple">%1$d öğe %2$s konumuna taşındı</string>
+    <string name="toast_copied_to_album_single">Öğe %1$s konumuna kopyalandı</string>
+    <string name="toast_copied_to_album_multiple">%1$d öğe %2$s konumuna kopyalandı</string>
 </resources>

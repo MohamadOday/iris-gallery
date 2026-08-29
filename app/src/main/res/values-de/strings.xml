@@ -56,6 +56,17 @@
     <string name="action_lock">Sperren</string>
     <string name="action_details">Details</string>
     <string name="action_backspace">Rücktaste</string>
+    <string name="action_mute">Stummschalten</string>
+    <string name="action_unmute">Stummschaltung aufheben</string>
+    <string name="action_play">Abspielen</string>
+    <string name="action_pause">Pausieren</string>
+    <string name="action_rotate_screen">Bildschirm drehen</string>
+    <string name="action_delete_permanently">Endgültig löschen</string>
+    <string name="delete_permanently_checkbox">Endgültig löschen</string>
+    <string name="delete_multiple_trash_title">%1$d Elemente in den Papierkorb verschieben?</string>
+    <string name="delete_permanent_dialog_title">%1$d Elemente endgültig löschen?</string>
+    <string name="video_muted">Stummgeschaltet</string>
+    <string name="video_unmuted">Ton ein</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Sprache &amp; Region</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android wird dich um Bestätigung dieser Änderung bitten.</string>
     <string name="delete_permanent_video_title">Video dauerhaft löschen?</string>
     <string name="delete_permanent_photo_title">Foto dauerhaft löschen?</string>
-    <string name="delete_permanent_desc">Dieses Element wird dauerhaft aus deinem privaten Tresor gelöscht.</string>
+    <string name="delete_permanent_desc">Dieses Element wird dauerhaft von deinem Gerät gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="delete_vault_desc">Dieses Element wird dauerhaft aus deinem privaten Tresor gelöscht.</string>
     <string name="dialog_delete_vault_item_title">%1$s dauerhaft löschen?</string>
     <string name="dialog_delete_vault_item_message">Dieses Element wird dauerhaft aus deinem privaten Tresor gelöscht.</string>
     <string name="prompt_free_vault_title">Tresor ohne Bestätigungsdialoge</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Gewähre \'Vollzugriff auf Dateien\', damit Iris Fotos ohne Android-Bestätigungsdialoge in den Tresor verschieben und verbergen kann.</string>
     <string name="settings_vault_biometric_title">Biometrische Sperre für privaten Tresor</string>
     <string name="settings_vault_biometric_desc">Geräte-PIN/-Muster beim Aufrufen gesperrter Tresorelemente anfordern</string>
+    <string name="settings_confirm_delete_title">Vor dem Löschen bestätigen</string>
+    <string name="settings_confirm_delete_desc">Bestätigungsdialog vor dem Verschieben in den Papierkorb oder endgültigen Löschen anzeigen</string>
 
     <string name="settings_section_storage">Speicher &amp; Zurücksetzen</string>
     <string name="settings_clear_cache">Cache für Bild- &amp; Video-Miniaturansichten leeren</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Bearbeitete Kopie in Pictures/Iris gespeichert</string>
     <string name="toast_editor_failed">Bearbeitete Kopie konnte nicht gespeichert werden</string>
     <string name="toast_optics_unlocked">Optik von Ibn al-Haitham freigeschaltet!</string>
+    <string name="toast_item_moved_to_trash">In den Papierkorb verschoben (für 30 Tage aufbewahrt)</string>
+    <string name="toast_items_moved_to_trash">%1$d Elemente in den Papierkorb verschoben (für 30 Tage aufbewahrt)</string>
+    <string name="toast_item_restored_from_trash">Element in der Galerie wiederhergestellt</string>
+    <string name="toast_items_restored_from_trash">%1$d Elemente in der Galerie wiederhergestellt</string>
+    <string name="toast_item_permanently_deleted">Element endgültig gelöscht</string>
+    <string name="toast_items_permanently_deleted">%1$d Elemente endgültig gelöscht</string>
     <string name="toast_easter_egg_hint">Noch %1$d-mal tippen für Easter Egg</string>
     <string name="toast_easter_egg_hint_one">Noch 1-mal tippen für Easter Egg</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">In Album verschieben</string>
+    <string name="action_copy_to_album">In Album kopieren</string>
+    <string name="action_create_album">Neues Album</string>
+    <string name="create_album_title">Neues Album erstellen</string>
+    <string name="create_album_name_hint">Albumname</string>
+    <string name="create_album_button">Erstellen</string>
+    <string name="move_to_album_title">In Album verschieben</string>
+    <string name="copy_to_album_title">In Album kopieren</string>
+    <string name="toast_moved_to_album_single">Element nach %1$s verschoben</string>
+    <string name="toast_moved_to_album_multiple">%1$d Elemente nach %2$s verschoben</string>
+    <string name="toast_copied_to_album_single">Element nach %1$s kopiert</string>
+    <string name="toast_copied_to_album_multiple">%1$d Elemente nach %2$s kopiert</string>
 </resources>

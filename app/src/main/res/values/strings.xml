@@ -56,6 +56,17 @@
     <string name="action_lock">Lock</string>
     <string name="action_details">Details</string>
     <string name="action_backspace">Backspace</string>
+    <string name="action_mute">Mute</string>
+    <string name="action_unmute">Unmute</string>
+    <string name="action_play">Play</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_rotate_screen">Rotate screen</string>
+    <string name="action_delete_permanently">Delete permanently</string>
+    <string name="delete_permanently_checkbox">Delete permanently</string>
+    <string name="delete_multiple_trash_title">Move %1$d items to trash?</string>
+    <string name="delete_permanent_dialog_title">Permanently delete %1$d items?</string>
+    <string name="video_muted">Muted</string>
+    <string name="video_unmuted">Unmuted</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Language &amp; Region</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android will ask you to confirm this change.</string>
     <string name="delete_permanent_video_title">Permanently delete video?</string>
     <string name="delete_permanent_photo_title">Permanently delete photo?</string>
-    <string name="delete_permanent_desc">This item will be permanently removed from your private vault.</string>
+    <string name="delete_permanent_desc">This item will be permanently deleted from your device. This cannot be undone.</string>
+    <string name="delete_vault_desc">This item will be permanently removed from your private vault.</string>
     <string name="dialog_delete_vault_item_title">Permanently delete %1$s?</string>
     <string name="dialog_delete_vault_item_message">This item will be permanently removed from your private vault.</string>
     <string name="prompt_free_vault_title">Prompt-Free Vault</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Grant \'All Files Access\' so Iris can move and hide photos in the vault without Android confirmation popups.</string>
     <string name="settings_vault_biometric_title">Biometric Lock for Private Vault</string>
     <string name="settings_vault_biometric_desc">Require device credential/PIN when viewing locked vault items</string>
+    <string name="settings_confirm_delete_title">Confirm Before Deleting</string>
+    <string name="settings_confirm_delete_desc">Show confirmation dialog before moving items to trash or deleting permanently</string>
 
     <string name="settings_section_storage">Storage &amp; Reset</string>
     <string name="settings_clear_cache">Clear Image &amp; Video Thumbnail Cache</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Edited copy saved to Pictures/Iris</string>
     <string name="toast_editor_failed">Could not save edited copy</string>
     <string name="toast_optics_unlocked">Ibn al-Haytham Optics Unlocked!</string>
+    <string name="toast_item_moved_to_trash">Moved to Trash (kept for 30 days)</string>
+    <string name="toast_items_moved_to_trash">%1$d items moved to Trash (kept for 30 days)</string>
+    <string name="toast_item_restored_from_trash">Item restored to gallery</string>
+    <string name="toast_items_restored_from_trash">%1$d items restored to gallery</string>
+    <string name="toast_item_permanently_deleted">Item permanently deleted</string>
+    <string name="toast_items_permanently_deleted">%1$d items permanently deleted</string>
     <string name="toast_easter_egg_hint">Press %1$d times to show easter egg</string>
     <string name="toast_easter_egg_hint_one">Press 1 time to show easter egg</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Move to album</string>
+    <string name="action_copy_to_album">Copy to album</string>
+    <string name="action_create_album">New album</string>
+    <string name="create_album_title">Create new album</string>
+    <string name="create_album_name_hint">Album name</string>
+    <string name="create_album_button">Create</string>
+    <string name="move_to_album_title">Move to Album</string>
+    <string name="copy_to_album_title">Copy to Album</string>
+    <string name="toast_moved_to_album_single">Moved item to %1$s</string>
+    <string name="toast_moved_to_album_multiple">Moved %1$d items to %2$s</string>
+    <string name="toast_copied_to_album_single">Copied item to %1$s</string>
+    <string name="toast_copied_to_album_multiple">Copied %1$d items to %2$s</string>
 </resources>

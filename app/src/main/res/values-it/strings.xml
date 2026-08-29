@@ -56,6 +56,17 @@
     <string name="action_lock">Blocca</string>
     <string name="action_details">Dettagli</string>
     <string name="action_backspace">Cancella</string>
+    <string name="action_mute">Disattiva audio</string>
+    <string name="action_unmute">Attiva audio</string>
+    <string name="action_play">Riproduci</string>
+    <string name="action_pause">Pausa</string>
+    <string name="action_rotate_screen">Ruota schermo</string>
+    <string name="action_delete_permanently">Elimina definitivamente</string>
+    <string name="delete_permanently_checkbox">Elimina definitivamente</string>
+    <string name="delete_multiple_trash_title">Spostare %1$d elementi nel cestino?</string>
+    <string name="delete_permanent_dialog_title">Eliminare definitivamente %1$d elementi?</string>
+    <string name="video_muted">Audio disattivato</string>
+    <string name="video_unmuted">Audio attivato</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Lingua e regione</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android richiederà di confermare questa modifica.</string>
     <string name="delete_permanent_video_title">Eliminare definitivamente il video?</string>
     <string name="delete_permanent_photo_title">Eliminare definitivamente la foto?</string>
-    <string name="delete_permanent_desc">Questo elemento verrà rimosso definitivamente dalla tua cassaforte privata.</string>
+    <string name="delete_permanent_desc">Questo elemento verrà eliminato definitivamente dal tuo dispositivo. Questa azione non può essere annullata.</string>
+    <string name="delete_vault_desc">Questo elemento verrà rimosso definitivamente dalla tua cassaforte privata.</string>
     <string name="dialog_delete_vault_item_title">Eliminare definitivamente %1$s?</string>
     <string name="dialog_delete_vault_item_message">Questo elemento verrà rimosso definitivamente dalla tua cassaforte privata.</string>
     <string name="prompt_free_vault_title">Cassaforte senza conferme</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Consenti l\'\"Accesso a tutti i file\" affinché Iris possa spostare e nascondere le foto nella cassaforte senza popup di conferma da parte di Android.</string>
     <string name="settings_vault_biometric_title">Blocco biometrico per la cassaforte</string>
     <string name="settings_vault_biometric_desc">Richiedi credenziali o PIN del dispositivo per visualizzare i file protetti nella cassaforte</string>
+    <string name="settings_confirm_delete_title">Conferma prima di eliminare</string>
+    <string name="settings_confirm_delete_desc">Mostra una finestra di conferma prima di spostare nel cestino o eliminare definitivamente</string>
 
     <string name="settings_section_storage">Spazio di archiviazione e ripristino</string>
     <string name="settings_clear_cache">Cancella cache delle miniature di immagini e video</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Copia modificata salvata in Pictures/Iris</string>
     <string name="toast_editor_failed">Impossibile salvare la copia modificata</string>
     <string name="toast_optics_unlocked">Ottica di Ibn al-Haytham sbloccata!</string>
+    <string name="toast_item_moved_to_trash">Spostato nel cestino (conservato per 30 giorni)</string>
+    <string name="toast_items_moved_to_trash">%1$d elementi spostati nel cestino (conservati per 30 giorni)</string>
+    <string name="toast_item_restored_from_trash">Elemento ripristinato nella galleria</string>
+    <string name="toast_items_restored_from_trash">%1$d elementi ripristinati nella galleria</string>
+    <string name="toast_item_permanently_deleted">Elemento eliminato definitivamente</string>
+    <string name="toast_items_permanently_deleted">%1$d elementi eliminati definitivamente</string>
     <string name="toast_easter_egg_hint">Tocca ancora %1$d volte per mostrare l\'easter egg</string>
     <string name="toast_easter_egg_hint_one">Tocca ancora 1 volta per mostrare l\'easter egg</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Sposta nell\'album</string>
+    <string name="action_copy_to_album">Copia nell\'album</string>
+    <string name="action_create_album">Nuovo album</string>
+    <string name="create_album_title">Crea nuovo album</string>
+    <string name="create_album_name_hint">Nome dell\'album</string>
+    <string name="create_album_button">Crea</string>
+    <string name="move_to_album_title">Sposta nell\'album</string>
+    <string name="copy_to_album_title">Copia nell\'album</string>
+    <string name="toast_moved_to_album_single">Elemento spostato in %1$s</string>
+    <string name="toast_moved_to_album_multiple">%1$d elementi spostati in %2$s</string>
+    <string name="toast_copied_to_album_single">Elemento copiato in %1$s</string>
+    <string name="toast_copied_to_album_multiple">%1$d elementi copiati in %2$s</string>
 </resources>

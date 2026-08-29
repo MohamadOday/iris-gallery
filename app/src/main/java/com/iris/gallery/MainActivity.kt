@@ -86,6 +86,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Share
@@ -158,11 +160,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.material3.Checkbox
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -246,7 +252,27 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 
+import com.iris.gallery.data.AlbumAction
+import com.iris.gallery.data.AlbumOperationResult
+import com.iris.gallery.ui.AlbumPickerSheet
+import java.io.File
+
 private var isSessionAppUnlocked = false
+
+enum class TrashFeedbackType {
+    MOVED_TO_TRASH,
+    RESTORED,
+    PERMANENTLY_DELETED,
+    MOVED_TO_ALBUM,
+    COPIED_TO_ALBUM,
+}
+
+data class TrashFeedback(
+    val type: TrashFeedbackType,
+    val count: Int,
+    val albumName: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -575,25 +601,25 @@ private fun GalleryApp(
                         },
                         onPick = onPick,
                         onTrash = { media ->
-                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                                val request = MediaStore.createTrashRequest(context.contentResolver,
-                                    media.map { canonicalMediaUri(it) }, true)
-                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                            }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                            if (media.isNotEmpty()) {
+                                coroutineScope.launch {
+                                    viewModel.moveToTrash(media)
+                                }
+                            }
                         },
                         onRestore = { media ->
-                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                                val request = MediaStore.createTrashRequest(context.contentResolver,
-                                    media.map { canonicalMediaUri(it) }, false)
-                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                            }.onFailure { Toast.makeText(context, "Could not request restore", Toast.LENGTH_LONG).show() }
+                            if (media.isNotEmpty()) {
+                                coroutineScope.launch {
+                                    viewModel.restoreFromTrash(media)
+                                }
+                            }
                         },
                         onDeletePermanently = { media ->
-                            if (Build.VERSION.SDK_INT >= 30 && media.isNotEmpty()) runCatching {
-                                val request = MediaStore.createDeleteRequest(context.contentResolver,
-                                    media.map { canonicalMediaUri(it) })
-                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                            }.onFailure { Toast.makeText(context, "Could not request deletion", Toast.LENGTH_LONG).show() }
+                            if (media.isNotEmpty()) {
+                                coroutineScope.launch {
+                                    viewModel.deletePermanently(media)
+                                }
+                            }
                         },
                         onEditMetadata = { media, name, title, captured, orientation ->
                             val values = ContentValues().apply {
@@ -612,6 +638,18 @@ private fun GalleryApp(
                         duplicateState = duplicateState,
                         onScanDuplicates = viewModel::scanDuplicates,
                         onCancelDuplicateScan = viewModel::cancelDuplicateScan,
+                        onMoveToAlbum = { media, dir, name ->
+                            coroutineScope.launch {
+                                viewModel.moveMediaToAlbum(media, dir, name)
+                            }
+                        },
+                        onCopyToAlbum = { media, dir, name ->
+                            coroutineScope.launch {
+                                viewModel.copyMediaToAlbum(media, dir, name)
+                            }
+                        },
+                        getAlbumDir = viewModel::getAlbumDirectory,
+                        createAlbumDir = viewModel::createNewAlbumDirectory,
                         initialMemories = initialMemories,
                         initialViewUri = initialViewUri,
                     )
@@ -645,10 +683,15 @@ private fun GalleryApp(
                         dismissButton = {
                             TextButton(onClick = {
                                 showAllFilesAccessPromptDialog = false
-                                pending?.let { executeVaultMove(it) }
+                                if (pending != null) {
+                                    val lockedIds = pending.map { it.id }.toSet()
+                                    viewModel.setLocked(lockedIds, true)
+                                    viewModel.refresh()
+                                    Toast.makeText(context, "${pending.size} item(s) hidden in Iris Gallery", Toast.LENGTH_SHORT).show()
+                                }
                                 pendingVaultItems = null
                             }) {
-                                Text(stringResource(R.string.action_use_system_popup))
+                                Text(stringResource(R.string.action_cancel))
                             }
                         }
                     )
@@ -656,27 +699,18 @@ private fun GalleryApp(
             }
         }
     }
-
-    if (!settings.firstLaunchLanguageSetupDone) {
-        com.iris.gallery.ui.FirstLaunchLanguageBottomSheet(
-            onConfirm = { selectedLang ->
-                settingsPreferences.setLanguage(selectedLang)
-                settingsPreferences.setFirstLaunchLanguageSetupDone(true)
-                com.iris.gallery.ui.setAppLanguage(context, selectedLang)
-            }
-        )
-    }
 }
 
 private fun canonicalMediaUri(item: MediaImage): Uri {
-    if (item.uri.scheme == "file" || item.id < 0) return item.uri
-    val collection = if (item.isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-    else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-    return ContentUris.withAppendedId(collection, item.id)
+    return if (item.uri.scheme == "file") {
+        item.uri
+    } else {
+        item.uri
+    }
 }
 
 private fun getShareUri(context: android.content.Context, item: MediaImage): Uri {
-    return if (item.uri.scheme == "file" || item.path.startsWith(context.filesDir.absolutePath)) {
+    return if (item.path.startsWith(context.filesDir.absolutePath)) {
         androidx.core.content.FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -732,6 +766,10 @@ private fun GalleryScaffold(
     onRestore: (List<MediaImage>) -> Unit,
     onDeletePermanently: (List<MediaImage>) -> Unit,
     onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
+    onMoveToAlbum: (List<MediaImage>, java.io.File, String) -> Unit,
+    onCopyToAlbum: (List<MediaImage>, java.io.File, String) -> Unit,
+    getAlbumDir: (MediaAlbum) -> java.io.File,
+    createAlbumDir: (String) -> java.io.File,
     duplicateState: DuplicateScanState,
     onScanDuplicates: () -> Unit,
     onCancelDuplicateScan: () -> Unit,
@@ -838,8 +876,48 @@ private fun GalleryScaffold(
         }
         context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
     }
+    val availableAlbums = remember(images, albumCovers) {
+        images.groupBy { it.bucketId }.map { (id, media) ->
+            MediaAlbum(
+                id = id,
+                name = media.first().bucketName,
+                cover = media.firstOrNull { it.id == albumCovers[id] } ?: media.first(),
+                images = media,
+            )
+        }.sortedBy { it.name.lowercase() }
+    }
+    var albumPickerAction by remember { mutableStateOf<AlbumAction?>(null) }
+    var pendingAlbumMedia by remember { mutableStateOf<List<MediaImage>?>(null) }
+    var pendingDeleteItems by remember { mutableStateOf<List<MediaImage>?>(null) }
+    var trashFeedback by remember { mutableStateOf<TrashFeedback?>(null) }
+    LaunchedEffect(trashFeedback) {
+        if (trashFeedback != null) {
+            kotlinx.coroutines.delay(1800)
+            trashFeedback = null
+        }
+    }
 
-    Scaffold(
+    val handleTrash: (List<MediaImage>) -> Unit = { items ->
+        if (items.isNotEmpty()) {
+            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, items.size)
+            onTrash(items)
+        }
+    }
+    val handleRestore: (List<MediaImage>) -> Unit = { items ->
+        if (items.isNotEmpty()) {
+            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, items.size)
+            onRestore(items)
+        }
+    }
+    val handleDeletePermanently: (List<MediaImage>) -> Unit = { items ->
+        if (items.isNotEmpty()) {
+            trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, items.size)
+            onDeletePermanently(items)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -873,18 +951,22 @@ private fun GalleryScaffold(
                 actions = {
                     if (selectedIds.isNotEmpty()) {
                         if (destination == 3 && librarySection == "trash") {
-                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onRestore(selected) }) {
+                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); handleRestore(selected) }) {
                                 Icon(Icons.Outlined.RestoreFromTrash, stringResource(R.string.action_restore))
                             }
                         }
                         IconButton(onClick = ::shareSelection) { Icon(Icons.Outlined.Share, stringResource(R.string.action_share)) }
                         IconButton(onClick = {
                             val selected = activeMedia.filter { it.id in selectedIds }
-                            clearSelection()
-                            when {
-                                destination == 3 && librarySection == "trash" -> onDeletePermanently(selected)
-                                destination == 3 && librarySection == "locked" -> onDeleteFromLocked(selected)
-                                else -> onTrash(selected)
+                            if (selected.isNotEmpty()) {
+                                if (destination == 3 && (librarySection == "trash" || librarySection == "locked")) {
+                                    pendingDeleteItems = selected
+                                } else if (settings.confirmDelete) {
+                                    pendingDeleteItems = selected
+                                } else {
+                                    clearSelection()
+                                    handleTrash(selected)
+                                }
                             }
                         }) { Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.action_delete)) }
                         Box {
@@ -897,6 +979,28 @@ private fun GalleryScaffold(
                                 if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
                                     DropdownMenuItem(text = { Text(stringResource(R.string.action_set_album_cover)) }, leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
                                         onClick = { selectionMenuExpanded = false; onSetAlbumCover(selectedAlbum!!.id, selectedIds.first()); clearSelection() })
+                                }
+                                if (!(destination == 3 && (librarySection == "trash" || librarySection == "locked"))) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_move_to_album)) },
+                                        leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            val selected = activeMedia.filter { it.id in selectedIds }
+                                            pendingAlbumMedia = selected
+                                            albumPickerAction = AlbumAction.MOVE
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_copy_to_album)) },
+                                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            val selected = activeMedia.filter { it.id in selectedIds }
+                                            pendingAlbumMedia = selected
+                                            albumPickerAction = AlbumAction.COPY
+                                        }
+                                    )
                                 }
                                 if (destination == 3 && librarySection == "locked") {
                                     DropdownMenuItem(text = { Text(stringResource(R.string.action_remove_from_locked)) }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
@@ -1197,7 +1301,7 @@ private fun GalleryScaffold(
                             onScan = onScanDuplicates,
                             onCancel = onCancelDuplicateScan,
                             onOpen = { group, media -> viewerImages = group.items; selectedId = media.id },
-                            onTrash = onTrash,
+                            onTrash = handleTrash,
                         )
                         else -> LibraryScreen(padding, trashed.size, lockedMedia.size) {
                             librarySection = it
@@ -1238,13 +1342,134 @@ private fun GalleryScaffold(
             confirmButton = {
                 TextButton(onClick = {
                     confirmEmptyTrash = false
-                    onDeletePermanently(trashed)
+                    handleDeletePermanently(trashed)
                 }) {
                     Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmEmptyTrash = false }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+
+    pendingDeleteItems?.let { items ->
+        val isInTrash = destination == 3 && librarySection == "trash"
+        val isLockedSection = destination == 3 && librarySection == "locked"
+        val isPermanentMode = isInTrash || isLockedSection
+        var deletePermanently by remember { mutableStateOf(isPermanentMode) }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteItems = null },
+            title = {
+                Text(
+                    if (isPermanentMode) {
+                        stringResource(R.string.delete_permanent_dialog_title, items.size)
+                    } else if (items.size == 1) {
+                        if (items[0].isVideo) stringResource(R.string.delete_trash_video_title)
+                        else stringResource(R.string.delete_trash_photo_title)
+                    } else {
+                        stringResource(R.string.delete_multiple_trash_title, items.size)
+                    }
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isLockedSection) stringResource(R.string.delete_vault_desc)
+                        else if (isPermanentMode) stringResource(R.string.delete_permanent_desc)
+                        else stringResource(R.string.delete_trash_desc)
+                    )
+                    if (!isPermanentMode) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { deletePermanently = !deletePermanently }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = deletePermanently,
+                                onCheckedChange = { deletePermanently = it }
+                            )
+                            Text(
+                                text = stringResource(R.string.delete_permanently_checkbox),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val toDelete = items
+                    pendingDeleteItems = null
+                    clearSelection()
+                    if (isLockedSection) {
+                        trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, toDelete.size)
+                        onDeleteFromLocked(toDelete)
+                    } else if (isInTrash || deletePermanently) {
+                        handleDeletePermanently(toDelete)
+                    } else {
+                        handleTrash(toDelete)
+                    }
+                }) {
+                    Text(
+                        if (isPermanentMode || deletePermanently) stringResource(R.string.action_delete_permanently)
+                        else stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteItems = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (albumPickerAction != null && pendingAlbumMedia != null) {
+        val currentAlbumIdForMove = if (destination == 1 && selectedAlbum != null) selectedAlbum.id else null
+        AlbumPickerSheet(
+            action = albumPickerAction!!,
+            selectedCount = pendingAlbumMedia!!.size,
+            albums = availableAlbums,
+            currentAlbumId = currentAlbumIdForMove,
+            onDismiss = {
+                albumPickerAction = null
+                pendingAlbumMedia = null
+            },
+            onSelectAlbum = { album ->
+                val action = albumPickerAction!!
+                val toProcess = pendingAlbumMedia!!
+                val targetDir = getAlbumDir(album)
+                albumPickerAction = null
+                pendingAlbumMedia = null
+                clearSelection()
+                if (action == AlbumAction.MOVE) {
+                    trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, toProcess.size, album.name)
+                    onMoveToAlbum(toProcess, targetDir, album.name)
+                } else {
+                    trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, toProcess.size, album.name)
+                    onCopyToAlbum(toProcess, targetDir, album.name)
+                }
+            },
+            onCreateAlbum = { newName ->
+                val action = albumPickerAction!!
+                val toProcess = pendingAlbumMedia!!
+                val targetDir = createAlbumDir(newName)
+                albumPickerAction = null
+                pendingAlbumMedia = null
+                clearSelection()
+                if (action == AlbumAction.MOVE) {
+                    trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, toProcess.size, newName)
+                    onMoveToAlbum(toProcess, targetDir, newName)
+                } else {
+                    trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, toProcess.size, newName)
+                    onCopyToAlbum(toProcess, targetDir, newName)
+                }
             }
         )
     }
@@ -1257,7 +1482,8 @@ private fun GalleryScaffold(
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
         val index = activeImages.indexOfFirst { it.id == id }
-        val isViewingLocked = (destination == 3 && librarySection == "locked") || id < 0 || id in lockedIds
+        val isViewingLocked = destination == 3 && librarySection == "locked"
+        val isViewingTrash = destination == 3 && librarySection == "trash"
         if (index >= 0 && activeImages.isNotEmpty()) PhotoViewer(
             images = activeImages,
             initialPage = index,
@@ -1266,22 +1492,39 @@ private fun GalleryScaffold(
             loop = settings.loopVideo,
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
             isLocked = isViewingLocked,
+            isInTrash = isViewingTrash,
+            confirmDeleteSetting = settings.confirmDelete,
+            availableAlbums = availableAlbums,
             onToggleFavorite = onToggleFavorite,
             onClose = { selectedId = null },
-            onDelete = {
+            onDelete = { media, deletePermanently ->
                 selectedId = null
-                if (isViewingLocked || it.id < 0) {
-                    onDeleteFromLocked(listOf(it))
-                } else if (destination == 3 && librarySection == "trash") {
-                    onDeletePermanently(listOf(it))
+                if (isViewingTrash || deletePermanently) {
+                    handleDeletePermanently(listOf(media))
+                } else if (isViewingLocked) {
+                    trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, 1)
+                    onDeleteFromLocked(listOf(media))
                 } else {
-                    onTrash(listOf(it))
+                    handleTrash(listOf(media))
                 }
+            },
+            onRestore = { media ->
+                handleRestore(listOf(media))
             },
             onEditMetadata = onEditMetadata,
             onEdit = { editorImage = it; selectedId = null },
             onLock = { onLockMedia(listOf(it)); selectedId = null },
             onUnlock = { onUnlockMedia(listOf(it)); selectedId = null },
+            onMoveToAlbum = { mediaList, dir, name ->
+                trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, mediaList.size, name)
+                onMoveToAlbum(mediaList, dir, name)
+            },
+            onCopyToAlbum = { mediaList, dir, name ->
+                trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, mediaList.size, name)
+                onCopyToAlbum(mediaList, dir, name)
+            },
+            getAlbumDir = getAlbumDir,
+            createAlbumDir = createAlbumDir,
         )
     }
     editorImage?.let { image ->
@@ -1290,6 +1533,96 @@ private fun GalleryScaffold(
             Toast.makeText(context, if (saved) context.getString(R.string.toast_edited_saved) else context.getString(R.string.toast_edited_failed),
                 Toast.LENGTH_SHORT).show()
         })
+    }
+
+        AnimatedVisibility(
+            visible = trashFeedback != null,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = if (selectedId != null) 96.dp else if (selectedIds.isEmpty()) 88.dp else 24.dp),
+            enter = fadeIn(tween(160)) + slideInVertically(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                initialOffsetY = { it / 2 }
+            ) + scaleIn(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                initialScale = 0.82f
+            ),
+            exit = fadeOut(tween(220, easing = FastOutSlowInEasing)) + slideOutVertically(
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                targetOffsetY = { it / 2 }
+            ) + scaleOut(
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                targetScale = 0.85f
+            ),
+        ) {
+            trashFeedback?.let { feedback ->
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 6.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val icon = when (feedback.type) {
+                            TrashFeedbackType.MOVED_TO_TRASH -> Icons.Outlined.DeleteOutline
+                            TrashFeedbackType.RESTORED -> Icons.Outlined.RestoreFromTrash
+                            TrashFeedbackType.PERMANENTLY_DELETED -> Icons.Outlined.DeleteForever
+                            TrashFeedbackType.MOVED_TO_ALBUM -> Icons.Outlined.DriveFileMove
+                            TrashFeedbackType.COPIED_TO_ALBUM -> Icons.Outlined.ContentCopy
+                        }
+                        val tint = when (feedback.type) {
+                            TrashFeedbackType.MOVED_TO_TRASH -> MaterialTheme.colorScheme.primary
+                            TrashFeedbackType.RESTORED -> MaterialTheme.colorScheme.primary
+                            TrashFeedbackType.PERMANENTLY_DELETED -> MaterialTheme.colorScheme.error
+                            TrashFeedbackType.MOVED_TO_ALBUM -> MaterialTheme.colorScheme.primary
+                            TrashFeedbackType.COPIED_TO_ALBUM -> MaterialTheme.colorScheme.primary
+                        }
+                        val message = when (feedback.type) {
+                            TrashFeedbackType.MOVED_TO_TRASH -> {
+                                if (feedback.count == 1) stringResource(R.string.toast_item_moved_to_trash)
+                                else stringResource(R.string.toast_items_moved_to_trash, feedback.count)
+                            }
+                            TrashFeedbackType.RESTORED -> {
+                                if (feedback.count == 1) stringResource(R.string.toast_item_restored_from_trash)
+                                else stringResource(R.string.toast_items_restored_from_trash, feedback.count)
+                            }
+                            TrashFeedbackType.PERMANENTLY_DELETED -> {
+                                if (feedback.count == 1) stringResource(R.string.toast_item_permanently_deleted)
+                                else stringResource(R.string.toast_items_permanently_deleted, feedback.count)
+                            }
+                            TrashFeedbackType.MOVED_TO_ALBUM -> {
+                                if (feedback.count == 1) stringResource(R.string.toast_moved_to_album_single, feedback.albumName)
+                                else stringResource(R.string.toast_moved_to_album_multiple, feedback.count, feedback.albumName)
+                            }
+                            TrashFeedbackType.COPIED_TO_ALBUM -> {
+                                if (feedback.count == 1) stringResource(R.string.toast_copied_to_album_single, feedback.albumName)
+                                else stringResource(R.string.toast_copied_to_album_multiple, feedback.count, feedback.albumName)
+                            }
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1496,6 +1829,7 @@ private fun PhotoGrid(
         }
         found
     } }
+    val currentImages by rememberUpdatedState(images)
     val currentSelection by rememberUpdatedState(selectedIds)
     val currentSetSelection by rememberUpdatedState(onSetSelection)
     val currentCellSize by rememberUpdatedState(cellSize)
@@ -1529,12 +1863,14 @@ private fun PhotoGrid(
             modifier = Modifier.fillMaxSize().pointerInput(gridState, onSetSelection) {
                 if (currentSetSelection == null) return@pointerInput
                 var selecting = true
-                val visited = mutableSetOf<Long>()
+                var startId: Long? = null
+                var startPosition = Offset.Zero
+                var initialSelection = emptySet<Long>()
+                var previousDragIds = emptySet<Long>()
+                var hasDragged = false
                 var autoScrollJob: kotlinx.coroutines.Job? = null
                 val edge = 72.dp.toPx()
-                fun mediaRowAt(y: Float) = gridState.layoutInfo.visibleItemsInfo.filter { item ->
-                    item.key is Long && y >= item.offset.y && y <= item.offset.y + item.size.height
-                }.mapNotNull { it.key as? Long }
+                val dragSlop = 16.dp.toPx()
                 fun mediaAt(position: Offset) = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
                     item.key is Long &&
                         position.x >= item.offset.x && position.x <= item.offset.x + item.size.width &&
@@ -1542,36 +1878,67 @@ private fun PhotoGrid(
                 }?.key as? Long
                 detectDragGesturesAfterLongPress(
                     onDragStart = { position ->
-                        visited.clear()
                         val id = mediaAt(position) ?: return@detectDragGesturesAfterLongPress
-                        selecting = id !in currentSelection
+                        startId = id
+                        startPosition = position
+                        initialSelection = currentSelection
+                        selecting = id !in initialSelection
                         suppressReleaseClickId = id
-                        visited.add(id)
+                        hasDragged = false
+                        previousDragIds = setOf(id)
                         currentSetSelection?.invoke(id, selecting)
                     },
                     onDrag = { change, _ ->
-                        mediaRowAt(change.position.y).forEach { id ->
-                            if (visited.add(id)) currentSetSelection?.invoke(id, selecting)
-                        }
-                        val scrollBy = when {
-                            change.position.y < edge -> -38f
-                            change.position.y > size.height - edge -> 38f
-                            else -> 0f
-                        }
-                        if (scrollBy != 0f && autoScrollJob?.isActive != true) {
-                            autoScrollJob = scrubberScope.launch { gridState.scrollBy(scrollBy) }
+                        val sId = startId
+                        if (sId != null) {
+                            val dist = (change.position - startPosition).getDistance()
+                            if (!hasDragged && dist < dragSlop) {
+                                change.consume()
+                                return@detectDragGesturesAfterLongPress
+                            }
+                            hasDragged = true
+                            val currentId = mediaAt(change.position)
+                            if (currentId != null) {
+                                val allImages = currentImages
+                                val startIndex = allImages.indexOfFirst { it.id == sId }
+                                val currIndex = allImages.indexOfFirst { it.id == currentId }
+                                if (startIndex >= 0 && currIndex >= 0) {
+                                    val minIdx = minOf(startIndex, currIndex)
+                                    val maxIdx = maxOf(startIndex, currIndex)
+                                    val currentRangeIds = allImages.subList(minIdx, maxIdx + 1).map { it.id }.toSet()
+                                    currentRangeIds.forEach { id ->
+                                        currentSetSelection?.invoke(id, selecting)
+                                    }
+                                    previousDragIds.filter { it !in currentRangeIds }.forEach { id ->
+                                        currentSetSelection?.invoke(id, id in initialSelection)
+                                    }
+                                    previousDragIds = currentRangeIds
+                                }
+                            }
+                            val scrollBy = when {
+                                change.position.y < edge -> -38f
+                                change.position.y > size.height - edge -> 38f
+                                else -> 0f
+                            }
+                            if (scrollBy != 0f && autoScrollJob?.isActive != true) {
+                                autoScrollJob = scrubberScope.launch { gridState.scrollBy(scrollBy) }
+                            }
                         }
                         change.consume()
                     },
                     onDragEnd = {
-                        autoScrollJob?.cancel(); visited.clear()
+                        autoScrollJob?.cancel()
+                        startId = null
+                        previousDragIds = emptySet()
                         scrubberScope.launch {
                             kotlinx.coroutines.delay(250)
                             suppressReleaseClickId = null
                         }
                     },
                     onDragCancel = {
-                        autoScrollJob?.cancel(); visited.clear()
+                        autoScrollJob?.cancel()
+                        startId = null
+                        previousDragIds = emptySet()
                         suppressReleaseClickId = null
                     },
                 )
@@ -1708,13 +2075,21 @@ private fun PhotoViewer(
     loop: Boolean = true,
     doubleTapZoomLevel: Float = 2.5f,
     isLocked: Boolean = false,
+    isInTrash: Boolean = false,
+    confirmDeleteSetting: Boolean = false,
+    availableAlbums: List<MediaAlbum> = emptyList(),
     onToggleFavorite: (Long) -> Unit,
     onClose: () -> Unit,
-    onDelete: (MediaImage) -> Unit,
+    onDelete: (MediaImage, Boolean) -> Unit,
+    onRestore: (MediaImage) -> Unit = {},
     onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
     onEdit: (MediaImage) -> Unit,
     onLock: (MediaImage) -> Unit,
     onUnlock: (MediaImage) -> Unit = {},
+    onMoveToAlbum: (List<MediaImage>, File, String) -> Unit = { _, _, _ -> },
+    onCopyToAlbum: (List<MediaImage>, File, String) -> Unit = { _, _, _ -> },
+    getAlbumDir: (MediaAlbum) -> File = { File("") },
+    createAlbumDir: (String) -> File = { File("") },
 ) {
     val context = LocalContext.current
     val activity = remember(context) {
@@ -1730,11 +2105,15 @@ private fun PhotoViewer(
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         onClose()
     }
+    BackHandler(enabled = true) { handleClose() }
+
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { images.size })
     var showInfo by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var zoomedImageId by remember { mutableStateOf<Long?>(null) }
+    var viewerMenuExpanded by remember { mutableStateOf(false) }
+    var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
     val current = images[pagerState.currentPage]
     val videoEngine = remember { Media3VideoEngine(context) }
     DisposableEffect(videoEngine) { onDispose { videoEngine.release() } }
@@ -1742,109 +2121,152 @@ private fun PhotoViewer(
         if (current.isVideo) videoEngine.load(current.uri) else videoEngine.player.pause()
     }
 
-    Dialog(
-        onDismissRequest = handleClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF080808)) {
-          Box(Modifier.fillMaxSize()) {
-            HorizontalPager(
-                state = pagerState,
-                beyondViewportPageCount = 1,
-                userScrollEnabled = zoomedImageId != current.id,
-            ) { page ->
-                val media = images[page]
-                if (media.isVideo) {
-                    VideoPage(
-                        media = media,
-                        engine = videoEngine,
-                        active = page == pagerState.currentPage,
-                        controlsVisible = controlsVisible,
-                        autoPlay = autoPlay,
-                        loop = loop,
-                        onTap = { controlsVisible = !controlsVisible },
-                        onZoomChanged = { zoomed -> zoomedImageId = if (zoomed) media.id else null },
-                    )
-                } else {
-                    ZoomablePhoto(
-                        image = media,
-                        doubleTapZoomLevel = doubleTapZoomLevel,
-                        onTap = { controlsVisible = !controlsVisible },
-                        onZoomChanged = { zoomed ->
-                            zoomedImageId = if (zoomed) media.id else null
-                        },
-                    )
+    Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF080808)) {
+      Box(Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            beyondViewportPageCount = 1,
+            userScrollEnabled = zoomedImageId != current.id,
+        ) { page ->
+            val media = images[page]
+            if (media.isVideo) {
+                VideoPage(
+                    media = media,
+                    engine = videoEngine,
+                    active = page == pagerState.currentPage,
+                    controlsVisible = controlsVisible,
+                    autoPlay = autoPlay,
+                    loop = loop,
+                    onTap = { controlsVisible = !controlsVisible },
+                    onZoomChanged = { zoomed -> zoomedImageId = if (zoomed) media.id else null },
+                )
+            } else {
+                ZoomablePhoto(
+                    image = media,
+                    doubleTapZoomLevel = doubleTapZoomLevel,
+                    onTap = { controlsVisible = !controlsVisible },
+                    onZoomChanged = { zoomed ->
+                        zoomedImageId = if (zoomed) media.id else null
+                    },
+                )
+            }
+        }
+        AnimatedVisibility(
+          visible = controlsVisible,
+          modifier = Modifier.align(Alignment.TopCenter),
+          enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { -it / 5 },
+          exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 5 },
+        ) {
+          Box(Modifier.fillMaxWidth().height(156.dp)) {
+          Box(
+            modifier = Modifier.fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .82f), Color.Transparent))),
+          )
+          Row(
+            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                Text(current.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size), color = Color.White.copy(alpha = .7f),
+                    style = MaterialTheme.typography.labelMedium)
+            }
+            IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.details_title), tint = Color.White) }
+            if (!isLocked && !isInTrash && current.id > 0) {
+                Box {
+                    IconButton(onClick = { viewerMenuExpanded = true }) {
+                        Icon(Icons.Outlined.MoreVert, stringResource(R.string.action_more), tint = Color.White)
+                    }
+                    DropdownMenu(
+                        expanded = viewerMenuExpanded,
+                        onDismissRequest = { viewerMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_move_to_album)) },
+                            leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null) },
+                            onClick = {
+                                viewerMenuExpanded = false
+                                viewerAlbumAction = AlbumAction.MOVE
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_copy_to_album)) },
+                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                            onClick = {
+                                viewerMenuExpanded = false
+                                viewerAlbumAction = AlbumAction.COPY
+                            }
+                        )
+                    }
                 }
             }
-            AnimatedVisibility(
-              visible = controlsVisible,
-              modifier = Modifier.align(Alignment.TopCenter),
-              enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { -it / 5 },
-              exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 5 },
-            ) {
-              Box(Modifier.fillMaxWidth().height(156.dp)) {
-              Box(
-                modifier = Modifier.fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .82f), Color.Transparent))),
-              )
-              Row(
-                modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(current.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size), color = Color.White.copy(alpha = .7f),
-                        style = MaterialTheme.typography.labelMedium)
+          }
+          }
+        }
+        AnimatedVisibility(
+          visible = controlsVisible,
+          modifier = Modifier
+              .align(Alignment.BottomCenter)
+              .navigationBarsPadding()
+              .padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+          enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                  slideInVertically(
+                      animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                      initialOffsetY = { it }
+                  ) +
+                  scaleIn(
+                      animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                      initialScale = 0.90f
+                  ),
+          exit = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
+                 slideOutVertically(
+                     animationSpec = tween(180, easing = FastOutSlowInEasing),
+                     targetOffsetY = { it / 2 }
+                  ) +
+                 scaleOut(
+                     animationSpec = tween(160, easing = FastOutSlowInEasing),
+                     targetScale = 0.92f
+                  ),
+        ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+            shape = RoundedCornerShape(32.dp),
+            tonalElevation = 8.dp,
+        ) {
+          val isFav = current.id in favorites
+          val favScale by animateFloatAsState(
+              targetValue = if (isFav) 1.25f else 1.0f,
+              animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+              label = "fav_scale"
+          )
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            if (isInTrash) {
+                ViewerIconButton(
+                    icon = Icons.Outlined.RestoreFromTrash,
+                    label = stringResource(R.string.action_restore),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    onRestore(current)
+                    handleClose()
                 }
-                IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.details_title), tint = Color.White) }
-              }
-              }
-            }
-            AnimatedVisibility(
-              visible = controlsVisible,
-              modifier = Modifier.align(Alignment.BottomCenter),
-              enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-                      slideInVertically(
-                          animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
-                          initialOffsetY = { it }
-                      ) +
-                      scaleIn(
-                          animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
-                          initialScale = 0.90f
-                      ),
-              exit = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
-                     slideOutVertically(
-                         animationSpec = tween(180, easing = FastOutSlowInEasing),
-                         targetOffsetY = { it / 2 }
-                     ) +
-                     scaleOut(
-                         animationSpec = tween(160, easing = FastOutSlowInEasing),
-                         targetScale = 0.92f
-                     ),
-            ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp)
-                    .navigationBarsPadding()
-                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .96f),
-                shape = RoundedCornerShape(32.dp),
-                tonalElevation = 8.dp,
-            ) {
-              val isFav = current.id in favorites
-              val favScale by animateFloatAsState(
-                  targetValue = if (isFav) 1.25f else 1.0f,
-                  animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-                  label = "fav_scale"
-              )
-              Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
+                ViewerIconButton(
+                    icon = Icons.Outlined.DeleteForever,
+                    label = stringResource(R.string.action_delete_permanently),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    confirmDelete = true
+                }
+            } else {
                 ViewerIconButton(
                     icon = Icons.Outlined.Share,
                     label = stringResource(R.string.action_share),
@@ -1872,7 +2294,7 @@ private fun PhotoViewer(
                         modifier = Modifier.weight(1f),
                     ) { onEdit(current) }
                 }
-                if (isLocked || current.id < 0) {
+                if (isLocked) {
                     ViewerIconButton(
                         icon = Icons.Outlined.LockOpen,
                         label = stringResource(R.string.action_unlock),
@@ -1889,24 +2311,31 @@ private fun PhotoViewer(
                     icon = Icons.Outlined.DeleteOutline,
                     label = stringResource(R.string.action_delete),
                     modifier = Modifier.weight(1f),
-                ) { confirmDelete = true }
-              }
-            }
+                ) {
+                    if (isLocked || confirmDeleteSetting) {
+                        confirmDelete = true
+                    } else {
+                        onDelete(current, false)
+                    }
+                }
             }
           }
         }
+        }
+      }
     }
 
     if (showInfo) PhotoDetailsSheet(current, onDismiss = { showInfo = false }, onSave = { name, title, captured, orientation ->
         onEditMetadata(current, name, title, captured, orientation); showInfo = false
     })
     if (confirmDelete) {
-        val isItemLocked = isLocked || current.id < 0
+        val isPermanentlyDeleting = isLocked || isInTrash
+        var deletePermanently by remember { mutableStateOf(isPermanentlyDeleting) }
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = {
                 Text(
-                    if (isItemLocked) {
+                    if (isPermanentlyDeleting) {
                         if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
                         else stringResource(R.string.delete_permanent_photo_title)
                     } else {
@@ -1916,15 +2345,82 @@ private fun PhotoViewer(
                 )
             },
             text = {
-                Text(
-                    if (isItemLocked) stringResource(R.string.delete_permanent_desc)
-                    else stringResource(R.string.delete_trash_desc)
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isLocked) stringResource(R.string.delete_vault_desc)
+                        else if (isPermanentlyDeleting) stringResource(R.string.delete_permanent_desc)
+                        else stringResource(R.string.delete_trash_desc)
+                    )
+                    if (!isPermanentlyDeleting) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { deletePermanently = !deletePermanently }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = deletePermanently,
+                                onCheckedChange = { deletePermanently = it }
+                            )
+                            Text(
+                                text = stringResource(R.string.delete_permanently_checkbox),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
             },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(current) }) {
-                Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-            } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete(current, isPermanentlyDeleting || deletePermanently)
+                }) {
+                    Text(
+                        if (isPermanentlyDeleting || deletePermanently) stringResource(R.string.action_delete_permanently)
+                        else stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (viewerAlbumAction != null) {
+        val action = viewerAlbumAction!!
+        AlbumPickerSheet(
+            action = action,
+            selectedCount = 1,
+            albums = availableAlbums,
+            currentAlbumId = if (action == AlbumAction.MOVE) current.bucketId else null,
+            onDismiss = { viewerAlbumAction = null },
+            onSelectAlbum = { album ->
+                val targetDir = getAlbumDir(album)
+                viewerAlbumAction = null
+                if (action == AlbumAction.MOVE) {
+                    onMoveToAlbum(listOf(current), targetDir, album.name)
+                    handleClose()
+                } else {
+                    onCopyToAlbum(listOf(current), targetDir, album.name)
+                }
+            },
+            onCreateAlbum = { newName ->
+                val targetDir = createAlbumDir(newName)
+                viewerAlbumAction = null
+                if (action == AlbumAction.MOVE) {
+                    onMoveToAlbum(listOf(current), targetDir, newName)
+                    handleClose()
+                } else {
+                    onCopyToAlbum(listOf(current), targetDir, newName)
+                }
+            }
         )
     }
 }
@@ -2135,7 +2631,7 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
     ModalBottomSheet(
         onDismissRequest = onDismiss,
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(image.name.ifBlank { stringResource(R.string.details_photo_details) }, style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)

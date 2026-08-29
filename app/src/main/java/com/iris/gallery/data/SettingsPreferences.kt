@@ -61,6 +61,7 @@ data class SettingsState(
     val appLockPinHash: String = "",
     val appLockPinSalt: String = "",
     val appLockBiometricsEnabled: Boolean = true,
+    val confirmDelete: Boolean = false,
     val language: String = "",
     val firstLaunchLanguageSetupDone: Boolean = false,
 ) {
@@ -93,6 +94,7 @@ class SettingsPreferences(context: Context) {
     fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
     fun setAppLockBiometricsEnabled(enabled: Boolean) = update { copy(appLockBiometricsEnabled = enabled) }
+    fun setConfirmDelete(enabled: Boolean) = update { copy(confirmDelete = enabled) }
 
     fun setPin(pin: String) {
         val salt = java.util.UUID.randomUUID().toString()
@@ -156,6 +158,7 @@ class SettingsPreferences(context: Context) {
             appLockPinHash = prefs.getString("app_lock_pin_hash", "").orEmpty(),
             appLockPinSalt = prefs.getString("app_lock_pin_salt", "").orEmpty(),
             appLockBiometricsEnabled = prefs.getBoolean("app_lock_biometrics_enabled", true),
+            confirmDelete = prefs.getBoolean("confirm_delete", false),
             language = prefs.getString("app_language", "").orEmpty(),
             firstLaunchLanguageSetupDone = prefs.getBoolean("first_launch_lang_done", false),
         )
@@ -184,6 +187,7 @@ class SettingsPreferences(context: Context) {
             .putString("app_lock_pin_hash", state.appLockPinHash)
             .putString("app_lock_pin_salt", state.appLockPinSalt)
             .putBoolean("app_lock_biometrics_enabled", state.appLockBiometricsEnabled)
+            .putBoolean("confirm_delete", state.confirmDelete)
             .putString("app_language", state.language)
             .putBoolean("first_launch_lang_done", state.firstLaunchLanguageSetupDone)
             .apply()

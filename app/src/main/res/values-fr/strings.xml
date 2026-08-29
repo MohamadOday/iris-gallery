@@ -56,6 +56,17 @@
     <string name="action_lock">Verrouiller</string>
     <string name="action_details">Détails</string>
     <string name="action_backspace">Effacer</string>
+    <string name="action_mute">Couper le son</string>
+    <string name="action_unmute">Réactiver le son</string>
+    <string name="action_play">Lecture</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_rotate_screen">Faire pivoter l\'écran</string>
+    <string name="action_delete_permanently">Supprimer définitivement</string>
+    <string name="delete_permanently_checkbox">Supprimer définitivement</string>
+    <string name="delete_multiple_trash_title">Déplacer %1$d éléments vers la corbeille ?</string>
+    <string name="delete_permanent_dialog_title">Supprimer définitivement %1$d éléments ?</string>
+    <string name="video_muted">Son coupé</string>
+    <string name="video_unmuted">Son activé</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Langue et région</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android vous demandera de confirmer cette modification.</string>
     <string name="delete_permanent_video_title">Supprimer définitivement la vidéo ?</string>
     <string name="delete_permanent_photo_title">Supprimer définitivement la photo ?</string>
-    <string name="delete_permanent_desc">Cet élément sera définitivement supprimé de votre coffre privé.</string>
+    <string name="delete_permanent_desc">Cet élément sera définitivement supprimé de votre appareil. Cette action est irréversible.</string>
+    <string name="delete_vault_desc">Cet élément sera définitivement supprimé de votre coffre privé.</string>
     <string name="dialog_delete_vault_item_title">Supprimer définitivement %1$s ?</string>
     <string name="dialog_delete_vault_item_message">Cet élément sera définitivement supprimé de votre coffre privé.</string>
     <string name="prompt_free_vault_title">Coffre sans invite système</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Accordez l\'accès à tous les fichiers pour qu\'Iris puisse déplacer et masquer les photos dans le coffre sans confirmation système d\'Android.</string>
     <string name="settings_vault_biometric_title">Verrouillage biométrique du coffre privé</string>
     <string name="settings_vault_biometric_desc">Exiger les identifiants de l\'appareil / code PIN lors de la consultation des éléments verrouillés</string>
+    <string name="settings_confirm_delete_title">Confirmer avant de supprimer</string>
+    <string name="settings_confirm_delete_desc">Afficher une confirmation avant de déplacer vers la corbeille ou de supprimer définitivement</string>
 
     <string name="settings_section_storage">Stockage et réinitialisation</string>
     <string name="settings_clear_cache">Vider le cache des miniatures d\'images et vidéos</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Copie retouchée enregistrée dans Pictures/Iris</string>
     <string name="toast_editor_failed">Impossible d\'enregistrer la copie retouchée</string>
     <string name="toast_optics_unlocked">Optique d\'Ibn al-Haytham débloquée !</string>
+    <string name="toast_item_moved_to_trash">Déplacé dans la corbeille (conservé 30 jours)</string>
+    <string name="toast_items_moved_to_trash">%1$d éléments déplacés dans la corbeille (conservés 30 jours)</string>
+    <string name="toast_item_restored_from_trash">Élément restauré dans la galerie</string>
+    <string name="toast_items_restored_from_trash">%1$d éléments restaurés dans la galerie</string>
+    <string name="toast_item_permanently_deleted">Élément définitivement supprimé</string>
+    <string name="toast_items_permanently_deleted">%1$d éléments définitivement supprimés</string>
     <string name="toast_easter_egg_hint">Appuyez encore %1$d fois pour afficher l\'easter egg</string>
     <string name="toast_easter_egg_hint_one">Appuyez encore 1 fois pour afficher l\'easter egg</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Déplacer vers un album</string>
+    <string name="action_copy_to_album">Copier vers un album</string>
+    <string name="action_create_album">Nouvel album</string>
+    <string name="create_album_title">Créer un nouvel album</string>
+    <string name="create_album_name_hint">Nom de l\'album</string>
+    <string name="create_album_button">Créer</string>
+    <string name="move_to_album_title">Déplacer vers l\'album</string>
+    <string name="copy_to_album_title">Copier vers l\'album</string>
+    <string name="toast_moved_to_album_single">Élément déplacé vers %1$s</string>
+    <string name="toast_moved_to_album_multiple">%1$d éléments déplacés vers %2$s</string>
+    <string name="toast_copied_to_album_single">Élément copié vers %1$s</string>
+    <string name="toast_copied_to_album_multiple">%1$d éléments copiés vers %2$s</string>
 </resources>

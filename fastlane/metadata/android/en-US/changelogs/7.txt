@@ -1,0 +1,5 @@
+• Album Management: Move and copy photos & videos between albums with directory creation and album picker sheet
+• App-Managed 30-Day Trash: Offline recycle bin with automatic 30-day retention and restore functionality
+• Video Player Mute/Unmute: Direct in-player mute toggle with animated feedback and volume preservation
+• Enhanced Drag Selection: Smooth index-range drag-to-select with movement threshold to prevent accidental multi-selection
+• UI & Navigation Bar Fixes: Optimized 3-button navigation insets, full-screen orientation handling, and dynamic About versioning

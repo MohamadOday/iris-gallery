@@ -8,6 +8,8 @@ import com.iris.gallery.data.MediaRepository
 import com.iris.gallery.data.LibraryPreferences
 import com.iris.gallery.data.LibraryPreferencesState
 import com.iris.gallery.data.AlbumSort
+import com.iris.gallery.data.VaultRepository
+import com.iris.gallery.data.TrashRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import com.iris.gallery.data.DuplicateDetector
 import com.iris.gallery.data.DuplicateGroup
+
+import com.iris.gallery.data.AlbumRepository
+import com.iris.gallery.data.AlbumAction
+import com.iris.gallery.data.AlbumOperationResult
+import java.io.File
 
 data class GalleryUiState(
     val loading: Boolean = false,
@@ -26,9 +33,11 @@ data class GalleryUiState(
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaRepository(application)
     private val libraryPreferences = LibraryPreferences(application)
-    private val vaultRepository = com.iris.gallery.data.VaultRepository(application)
+    private val vaultRepository = VaultRepository(application)
+    private val trashRepository = TrashRepository(application)
+    private val albumRepository = AlbumRepository(application)
     private val preferences = application.getSharedPreferences("gallery", 0)
-    private val _uiState = MutableStateFlow(GalleryUiState(images = repository.loadSnapshot()))
+    private val _uiState = MutableStateFlow(GalleryUiState(images = repository.loadSnapshot(), trashed = trashRepository.trashedMedia.value))
     val uiState: StateFlow<GalleryUiState> = _uiState.asStateFlow()
     private val _favorites = MutableStateFlow(
         preferences.getStringSet("favorites", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
@@ -36,10 +45,19 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val favorites: StateFlow<Set<Long>> = _favorites.asStateFlow()
     val libraryState: StateFlow<LibraryPreferencesState> = libraryPreferences.state
     val vaultMedia: StateFlow<List<MediaImage>> = vaultRepository.vaultMedia
+    val trashedMedia: StateFlow<List<MediaImage>> = trashRepository.trashedMedia
     private val duplicateDetector = DuplicateDetector(application)
     private var duplicateJob: Job? = null
     private val _duplicateState = MutableStateFlow(DuplicateScanState())
     val duplicateState: StateFlow<DuplicateScanState> = _duplicateState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            trashRepository.trashedMedia.collect { trashedList ->
+                _uiState.value = _uiState.value.copy(trashed = trashedList)
+            }
+        }
+    }
 
     fun scanDuplicates() {
         if (duplicateJob?.isActive == true) return
@@ -68,6 +86,43 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     suspend fun restoreFromVault(mediaList: List<MediaImage>): List<MediaImage> = vaultRepository.restoreFromVault(mediaList)
     suspend fun deletePermanentlyFromVault(mediaList: List<MediaImage>) = vaultRepository.deletePermanently(mediaList)
 
+    suspend fun moveToTrash(mediaList: List<MediaImage>): List<MediaImage> {
+        val result = trashRepository.moveToTrash(mediaList)
+        refresh()
+        return result
+    }
+
+    suspend fun restoreFromTrash(mediaList: List<MediaImage>): List<MediaImage> {
+        val result = trashRepository.restoreFromTrash(mediaList)
+        refresh()
+        return result
+    }
+
+    suspend fun deletePermanently(mediaList: List<MediaImage>) {
+        trashRepository.deletePermanently(mediaList)
+        refresh()
+    }
+
+    suspend fun emptyTrash() {
+        trashRepository.emptyTrash()
+        refresh()
+    }
+
+    suspend fun moveMediaToAlbum(mediaList: List<MediaImage>, targetDir: File, targetAlbumName: String): AlbumOperationResult {
+        val result = albumRepository.moveMedia(mediaList, targetDir, targetAlbumName)
+        refresh()
+        return result
+    }
+
+    suspend fun copyMediaToAlbum(mediaList: List<MediaImage>, targetDir: File, targetAlbumName: String): AlbumOperationResult {
+        val result = albumRepository.copyMedia(mediaList, targetDir, targetAlbumName)
+        refresh()
+        return result
+    }
+
+    fun getAlbumDirectory(album: MediaAlbum): File = albumRepository.getAlbumDirectory(album)
+    fun createNewAlbumDirectory(albumName: String): File = albumRepository.createNewAlbumDirectory(albumName)
+
     fun togglePinnedAlbum(id: Long) = libraryPreferences.togglePinnedAlbum(id)
     fun setAlbumCover(albumId: Long, mediaId: Long) = libraryPreferences.setAlbumCover(albumId, mediaId)
     fun setAlbumSort(sort: AlbumSort) = libraryPreferences.setAlbumSort(sort)
@@ -84,7 +139,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun refresh() {
         viewModelScope.launch {
             vaultRepository.loadVaultItems()
-            _uiState.value = _uiState.value.copy(loading = true, error = null)
+            val trashList = trashRepository.loadTrashItems()
+            _uiState.value = _uiState.value.copy(loading = true, trashed = trashList, error = null)
             val media = runCatching { repository.loadImages() }
             media.fold(
                 onSuccess = {
@@ -94,8 +150,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 onFailure = { _uiState.value = _uiState.value.copy(loading = false,
                     error = it.message ?: "Could not load photos") },
             )
-            if (media.isSuccess) runCatching { repository.loadImages(trashed = true) }
-                .onSuccess { trash -> _uiState.value = _uiState.value.copy(trashed = trash) }
         }
     }
 }

@@ -56,6 +56,17 @@
     <string name="action_lock">قفل</string>
     <string name="action_details">التفاصيل</string>
     <string name="action_backspace">حذف</string>
+    <string name="action_mute">كتم الصوت</string>
+    <string name="action_unmute">إلغاء كتم الصوت</string>
+    <string name="action_play">تشغيل</string>
+    <string name="action_pause">إيقاف مؤقت</string>
+    <string name="action_rotate_screen">تدوير الشاشة</string>
+    <string name="action_delete_permanently">حذف نهائي</string>
+    <string name="delete_permanently_checkbox">حذف نهائي</string>
+    <string name="delete_multiple_trash_title">نقل %1$d عناصر إلى سلة المهملات؟</string>
+    <string name="delete_permanent_dialog_title">حذف %1$d عناصر نهائيًا؟</string>
+    <string name="video_muted">تم كتم الصوت</string>
+    <string name="video_unmuted">تم تشغيل الصوت</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">اللغة والمنطقة</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">سيطلب نظام أندرويد تأكيدك لتطبيق هذا التغيير.</string>
     <string name="delete_permanent_video_title">حذف الفيديو نهائياً؟</string>
     <string name="delete_permanent_photo_title">حذف الصورة نهائياً؟</string>
-    <string name="delete_permanent_desc">سيتم حذف هذا العنصر نهائياً من خزنتك الخاصة.</string>
+    <string name="delete_permanent_desc">سيتم حذف هذا العنصر نهائياً من جهازك. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_vault_desc">سيتم حذف هذا العنصر نهائياً من خزنتك الخاصة.</string>
     <string name="dialog_delete_vault_item_title">حذف %1$s نهائياً؟</string>
     <string name="dialog_delete_vault_item_message">سيتم حذف هذا العنصر نهائياً من خزنتك الخاصة.</string>
     <string name="prompt_free_vault_title">خزنة دون نوافذ تأكيد</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">امنح إذن \'الوصول إلى جميع الملفات\' ليتمكن Iris من نقل الصور وإخفائها في الخزنة دون نوافذ تأكيد من أندرويد.</string>
     <string name="settings_vault_biometric_title">القفل الحيوي للخزنة الخاصة</string>
     <string name="settings_vault_biometric_desc">طلب بيانات اعتماد الجهاز أو رمز PIN عند عرض عناصر الخزنة المقفلة</string>
+    <string name="settings_confirm_delete_title">تأكيد الحذف</string>
+    <string name="settings_confirm_delete_desc">عرض نافذة تأكيد قبل نقل العناصر إلى المهملات أو حذفها نهائيًا</string>
 
     <string name="settings_section_storage">التخزين وإعادة الضبط</string>
     <string name="settings_clear_cache">مسح الذاكرة المؤقتة للصور المصغرة والفيديو</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">تم حفظ النسخة المعدلة في Pictures/Iris</string>
     <string name="toast_editor_failed">تعذر حفظ النسخة المعدلة</string>
     <string name="toast_optics_unlocked">تم كشف بصريات ابن الهيثم!</string>
-    <string name="toast_easter_egg_hint">اضغط %1$d مرات لكشف المفاجأة</string>
-    <string name="toast_easter_egg_hint_one">اضغط مرة واحدة لكشف المفاجأة</string>
+    <string name="toast_item_moved_to_trash">تم النقل إلى سلة المهملات (تُحفظ لمدة 30 يومًا)</string>
+    <string name="toast_items_moved_to_trash">تم نقل %1$d عناصر إلى سلة المهملات (تُحفظ لمدة 30 يومًا)</string>
+    <string name="toast_item_restored_from_trash">تم استعادة العنصر إلى المعرض</string>
+    <string name="toast_items_restored_from_trash">تم استعادة %1$d عناصر إلى المعرض</string>
+    <string name="toast_item_permanently_deleted">تم حذف العنصر نهائيًا</string>
+    <string name="toast_items_permanently_deleted">تم حذف %1$d عناصر نهائيًا</string>
+    <string name="toast_easter_egg_hint">اضغط %1$d مرات لإظهار الميزة المخفية</string>
+    <string name="toast_easter_egg_hint_one">اضغط مرة واحدة لإظهار الميزة المخفية</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">نقل إلى ألبوم</string>
+    <string name="action_copy_to_album">نسخ إلى ألبوم</string>
+    <string name="action_create_album">ألبوم جديد</string>
+    <string name="create_album_title">إنشاء ألبوم جديد</string>
+    <string name="create_album_name_hint">اسم الألبوم</string>
+    <string name="create_album_button">إنشاء</string>
+    <string name="move_to_album_title">نقل إلى ألبوم</string>
+    <string name="copy_to_album_title">نسخ إلى ألبوم</string>
+    <string name="toast_moved_to_album_single">تم نقل العنصر إلى %1$s</string>
+    <string name="toast_moved_to_album_multiple">تم نقل %1$d عنصر إلى %2$s</string>
+    <string name="toast_copied_to_album_single">تم نسخ العنصر إلى %1$s</string>
+    <string name="toast_copied_to_album_multiple">تم نسخ %1$d عنصر إلى %2$s</string>
 </resources>

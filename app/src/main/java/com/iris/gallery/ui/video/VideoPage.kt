@@ -9,12 +9,19 @@ import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.SystemClock
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -38,13 +45,19 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import com.iris.gallery.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -93,6 +106,8 @@ fun VideoPage(
 ) {
     val context = LocalContext.current
     var playing by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(engine.player.volume == 0f) }
+    var muteFeedbackEvent by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
     var scrubbing by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
@@ -123,8 +138,10 @@ fun VideoPage(
 
     LaunchedEffect(engine, active, autoPlay, loop) {
         engine.player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        isMuted = engine.player.volume == 0f
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(value: Boolean) { playing = value }
+            override fun onVolumeChanged(volume: Float) { isMuted = volume == 0f }
         }
         engine.player.addListener(listener)
         if (active && autoPlay) engine.player.play()
@@ -174,6 +191,12 @@ fun VideoPage(
     LaunchedEffect(gestureFeedback) {
         if (gestureFeedback != null && gestureFeedback != "2×") {
             delay(650); gestureFeedback = null
+        }
+    }
+    LaunchedEffect(muteFeedbackEvent) {
+        if (muteFeedbackEvent != null) {
+            delay(850)
+            muteFeedbackEvent = null
         }
     }
 
@@ -249,23 +272,13 @@ fun VideoPage(
                         event.changes.forEach { it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
-            } },
+            } }
     ) {
-        BoxWithConstraints(
+        Box(
             Modifier.fillMaxSize().graphicsLayer(
                 scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y,
             ),
         ) {
-            // Camera videos often keep landscape-encoded dimensions and carry a
-            // 90°/270° display rotation. Size the surface for the rotated frame;
-            // otherwise TextureView rotates portrait pixels into a landscape box.
-            val videoAspect = displayAspect
-            val containerAspect = maxWidth / maxHeight
-            val videoModifier = if (videoAspect > containerAspect) {
-                Modifier.fillMaxWidth().aspectRatio(videoAspect).align(Alignment.Center)
-            } else {
-                Modifier.fillMaxHeight().aspectRatio(videoAspect).align(Alignment.Center)
-            }
             if (active) {
                 AndroidView(
                     factory = { ctx ->
@@ -280,10 +293,10 @@ fun VideoPage(
                         }
                     },
                     update = { it.player = engine.player },
-                    modifier = videoModifier
+                    modifier = Modifier.fillMaxSize()
                 )
             } else {
-                MediaThumbnail(media, videoModifier)
+                MediaThumbnail(media, Modifier.fillMaxSize())
             }
         }
         AnimatedVisibility(
@@ -298,6 +311,39 @@ fun VideoPage(
                     .padding(horizontal = 18.dp, vertical = 10.dp))
         }
         AnimatedVisibility(
+            visible = muteFeedbackEvent != null,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(tween(140)) + scaleIn(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                initialScale = 0.75f
+            ),
+            exit = fadeOut(tween(200, easing = FastOutSlowInEasing)) + scaleOut(
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                targetScale = 0.85f
+            ),
+        ) {
+            val muted = muteFeedbackEvent?.first == true
+            Row(
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(28.dp))
+                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp)
+                )
+                Text(
+                    text = stringResource(if (muted) R.string.video_muted else R.string.video_unmuted),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+        AnimatedVisibility(
           visible = controlsVisible,
           modifier = Modifier.align(Alignment.BottomCenter),
           enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 5 },
@@ -308,8 +354,8 @@ fun VideoPage(
         Column(
             modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp).padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(top = if (compactLandscape) 8.dp else 128.dp,
-                    bottom = if (compactLandscape) 116.dp else 128.dp),
+                .padding(top = if (compactLandscape) 4.dp else 128.dp,
+                    bottom = if (compactLandscape) 76.dp else 128.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AnimatedVisibility(scrubbing && preview != null) {
@@ -323,9 +369,50 @@ fun VideoPage(
             Slider(value = progress.coerceIn(0f, 1f), onValueChange = { scrubbing = true; progress = it }, onValueChangeFinished = {
                 engine.player.seekTo((progress * duration()).toLong()); scrubbing = false; preview = null
             })
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    val next = engine.toggleMute()
+                    isMuted = next
+                    muteFeedbackEvent = next to SystemClock.uptimeMillis()
+                }) {
+                    AnimatedContent(
+                        targetState = isMuted,
+                        transitionSpec = {
+                            (scaleIn(animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.6f) +
+                             fadeIn(animationSpec = tween(150))
+                            ).togetherWith(
+                                scaleOut(animationSpec = tween(100), targetScale = 0.6f) +
+                                fadeOut(animationSpec = tween(100))
+                            )
+                        },
+                        label = "mute_icon_anim"
+                    ) { muted ->
+                        Icon(
+                            imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = stringResource(if (muted) R.string.action_unmute else R.string.action_mute),
+                            tint = Color.White
+                        )
+                    }
+                }
                 IconButton(onClick = { if (engine.player.isPlaying) engine.player.pause() else engine.player.play() }) {
-                    Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play or pause", tint = Color.White)
+                    AnimatedContent(
+                        targetState = playing,
+                        transitionSpec = {
+                            (scaleIn(animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.6f) +
+                             fadeIn(animationSpec = tween(150))
+                            ).togetherWith(
+                                scaleOut(animationSpec = tween(100), targetScale = 0.6f) +
+                                fadeOut(animationSpec = tween(100))
+                            )
+                        },
+                        label = "play_pause_icon_anim"
+                    ) { isPlaying ->
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
+                            tint = Color.White
+                        )
+                    }
                 }
                 IconButton(onClick = {
                     val activity = generateSequence(context) { (it as? ContextWrapper)?.baseContext }
@@ -337,7 +424,11 @@ fun VideoPage(
                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                     }
                 }) {
-                    Icon(Icons.Outlined.ScreenRotation, "Rotate screen", tint = Color.White)
+                    Icon(
+                        imageVector = Icons.Outlined.ScreenRotation,
+                        contentDescription = stringResource(R.string.action_rotate_screen),
+                        tint = Color.White
+                    )
                 }
             }
         }

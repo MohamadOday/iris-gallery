@@ -56,6 +56,17 @@
     <string name="action_lock">锁定</string>
     <string name="action_details">详情</string>
     <string name="action_backspace">删除</string>
+    <string name="action_mute">静音</string>
+    <string name="action_unmute">取消静音</string>
+    <string name="action_play">播放</string>
+    <string name="action_pause">暂停</string>
+    <string name="action_rotate_screen">旋转屏幕</string>
+    <string name="action_delete_permanently">永久删除</string>
+    <string name="delete_permanently_checkbox">永久删除</string>
+    <string name="delete_multiple_trash_title">将 %1$d 项移至回收站？</string>
+    <string name="delete_permanent_dialog_title">永久删除 %1$d 项？</string>
+    <string name="video_muted">已静音</string>
+    <string name="video_unmuted">已取消静音</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">语言与地区</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android 系统将提示您确认此更改。</string>
     <string name="delete_permanent_video_title">永久删除视频？</string>
     <string name="delete_permanent_photo_title">永久删除照片？</string>
-    <string name="delete_permanent_desc">该项目将从您的私密相册中永久移除。</string>
+    <string name="delete_permanent_desc">该项目将从您的设备中永久删除。此操作无法撤消。</string>
+    <string name="delete_vault_desc">该项目将从您的私密相册中永久移除。</string>
     <string name="dialog_delete_vault_item_title">永久删除 %1$s？</string>
     <string name="dialog_delete_vault_item_message">该项目将从您的私密相册中永久移除。</string>
     <string name="prompt_free_vault_title">免提示私密相册</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">授予“所有文件访问权限”，使 Iris 将照片移入私密相册并隐藏时无需 Android 系统确认弹窗。</string>
     <string name="settings_vault_biometric_title">私密相册生物识别锁</string>
     <string name="settings_vault_biometric_desc">查看已锁定的私密项目时需要验证设备凭据/PIN 码</string>
+    <string name="settings_confirm_delete_title">删除前确认</string>
+    <string name="settings_confirm_delete_desc">在移入回收站或永久删除前显示确认提示</string>
 
     <string name="settings_section_storage">存储与重置</string>
     <string name="settings_clear_cache">清除图片与视频缩略图缓存</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">已将编辑后的副本保存至 Pictures/Iris</string>
     <string name="toast_editor_failed">无法保存编辑后的副本</string>
     <string name="toast_optics_unlocked">已解锁海什木光学！</string>
+    <string name="toast_item_moved_to_trash">已移至回收站（保留 30 天）</string>
+    <string name="toast_items_moved_to_trash">已将 %1$d 项移至回收站（保留 30 天）</string>
+    <string name="toast_item_restored_from_trash">项目已恢复至图库</string>
+    <string name="toast_items_restored_from_trash">已将 %1$d 项恢复至图库</string>
+    <string name="toast_item_permanently_deleted">项目已永久删除</string>
+    <string name="toast_items_permanently_deleted">已永久删除 %1$d 项</string>
     <string name="toast_easter_egg_hint">再按 %1$d 次即可显示彩蛋</string>
     <string name="toast_easter_egg_hint_one">再按 1 次即可显示彩蛋</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">移动到相册</string>
+    <string name="action_copy_to_album">复制到相册</string>
+    <string name="action_create_album">新建相册</string>
+    <string name="create_album_title">创建新相册</string>
+    <string name="create_album_name_hint">相册名称</string>
+    <string name="create_album_button">创建</string>
+    <string name="move_to_album_title">移动到相册</string>
+    <string name="copy_to_album_title">复制到相册</string>
+    <string name="toast_moved_to_album_single">已移动项目到 %1$s</string>
+    <string name="toast_moved_to_album_multiple">已移动 %1$d 个项目到 %2$s</string>
+    <string name="toast_copied_to_album_single">已复制项目到 %1$s</string>
+    <string name="toast_copied_to_album_multiple">已复制 %1$d 个项目到 %2$s</string>
 </resources>

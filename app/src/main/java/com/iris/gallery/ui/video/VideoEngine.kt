@@ -8,6 +8,16 @@ import androidx.media3.exoplayer.ExoPlayer
 
 interface VideoEngine {
     val player: Player
+    val isMuted: Boolean
+        get() = player.volume == 0f
+    fun setMuted(muted: Boolean) {
+        player.volume = if (muted) 0f else 1f
+    }
+    fun toggleMute(): Boolean {
+        val nextMuted = !isMuted
+        setMuted(nextMuted)
+        return nextMuted
+    }
     fun load(uri: Uri)
     fun release()
 }

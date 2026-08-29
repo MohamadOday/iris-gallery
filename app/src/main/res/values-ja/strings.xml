@@ -56,6 +56,17 @@
     <string name="action_lock">ロック</string>
     <string name="action_details">詳細</string>
     <string name="action_backspace">削除</string>
+    <string name="action_mute">ミュート</string>
+    <string name="action_unmute">ミュート解除</string>
+    <string name="action_play">再生</string>
+    <string name="action_pause">一時停止</string>
+    <string name="action_rotate_screen">画面を回転</string>
+    <string name="action_delete_permanently">完全に削除</string>
+    <string name="delete_permanently_checkbox">完全に削除</string>
+    <string name="delete_multiple_trash_title">%1$d 件の項目をゴミ箱に移動しますか？</string>
+    <string name="delete_permanent_dialog_title">%1$d 件の項目を完全に削除しますか？</string>
+    <string name="video_muted">ミュート中</string>
+    <string name="video_unmuted">ミュート解除</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">言語と地域</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android システムから確認メッセージが表示されます。</string>
     <string name="delete_permanent_video_title">動画を完全に削除しますか？</string>
     <string name="delete_permanent_photo_title">写真を完全に削除しますか？</string>
-    <string name="delete_permanent_desc">このアイテムはプライベート保管庫から完全に削除されます。</string>
+    <string name="delete_permanent_desc">このアイテムはお使いの端末から完全に削除されます。この操作は元に戻せません。</string>
+    <string name="delete_vault_desc">このアイテムはプライベート保管庫から完全に削除されます。</string>
     <string name="dialog_delete_vault_item_title">%1$s を完全に削除しますか？</string>
     <string name="dialog_delete_vault_item_message">このアイテムはプライベート保管庫から完全に削除されます。</string>
     <string name="prompt_free_vault_title">確認なしで保管庫を利用</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">「すべてのファイルへのアクセス」を許可すると、Android の確認ポップアップなしで写真を保管庫へ移動・非表示にできます。</string>
     <string name="settings_vault_biometric_title">プライベート保管庫の生体認証ロック</string>
     <string name="settings_vault_biometric_desc">ロックされた保管庫アイテムを表示する際に端末の認証情報/PINを要求</string>
+    <string name="settings_confirm_delete_title">削除前に確認</string>
+    <string name="settings_confirm_delete_desc">ゴミ箱への移動または完全削除の前に確認ダイアログを表示</string>
 
     <string name="settings_section_storage">ストレージとリセット</string>
     <string name="settings_clear_cache">画像・動画サムネイルのキャッシュを削除</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">編集したコピーを Pictures/Iris に保存しました</string>
     <string name="toast_editor_failed">編集したコピーを保存できませんでした</string>
     <string name="toast_optics_unlocked">イブン・アル＝ハイサム光学がアンロックされました！</string>
+    <string name="toast_item_moved_to_trash">ゴミ箱に移動しました（30日間保持）</string>
+    <string name="toast_items_moved_to_trash">%1$d 件の項目をゴミ箱に移動しました（30日間保持）</string>
+    <string name="toast_item_restored_from_trash">ギャラリーに復元しました</string>
+    <string name="toast_items_restored_from_trash">%1$d 件の項目をギャラリーに復元しました</string>
+    <string name="toast_item_permanently_deleted">項目を完全に削除しました</string>
+    <string name="toast_items_permanently_deleted">%1$d 件の項目を完全に削除しました</string>
     <string name="toast_easter_egg_hint">あと %1$d 回タップでイースターエッグを表示</string>
     <string name="toast_easter_egg_hint_one">あと 1 回タップでイースターエッグを表示</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">アルバムへ移動</string>
+    <string name="action_copy_to_album">アルバムへコピー</string>
+    <string name="action_create_album">新規アルバム</string>
+    <string name="create_album_title">新規アルバムを作成</string>
+    <string name="create_album_name_hint">アルバム名</string>
+    <string name="create_album_button">作成</string>
+    <string name="move_to_album_title">アルバムへ移動</string>
+    <string name="copy_to_album_title">アルバムへコピー</string>
+    <string name="toast_moved_to_album_single">%1$s へ移動しました</string>
+    <string name="toast_moved_to_album_multiple">%1$d 個の項目を %2$s へ移動しました</string>
+    <string name="toast_copied_to_album_single">%1$s へコピーしました</string>
+    <string name="toast_copied_to_album_multiple">%1$d 個の項目を %2$s へコピーしました</string>
 </resources>

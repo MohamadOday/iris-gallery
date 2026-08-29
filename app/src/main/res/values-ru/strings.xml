@@ -56,6 +56,17 @@
     <string name="action_lock">Скрыть</string>
     <string name="action_details">Сведения</string>
     <string name="action_backspace">Стереть</string>
+    <string name="action_mute">Отключить звук</string>
+    <string name="action_unmute">Включить звук</string>
+    <string name="action_play">Воспроизвести</string>
+    <string name="action_pause">Пауза</string>
+    <string name="action_rotate_screen">Повернуть экран</string>
+    <string name="action_delete_permanently">Удалить навсегда</string>
+    <string name="delete_permanently_checkbox">Удалить навсегда</string>
+    <string name="delete_multiple_trash_title">Переместить %1$d объектов в корзину?</string>
+    <string name="delete_permanent_dialog_title">Удалить %1$d объектов навсегда?</string>
+    <string name="video_muted">Звук выключен</string>
+    <string name="video_unmuted">Звук включен</string>
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Язык и регион</string>
@@ -98,7 +109,8 @@
     <string name="delete_trash_desc">Android запросит подтверждение для этого действия.</string>
     <string name="delete_permanent_video_title">Удалить видео навсегда?</string>
     <string name="delete_permanent_photo_title">Удалить фото навсегда?</string>
-    <string name="delete_permanent_desc">Этот объект будет навсегда удален из вашего личного хранилища.</string>
+    <string name="delete_permanent_desc">Этот объект будет навсегда удален с вашего устройства. Это действие нельзя отменить.</string>
+    <string name="delete_vault_desc">Этот объект будет навсегда удален из вашего личного хранилища.</string>
     <string name="dialog_delete_vault_item_title">Удалить %1$s навсегда?</string>
     <string name="dialog_delete_vault_item_message">Этот объект будет навсегда удален из вашего личного хранилища.</string>
     <string name="prompt_free_vault_title">Хранилище без запросов</string>
@@ -277,6 +289,8 @@
     <string name="settings_silent_vault_desc_prompt">Предоставьте разрешение «Доступ ко всем файлам», чтобы Iris могла перемещать и скрывать фото в хранилище без всплывающих окон подтверждения Android.</string>
     <string name="settings_vault_biometric_title">Биометрия для личного хранилища</string>
     <string name="settings_vault_biometric_desc">Запрашивать данные разблокировки устройства или PIN при просмотре личного хранилища</string>
+    <string name="settings_confirm_delete_title">Подтверждение удаления</string>
+    <string name="settings_confirm_delete_desc">Показывать диалог перед перемещением в корзину или безвозвратным удалением</string>
 
     <string name="settings_section_storage">Хранилище и сброс</string>
     <string name="settings_clear_cache">Очистить кэш миниатюр фото и видео</string>
@@ -409,6 +423,26 @@
     <string name="toast_editor_saved">Отредактированная копия сохранена в Pictures/Iris</string>
     <string name="toast_editor_failed">Не удалось сохранить отредактированную копию</string>
     <string name="toast_optics_unlocked">Оптика Ибн аль-Хайсама разблокирована!</string>
+    <string name="toast_item_moved_to_trash">Перемещено в корзину (хранится 30 дней)</string>
+    <string name="toast_items_moved_to_trash">Перемещено %1$d объектов в корзину (хранятся 30 дней)</string>
+    <string name="toast_item_restored_from_trash">Объект восстановлен в галерею</string>
+    <string name="toast_items_restored_from_trash">Восстановлено %1$d объектов в галерею</string>
+    <string name="toast_item_permanently_deleted">Объект удален навсегда</string>
+    <string name="toast_items_permanently_deleted">Удалено %1$d объектов навсегда</string>
     <string name="toast_easter_egg_hint">Нажмите еще %1$d раз(а), чтобы открыть пасхалку</string>
     <string name="toast_easter_egg_hint_one">Нажмите еще 1 раз, чтобы открыть пасхалку</string>
+
+    <!-- Album Operations -->
+    <string name="action_move_to_album">Переместить в альбом</string>
+    <string name="action_copy_to_album">Копировать в альбом</string>
+    <string name="action_create_album">Новый альбом</string>
+    <string name="create_album_title">Создать новый альбом</string>
+    <string name="create_album_name_hint">Название альбома</string>
+    <string name="create_album_button">Создать</string>
+    <string name="move_to_album_title">Переместить в альбом</string>
+    <string name="copy_to_album_title">Копировать в альбом</string>
+    <string name="toast_moved_to_album_single">Объект перемещен в %1$s</string>
+    <string name="toast_moved_to_album_multiple">Перемещено %1$d объектов в %2$s</string>
+    <string name="toast_copied_to_album_single">Объект скопирован в %1$s</string>
+    <string name="toast_copied_to_album_multiple">Скопировано %1$d объектов в %2$s</string>
 </resources>
