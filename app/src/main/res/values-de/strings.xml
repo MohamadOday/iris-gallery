@@ -291,6 +291,21 @@
     <string name="settings_vault_biometric_desc">Geräte-PIN/-Muster beim Aufrufen gesperrter Tresorelemente anfordern</string>
     <string name="settings_confirm_delete_title">Vor dem Löschen bestätigen</string>
     <string name="settings_confirm_delete_desc">Bestätigungsdialog vor dem Verschieben in den Papierkorb oder endgültigen Löschen anzeigen</string>
+    <string name="settings_preferred_editor_title">Standard-Fotoeditor</string>
+    <string name="settings_preferred_editor_desc">Festlegen, ob Bearbeiten den Iris-Editor oder externe Apps öffnet</string>
+    <string name="settings_editor_always_ask">Immer nachfragen</string>
+    <string name="settings_editor_builtin">Iris-Editor (Integriert)</string>
+    <string name="settings_editor_external">Externe App</string>
+
+    <string name="editor_choice_title">Foto bearbeiten</string>
+    <string name="editor_builtin_title">Iris-Editor</string>
+    <string name="editor_builtin_desc">Integrierte Filter, Zuschnitt und Farbanpassungen</string>
+    <string name="editor_external_title">Externe App</string>
+    <string name="editor_external_desc">In ImageToolbox, Lightroom, Snapseed usw. öffnen</string>
+    <string name="editor_remember_choice">Diese Auswahl merken</string>
+    <string name="edit_with_external_title">Foto bearbeiten mit…</string>
+    <string name="action_edit_builtin">Mit Iris-Editor bearbeiten</string>
+    <string name="action_edit_external">Mit externer App bearbeiten</string>
 
     <string name="settings_section_storage">Speicher &amp; Zurücksetzen</string>
     <string name="settings_clear_cache">Cache für Bild- &amp; Video-Miniaturansichten leeren</string>

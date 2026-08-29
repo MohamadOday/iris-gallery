@@ -291,6 +291,21 @@
     <string name="settings_vault_biometric_desc">Require device credential/PIN when viewing locked vault items</string>
     <string name="settings_confirm_delete_title">Confirm Before Deleting</string>
     <string name="settings_confirm_delete_desc">Show confirmation dialog before moving items to trash or deleting permanently</string>
+    <string name="settings_preferred_editor_title">Default Photo Editor</string>
+    <string name="settings_preferred_editor_desc">Choose whether tapping edit opens Iris Editor or external apps</string>
+    <string name="settings_editor_always_ask">Always ask</string>
+    <string name="settings_editor_builtin">Iris Editor (Built-in)</string>
+    <string name="settings_editor_external">External Editor</string>
+
+    <string name="editor_choice_title">Edit Photo</string>
+    <string name="editor_builtin_title">Iris Editor</string>
+    <string name="editor_builtin_desc">Built-in filters, cropping, and color adjustments</string>
+    <string name="editor_external_title">External Editor</string>
+    <string name="editor_external_desc">Open in ImageToolbox, Lightroom, Snapseed, etc.</string>
+    <string name="editor_remember_choice">Always use this option</string>
+    <string name="edit_with_external_title">Edit photo with…</string>
+    <string name="action_edit_builtin">Edit with Iris Editor</string>
+    <string name="action_edit_external">Edit with external app</string>
 
     <string name="settings_section_storage">Storage &amp; Reset</string>
     <string name="settings_clear_cache">Clear Image &amp; Video Thumbnail Cache</string>

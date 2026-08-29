@@ -289,8 +289,23 @@
     <string name="settings_silent_vault_desc_prompt">Предоставьте разрешение «Доступ ко всем файлам», чтобы Iris могла перемещать и скрывать фото в хранилище без всплывающих окон подтверждения Android.</string>
     <string name="settings_vault_biometric_title">Биометрия для личного хранилища</string>
     <string name="settings_vault_biometric_desc">Запрашивать данные разблокировки устройства или PIN при просмотре личного хранилища</string>
-    <string name="settings_confirm_delete_title">Подтверждение удаления</string>
-    <string name="settings_confirm_delete_desc">Показывать диалог перед перемещением в корзину или безвозвратным удалением</string>
+    <string name="settings_confirm_delete_title">Подтверждать удаление</string>
+    <string name="settings_confirm_delete_desc">Показывать диалог подтверждения перед перемещением в корзину или окончательным удалением</string>
+    <string name="settings_preferred_editor_title">Фоторедактор по умолчанию</string>
+    <string name="settings_preferred_editor_desc">Выберите, открывать ли встроенный редактор Iris или внешние приложения</string>
+    <string name="settings_editor_always_ask">Всегда спрашивать</string>
+    <string name="settings_editor_builtin">Редактор Iris (Встроенный)</string>
+    <string name="settings_editor_external">Внешнее приложение</string>
+
+    <string name="editor_choice_title">Редактировать фото</string>
+    <string name="editor_builtin_title">Редактор Iris</string>
+    <string name="editor_builtin_desc">Встроенные фильтры, кадрирование и цветокоррекция</string>
+    <string name="editor_external_title">Внешнее приложение</string>
+    <string name="editor_external_desc">Открыть в ImageToolbox, Lightroom, Snapseed и др.</string>
+    <string name="editor_remember_choice">Запомнить мой выбор</string>
+    <string name="edit_with_external_title">Редактировать фото с помощью…</string>
+    <string name="action_edit_builtin">Редактировать в Iris</string>
+    <string name="action_edit_external">Редактировать во внешнем приложении</string>
 
     <string name="settings_section_storage">Хранилище и сброс</string>
     <string name="settings_clear_cache">Очистить кэш миниатюр фото и видео</string>

@@ -290,7 +290,22 @@
     <string name="settings_vault_biometric_title">Blocco biometrico per la cassaforte</string>
     <string name="settings_vault_biometric_desc">Richiedi credenziali o PIN del dispositivo per visualizzare i file protetti nella cassaforte</string>
     <string name="settings_confirm_delete_title">Conferma prima di eliminare</string>
-    <string name="settings_confirm_delete_desc">Mostra una finestra di conferma prima di spostare nel cestino o eliminare definitivamente</string>
+    <string name="settings_confirm_delete_desc">Mostra finestra di conferma prima di spostare nel cestino o eliminare definitivamente</string>
+    <string name="settings_preferred_editor_title">Editor foto predefinito</string>
+    <string name="settings_preferred_editor_desc">Scegli se toccando modifica si apre Iris Editor o app esterne</string>
+    <string name="settings_editor_always_ask">Chiedi sempre</string>
+    <string name="settings_editor_builtin">Iris Editor (Integrato)</string>
+    <string name="settings_editor_external">App esterna</string>
+
+    <string name="editor_choice_title">Modifica foto</string>
+    <string name="editor_builtin_title">Iris Editor</string>
+    <string name="editor_builtin_desc">Filtri integrati, ritaglio e regolazione colori</string>
+    <string name="editor_external_title">App esterna</string>
+    <string name="editor_external_desc">Apri in ImageToolbox, Lightroom, Snapseed, ecc.</string>
+    <string name="editor_remember_choice">Usa sempre questa opzione</string>
+    <string name="edit_with_external_title">Modifica foto con…</string>
+    <string name="action_edit_builtin">Modifica con Iris Editor</string>
+    <string name="action_edit_external">Modifica con app esterna</string>
 
     <string name="settings_section_storage">Spazio di archiviazione e ripristino</string>
     <string name="settings_clear_cache">Cancella cache delle miniature di immagini e video</string>

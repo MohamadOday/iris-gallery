@@ -30,9 +30,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -233,16 +235,20 @@ fun AppLockScreen(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp),
-            contentAlignment = Alignment.Center
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 420.dp),
+                    .widthIn(max = 420.dp)
+                    .padding(top = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -255,12 +261,12 @@ fun AppLockScreen(
 
                 Box(
                     modifier = Modifier
-                        .size(86.dp)
+                        .size(76.dp)
                         .graphicsLayer {
                             scaleX = logoScale
                             scaleY = logoScale
                         }
-                        .clip(RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(
                             Brush.linearGradient(
                                 colors = if (isUnlockedSuccess) listOf(Color(0xFF00C853), Color(0xFF00E676))
@@ -272,11 +278,11 @@ fun AppLockScreen(
                     Image(
                         painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                         contentDescription = stringResource(R.string.app_name),
-                        modifier = Modifier.size(68.dp)
+                        modifier = Modifier.size(60.dp)
                     )
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
                 Text(
                     text = if (isUnlockedSuccess) stringResource(R.string.app_lock_welcome_back)
@@ -296,7 +302,7 @@ fun AppLockScreen(
                     modifier = Modifier.padding(top = 4.dp)
                 )
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(20.dp))
 
                 // PIN Dots Indicator
                 PinDotsIndicator(
@@ -308,7 +314,7 @@ fun AppLockScreen(
                 )
 
                 // Error message container
-                Box(modifier = Modifier.height(30.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.Center) {
                     if (errorMessage != null) {
                         Text(
                             text = errorMessage.orEmpty(),

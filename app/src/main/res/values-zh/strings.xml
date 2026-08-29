@@ -290,7 +290,22 @@
     <string name="settings_vault_biometric_title">私密相册生物识别锁</string>
     <string name="settings_vault_biometric_desc">查看已锁定的私密项目时需要验证设备凭据/PIN 码</string>
     <string name="settings_confirm_delete_title">删除前确认</string>
-    <string name="settings_confirm_delete_desc">在移入回收站或永久删除前显示确认提示</string>
+    <string name="settings_confirm_delete_desc">在移至回收站或永久删除前显示确认对话框</string>
+    <string name="settings_preferred_editor_title">默认照片编辑器</string>
+    <string name="settings_preferred_editor_desc">选择点击编辑时打开 Iris 编辑器还是外部应用</string>
+    <string name="settings_editor_always_ask">每次询问</string>
+    <string name="settings_editor_builtin">Iris 编辑器 (内置)</string>
+    <string name="settings_editor_external">外部应用</string>
+
+    <string name="editor_choice_title">编辑照片</string>
+    <string name="editor_builtin_title">Iris 编辑器</string>
+    <string name="editor_builtin_desc">内置滤镜、裁剪和色彩调整</string>
+    <string name="editor_external_title">外部应用</string>
+    <string name="editor_external_desc">在 ImageToolbox、Lightroom、Snapseed 等应用中打开</string>
+    <string name="editor_remember_choice">始终使用此选项</string>
+    <string name="edit_with_external_title">编辑照片方式…</string>
+    <string name="action_edit_builtin">使用 Iris 编辑器编辑</string>
+    <string name="action_edit_external">使用外部应用编辑</string>
 
     <string name="settings_section_storage">存储与重置</string>
     <string name="settings_clear_cache">清除图片与视频缩略图缓存</string>

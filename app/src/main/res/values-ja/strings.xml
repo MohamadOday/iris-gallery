@@ -289,8 +289,23 @@
     <string name="settings_silent_vault_desc_prompt">「すべてのファイルへのアクセス」を許可すると、Android の確認ポップアップなしで写真を保管庫へ移動・非表示にできます。</string>
     <string name="settings_vault_biometric_title">プライベート保管庫の生体認証ロック</string>
     <string name="settings_vault_biometric_desc">ロックされた保管庫アイテムを表示する際に端末の認証情報/PINを要求</string>
-    <string name="settings_confirm_delete_title">削除前に確認</string>
-    <string name="settings_confirm_delete_desc">ゴミ箱への移動または完全削除の前に確認ダイアログを表示</string>
+    <string name="settings_confirm_delete_title">削除前に確認する</string>
+    <string name="settings_confirm_delete_desc">ゴミ箱への移動や完全削除の前に確認ダイアログを表示します</string>
+    <string name="settings_preferred_editor_title">デフォルトの写真エディタ</string>
+    <string name="settings_preferred_editor_desc">編集ボタンをタップした際にIrisエディタを開くか外部アプリを開くかを選択します</string>
+    <string name="settings_editor_always_ask">毎回確認</string>
+    <string name="settings_editor_builtin">Irisエディタ（内蔵）</string>
+    <string name="settings_editor_external">外部アプリ</string>
+
+    <string name="editor_choice_title">写真を編集</string>
+    <string name="editor_builtin_title">Irisエディタ</string>
+    <string name="editor_builtin_desc">内蔵のフィルター、トリミング、色調補正</string>
+    <string name="editor_external_title">外部アプリ</string>
+    <string name="editor_external_desc">ImageToolbox、Lightroom、Snapseedなどで開く</string>
+    <string name="editor_remember_choice">この選択を常に使用</string>
+    <string name="edit_with_external_title">アプリで写真を編集…</string>
+    <string name="action_edit_builtin">Irisエディタで編集</string>
+    <string name="action_edit_external">外部アプリで編集</string>
 
     <string name="settings_section_storage">ストレージとリセット</string>
     <string name="settings_clear_cache">画像・動画サムネイルのキャッシュを削除</string>

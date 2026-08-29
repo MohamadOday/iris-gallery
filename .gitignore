@@ -42,3 +42,9 @@ iris_widget_*.png
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Agent & AI instructions
+AGENTS.md
+Agents.md
+agents.md
+

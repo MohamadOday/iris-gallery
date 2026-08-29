@@ -1,9 +1,11 @@
 package com.iris.gallery.data
 
+import android.content.ContentUris
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.iris.gallery.ui.MediaAlbum
@@ -51,31 +53,29 @@ class AlbumRepository(private val context: Context) {
             val destFile = getUniqueDestinationFile(targetDir, item.name.ifBlank { "media_${System.currentTimeMillis()}" })
 
             var done = false
-            if (hasManager && srcFile != null && srcFile.exists()) {
-                done = runCatching {
-                    if (srcFile.parentFile?.canonicalPath == targetDir.canonicalPath) {
-                        true
-                    } else {
-                        srcFile.renameTo(destFile) || (srcFile.copyTo(destFile, overwrite = true).exists() && srcFile.delete())
-                    }
-                }.getOrDefault(false)
+            if (srcFile != null && srcFile.exists() && srcFile.parentFile?.canonicalPath == targetDir.canonicalPath) {
+                done = true
             }
 
             if (!done) {
-                val copyOk = runCatching {
-                    context.contentResolver.openInputStream(item.uri)?.use { input ->
-                        FileOutputStream(destFile).use { output ->
-                            input.copyTo(output)
+                var copied = false
+                if (srcFile != null && srcFile.exists()) {
+                    copied = runCatching {
+                        srcFile.copyTo(destFile, overwrite = true).exists() && destFile.length() > 0
+                    }.getOrDefault(false)
+                }
+                if (!copied) {
+                    copied = runCatching {
+                        context.contentResolver.openInputStream(item.uri)?.use { input ->
+                            FileOutputStream(destFile).use { output ->
+                                input.copyTo(output)
+                            }
                         }
-                    }
-                    destFile.exists() && destFile.length() > 0
-                }.getOrDefault(false)
-
-                if (copyOk) {
-                    if (hasManager && srcFile != null && srcFile.exists()) {
-                        runCatching { srcFile.delete() }
-                    }
-                    runCatching { context.contentResolver.delete(item.uri, null, null) }
+                        destFile.exists() && destFile.length() > 0
+                    }.getOrDefault(false)
+                }
+                if (copied) {
+                    deleteSourceMedia(item)
                     done = true
                 }
             }
@@ -189,5 +189,31 @@ class AlbumRepository(private val context: Context) {
             index++
         }
         return file
+    }
+
+    private fun deleteSourceMedia(item: MediaImage) {
+        if (item.path.isNotBlank()) {
+            val file = File(item.path)
+            if (file.exists()) {
+                runCatching { file.delete() }
+            }
+        }
+        val mediaStoreUri = if (item.id > 0) {
+            if (item.isVideo) ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.id)
+            else ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.id)
+        } else {
+            item.uri
+        }
+        runCatching { context.contentResolver.delete(mediaStoreUri, null, null) }
+        if (item.uri != mediaStoreUri) {
+            runCatching { context.contentResolver.delete(item.uri, null, null) }
+        }
+        if (item.path.isNotBlank()) {
+            val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            runCatching {
+                context.contentResolver.delete(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
+            }
+            MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
+        }
     }
 }

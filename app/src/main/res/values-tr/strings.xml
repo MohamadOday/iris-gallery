@@ -289,8 +289,23 @@
     <string name="settings_silent_vault_desc_prompt">Iris\'in fotoğrafları Android onay pencereleri olmadan kasaya taşıyıp gizleyebilmesi için \'Tüm Dosyalara Erişim\' izni verin.</string>
     <string name="settings_vault_biometric_title">Özel Kasa İçin Biyometrik Kilit</string>
     <string name="settings_vault_biometric_desc">Kilitli kasa ögelerini görüntülerken cihaz kimlik doğrulaması/PIN iste</string>
-    <string name="settings_confirm_delete_title">Silmeden Önce Onayla</string>
-    <string name="settings_confirm_delete_desc">Çöp kutusuna taşımadan veya kalıcı olarak silmeden önce onay penceresi göster</string>
+    <string name="settings_confirm_delete_title">Silmeden önce onayla</string>
+    <string name="settings_confirm_delete_desc">Çöp kutusuna taşımadan veya kalıcı olarak silmeden önce onay iletişim kutusu göster</string>
+    <string name="settings_preferred_editor_title">Varsayılan Fotoğraf Düzenleyici</string>
+    <string name="settings_preferred_editor_desc">Düzenle düğmesine dokunulduğunda Iris Düzenleyici\'nin mi yoksa harici uygulamaların mı açılacağını seçin</string>
+    <string name="settings_editor_always_ask">Her zaman sor</string>
+    <string name="settings_editor_builtin">Iris Düzenleyici (Yerleşik)</string>
+    <string name="settings_editor_external">Harici Uygulama</string>
+
+    <string name="editor_choice_title">Fotoğrafı Düzenle</string>
+    <string name="editor_builtin_title">Iris Düzenleyici</string>
+    <string name="editor_builtin_desc">Yerleşik filtreler, kırpma ve renk ayarları</string>
+    <string name="editor_external_title">Harici Uygulama</string>
+    <string name="editor_external_desc">ImageToolbox, Lightroom, Snapseed vb. ile aç</string>
+    <string name="editor_remember_choice">Bu seçimi her zaman kullan</string>
+    <string name="edit_with_external_title">Fotoğrafı şununla düzenle…</string>
+    <string name="action_edit_builtin">Iris Düzenleyici ile Düzenle</string>
+    <string name="action_edit_external">Harici uygulama ile düzenle</string>
 
     <string name="settings_section_storage">Depolama &amp; Sıfırlama</string>
     <string name="settings_clear_cache">Görsel &amp; Video Küçük Resim Önbelleğini Temizle</string>

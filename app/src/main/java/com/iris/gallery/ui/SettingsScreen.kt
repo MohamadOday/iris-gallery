@@ -67,6 +67,7 @@ import com.iris.gallery.R
 import com.iris.gallery.data.AccentColor
 import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.GridSpacing
+import com.iris.gallery.data.PreferredEditor
 import com.iris.gallery.data.SettingsPreferences
 import com.iris.gallery.data.SettingsState
 import com.iris.gallery.data.StartupTab
@@ -632,6 +633,44 @@ fun SettingsScreen(
                         checked = settings.confirmDelete,
                         onCheckedChange = { preferences.setConfirmDelete(it) }
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.settings_preferred_editor_title),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            stringResource(R.string.settings_preferred_editor_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.ALWAYS_ASK) },
+                                label = { Text(stringResource(R.string.settings_editor_always_ask), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
+                                label = { Text(stringResource(R.string.settings_editor_builtin), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.EXTERNAL,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.EXTERNAL) },
+                                label = { Text(stringResource(R.string.settings_editor_external), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                        }
+                    }
                 }
             }
         }

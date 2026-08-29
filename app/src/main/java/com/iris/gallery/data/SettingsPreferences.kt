@@ -10,6 +10,7 @@ enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_
 enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCLE(18) }
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
 enum class StartupTab(val pageIndex: Int) { PHOTOS(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
+enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
 
 data class AppLanguage(
     val code: String, // "" for system, or "en", "ar", "es", etc.
@@ -62,6 +63,7 @@ data class SettingsState(
     val appLockPinSalt: String = "",
     val appLockBiometricsEnabled: Boolean = true,
     val confirmDelete: Boolean = false,
+    val preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
     val language: String = "",
     val firstLaunchLanguageSetupDone: Boolean = false,
 ) {
@@ -95,6 +97,7 @@ class SettingsPreferences(context: Context) {
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
     fun setAppLockBiometricsEnabled(enabled: Boolean) = update { copy(appLockBiometricsEnabled = enabled) }
     fun setConfirmDelete(enabled: Boolean) = update { copy(confirmDelete = enabled) }
+    fun setPreferredEditor(editor: PreferredEditor) = update { copy(preferredEditor = editor) }
 
     fun setPin(pin: String) {
         val salt = java.util.UUID.randomUUID().toString()
@@ -159,6 +162,7 @@ class SettingsPreferences(context: Context) {
             appLockPinSalt = prefs.getString("app_lock_pin_salt", "").orEmpty(),
             appLockBiometricsEnabled = prefs.getBoolean("app_lock_biometrics_enabled", true),
             confirmDelete = prefs.getBoolean("confirm_delete", false),
+            preferredEditor = runCatching { PreferredEditor.valueOf(prefs.getString("preferred_editor", null).orEmpty()) }.getOrDefault(PreferredEditor.ALWAYS_ASK),
             language = prefs.getString("app_language", "").orEmpty(),
             firstLaunchLanguageSetupDone = prefs.getBoolean("first_launch_lang_done", false),
         )
@@ -188,6 +192,7 @@ class SettingsPreferences(context: Context) {
             .putString("app_lock_pin_salt", state.appLockPinSalt)
             .putBoolean("app_lock_biometrics_enabled", state.appLockBiometricsEnabled)
             .putBoolean("confirm_delete", state.confirmDelete)
+            .putString("preferred_editor", state.preferredEditor.name)
             .putString("app_language", state.language)
             .putBoolean("first_launch_lang_done", state.firstLaunchLanguageSetupDone)
             .apply()

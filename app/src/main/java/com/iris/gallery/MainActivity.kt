@@ -88,6 +88,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Share
@@ -207,12 +209,15 @@ import com.iris.gallery.ui.AlbumsGrid
 import com.iris.gallery.ui.MediaAlbum
 import com.iris.gallery.ui.LibraryScreen
 import com.iris.gallery.ui.EditorScreen
+import com.iris.gallery.ui.EditChoiceBottomSheet
+import com.iris.gallery.ui.launchExternalEditor
 import com.iris.gallery.ui.AppLockScreen
 import com.iris.gallery.ui.video.VideoPage
 import com.iris.gallery.ui.video.Media3VideoEngine
 import com.iris.gallery.data.DuplicateGroup
 import com.iris.gallery.data.SettingsPreferences
 import com.iris.gallery.data.SettingsState
+import com.iris.gallery.data.PreferredEditor
 import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.GridSpacing
 import com.iris.gallery.data.StartupTab
@@ -1494,6 +1499,8 @@ private fun GalleryScaffold(
             isLocked = isViewingLocked,
             isInTrash = isViewingTrash,
             confirmDeleteSetting = settings.confirmDelete,
+            preferredEditor = settings.preferredEditor,
+            onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
             availableAlbums = availableAlbums,
             onToggleFavorite = onToggleFavorite,
             onClose = { selectedId = null },
@@ -2077,6 +2084,8 @@ private fun PhotoViewer(
     isLocked: Boolean = false,
     isInTrash: Boolean = false,
     confirmDeleteSetting: Boolean = false,
+    preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
+    onSetPreferredEditor: (PreferredEditor) -> Unit = {},
     availableAlbums: List<MediaAlbum> = emptyList(),
     onToggleFavorite: (Long) -> Unit,
     onClose: () -> Unit,
@@ -2110,11 +2119,20 @@ private fun PhotoViewer(
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { images.size })
     var showInfo by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showEditChoiceSheet by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var zoomedImageId by remember { mutableStateOf<Long?>(null) }
     var viewerMenuExpanded by remember { mutableStateOf(false) }
     var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
     val current = images[pagerState.currentPage]
+
+    fun handleEditClick(image: MediaImage) {
+        when (preferredEditor) {
+            PreferredEditor.BUILT_IN -> onEdit(image)
+            PreferredEditor.EXTERNAL -> launchExternalEditor(context, image)
+            PreferredEditor.ALWAYS_ASK -> showEditChoiceSheet = true
+        }
+    }
     val videoEngine = remember { Media3VideoEngine(context) }
     DisposableEffect(videoEngine) { onDispose { videoEngine.release() } }
     LaunchedEffect(current.id) {
@@ -2199,6 +2217,24 @@ private fun PhotoViewer(
                                 viewerAlbumAction = AlbumAction.COPY
                             }
                         )
+                        if (!current.isVideo) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_edit_builtin)) },
+                                leadingIcon = { Icon(Icons.Outlined.AutoFixHigh, null) },
+                                onClick = {
+                                    viewerMenuExpanded = false
+                                    onEdit(current)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_edit_external)) },
+                                leadingIcon = { Icon(Icons.Outlined.OpenInNew, null) },
+                                onClick = {
+                                    viewerMenuExpanded = false
+                                    launchExternalEditor(context, current)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -2292,7 +2328,7 @@ private fun PhotoViewer(
                         icon = Icons.Outlined.Edit,
                         label = stringResource(R.string.action_edit),
                         modifier = Modifier.weight(1f),
-                    ) { onEdit(current) }
+                    ) { handleEditClick(current) }
                 }
                 if (isLocked) {
                     ViewerIconButton(
@@ -2420,6 +2456,22 @@ private fun PhotoViewer(
                 } else {
                     onCopyToAlbum(listOf(current), targetDir, newName)
                 }
+            }
+        )
+    }
+
+    if (showEditChoiceSheet) {
+        EditChoiceBottomSheet(
+            onDismiss = { showEditChoiceSheet = false },
+            onChooseBuiltIn = { rememberChoice ->
+                showEditChoiceSheet = false
+                if (rememberChoice) onSetPreferredEditor(PreferredEditor.BUILT_IN)
+                onEdit(current)
+            },
+            onChooseExternal = { rememberChoice ->
+                showEditChoiceSheet = false
+                if (rememberChoice) onSetPreferredEditor(PreferredEditor.EXTERNAL)
+                launchExternalEditor(context, current)
             }
         )
     }

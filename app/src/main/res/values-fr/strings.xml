@@ -290,7 +290,22 @@
     <string name="settings_vault_biometric_title">Verrouillage biométrique du coffre privé</string>
     <string name="settings_vault_biometric_desc">Exiger les identifiants de l\'appareil / code PIN lors de la consultation des éléments verrouillés</string>
     <string name="settings_confirm_delete_title">Confirmer avant de supprimer</string>
-    <string name="settings_confirm_delete_desc">Afficher une confirmation avant de déplacer vers la corbeille ou de supprimer définitivement</string>
+    <string name="settings_confirm_delete_desc">Afficher une boîte de dialogue avant de déplacer vers la corbeille ou de supprimer définitivement</string>
+    <string name="settings_preferred_editor_title">Éditeur de photos par défaut</string>
+    <string name="settings_preferred_editor_desc">Choisir si appuyer sur modifier ouvre Iris Editor ou une application externe</string>
+    <string name="settings_editor_always_ask">Toujours demander</string>
+    <string name="settings_editor_builtin">Iris Editor (Intégré)</string>
+    <string name="settings_editor_external">Application externe</string>
+
+    <string name="editor_choice_title">Modifier la photo</string>
+    <string name="editor_builtin_title">Iris Editor</string>
+    <string name="editor_builtin_desc">Filtres intégrés, recadrage et réglages des couleurs</string>
+    <string name="editor_external_title">Application externe</string>
+    <string name="editor_external_desc">Ouvrir dans ImageToolbox, Lightroom, Snapseed, etc.</string>
+    <string name="editor_remember_choice">Toujours utiliser cette option</string>
+    <string name="edit_with_external_title">Modifier la photo avec…</string>
+    <string name="action_edit_builtin">Modifier avec Iris Editor</string>
+    <string name="action_edit_external">Modifier avec une application externe</string>
 
     <string name="settings_section_storage">Stockage et réinitialisation</string>
     <string name="settings_clear_cache">Vider le cache des miniatures d\'images et vidéos</string>

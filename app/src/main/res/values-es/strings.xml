@@ -291,6 +291,21 @@
     <string name="settings_vault_biometric_desc">Requerir credencial o PIN del dispositivo al ver elementos bloqueados en la bóveda</string>
     <string name="settings_confirm_delete_title">Confirmar antes de eliminar</string>
     <string name="settings_confirm_delete_desc">Mostrar confirmación antes de mover a la papelera o eliminar definitivamente</string>
+    <string name="settings_preferred_editor_title">Editor de fotos predeterminado</string>
+    <string name="settings_preferred_editor_desc">Elige si al tocar editar se abre Iris Editor o apps externas</string>
+    <string name="settings_editor_always_ask">Preguntar siempre</string>
+    <string name="settings_editor_builtin">Iris Editor (Integrado)</string>
+    <string name="settings_editor_external">Editor externo</string>
+
+    <string name="editor_choice_title">Editar foto</string>
+    <string name="editor_builtin_title">Iris Editor</string>
+    <string name="editor_builtin_desc">Filtros integrados, recorte y ajustes de color</string>
+    <string name="editor_external_title">Aplicación externa</string>
+    <string name="editor_external_desc">Abrir con ImageToolbox, Lightroom, Snapseed, etc.</string>
+    <string name="editor_remember_choice">Usar siempre esta opción</string>
+    <string name="edit_with_external_title">Editar foto con…</string>
+    <string name="action_edit_builtin">Editar con Iris Editor</string>
+    <string name="action_edit_external">Editar con app externa</string>
 
     <string name="settings_section_storage">Almacenamiento &amp; Restablecimiento</string>
     <string name="settings_clear_cache">Borrar caché de miniaturas de imágenes &amp; videos</string>

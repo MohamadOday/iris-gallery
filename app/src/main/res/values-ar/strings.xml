@@ -291,6 +291,21 @@
     <string name="settings_vault_biometric_desc">طلب بيانات اعتماد الجهاز أو رمز PIN عند عرض عناصر الخزنة المقفلة</string>
     <string name="settings_confirm_delete_title">تأكيد الحذف</string>
     <string name="settings_confirm_delete_desc">عرض نافذة تأكيد قبل نقل العناصر إلى المهملات أو حذفها نهائيًا</string>
+    <string name="settings_preferred_editor_title">محرر الصور الافتراضي</string>
+    <string name="settings_preferred_editor_desc">اختيار ما إذا كان الضغط على تعديل يفتح محرر Iris أو تطبيقات خارجية</string>
+    <string name="settings_editor_always_ask">السؤال دائمًا</string>
+    <string name="settings_editor_builtin">محرر Iris (المدمج)</string>
+    <string name="settings_editor_external">محرر خارجي</string>
+
+    <string name="editor_choice_title">تعديل الصورة</string>
+    <string name="editor_builtin_title">محرر Iris</string>
+    <string name="editor_builtin_desc">الفلاتر المدمجة والقص وتعديل الألوان</string>
+    <string name="editor_external_title">تطبيق خارجي</string>
+    <string name="editor_external_desc">فتح في ImageToolbox أو Lightroom أو Snapseed وغيرها</string>
+    <string name="editor_remember_choice">استخدام هذا الخيار دائمًا</string>
+    <string name="edit_with_external_title">تعديل الصورة بواسطة…</string>
+    <string name="action_edit_builtin">تعديل بواسطة محرر Iris</string>
+    <string name="action_edit_external">تعديل بواسطة تطبيق خارجي</string>
 
     <string name="settings_section_storage">التخزين وإعادة الضبط</string>
     <string name="settings_clear_cache">مسح الذاكرة المؤقتة للصور المصغرة والفيديو</string>

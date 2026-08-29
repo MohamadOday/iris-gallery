@@ -1,5 +1,6 @@
 package com.iris.gallery.data
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -123,10 +124,46 @@ class TrashRepository(private val context: Context) {
         return mediaList
     }
 
+    fun deleteFromStorage(item: MediaImage): Boolean {
+        var deleted = false
+        if (item.path.isNotBlank()) {
+            val file = File(item.path)
+            if (file.exists()) {
+                deleted = runCatching { file.delete() }.getOrDefault(false)
+            }
+        }
+        val mediaStoreUri = if (item.id > 0) {
+            if (item.isVideo) ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.id)
+            else ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.id)
+        } else {
+            item.uri
+        }
+        val contentDeleted = runCatching {
+            context.contentResolver.delete(mediaStoreUri, null, null) > 0
+        }.getOrDefault(false)
+        deleted = deleted || contentDeleted
+
+        if (item.uri != mediaStoreUri) {
+            val genericDeleted = runCatching {
+                context.contentResolver.delete(item.uri, null, null) > 0
+            }.getOrDefault(false)
+            deleted = deleted || genericDeleted
+        }
+
+        if (item.path.isNotBlank()) {
+            val table = if (item.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val pathDeleted = runCatching {
+                context.contentResolver.delete(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path)) > 0
+            }.getOrDefault(false)
+            deleted = deleted || pathDeleted
+            MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
+        }
+        return deleted
+    }
+
     suspend fun moveToTrash(mediaList: List<MediaImage>): List<MediaImage> = withContext(Dispatchers.IO) {
         val currentItems = readIndex().toMutableList()
         val trashedList = mutableListOf<MediaImage>()
-        val hasManagerAccess = hasAllFilesAccess()
 
         for (item in mediaList) {
             val uniqueId = generateUniqueId(currentItems)
@@ -135,16 +172,16 @@ class TrashRepository(private val context: Context) {
             val targetFile = File(trashDir, trashFileName)
 
             val srcFile = if (item.path.isNotBlank()) File(item.path) else null
-            var moved = false
+            var copied = false
 
-            if (hasManagerAccess && srcFile != null && srcFile.exists()) {
-                moved = runCatching {
-                    srcFile.renameTo(targetFile) || (srcFile.copyTo(targetFile, overwrite = true).exists() && srcFile.delete())
+            if (srcFile != null && srcFile.exists()) {
+                copied = runCatching {
+                    srcFile.copyTo(targetFile, overwrite = true).exists() && targetFile.length() > 0
                 }.getOrDefault(false)
             }
 
-            if (!moved) {
-                val copySuccess = runCatching {
+            if (!copied) {
+                copied = runCatching {
                     context.contentResolver.openInputStream(item.uri)?.use { input ->
                         FileOutputStream(targetFile).use { output ->
                             input.copyTo(output)
@@ -152,20 +189,10 @@ class TrashRepository(private val context: Context) {
                     }
                     targetFile.exists() && targetFile.length() > 0
                 }.getOrDefault(false)
-
-                if (copySuccess) {
-                    if (hasManagerAccess && srcFile != null && srcFile.exists()) {
-                        runCatching { srcFile.delete() }
-                    }
-                    runCatching { context.contentResolver.delete(item.uri, null, null) }
-                    moved = true
-                }
             }
 
-            if (moved && targetFile.exists()) {
-                if (item.path.isNotBlank()) {
-                    MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
-                }
+            if (copied && targetFile.exists()) {
+                deleteFromStorage(item)
                 val trashItem = TrashItem(
                     id = uniqueId,
                     trashFileName = trashFileName,
@@ -277,14 +304,7 @@ class TrashRepository(private val context: Context) {
         writeIndex(currentItems)
 
         for (media in mediaList) {
-            if (media.path.isNotBlank()) {
-                val file = File(media.path)
-                if (file.exists()) {
-                    runCatching { file.delete() }
-                }
-                MediaScannerConnection.scanFile(context, arrayOf(media.path), null, null)
-            }
-            runCatching { context.contentResolver.delete(media.uri, null, null) }
+            deleteFromStorage(media)
         }
 
         loadTrashItems()

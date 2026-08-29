@@ -108,6 +108,7 @@ fun VideoPage(
     var playing by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(engine.player.volume == 0f) }
     var muteFeedbackEvent by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
+    var lastMuteFeedback by remember { mutableStateOf<Boolean?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
     var scrubbing by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
@@ -322,7 +323,7 @@ fun VideoPage(
                 targetScale = 0.85f
             ),
         ) {
-            val muted = muteFeedbackEvent?.first == true
+            val muted = lastMuteFeedback ?: (muteFeedbackEvent?.first == true)
             Row(
                 modifier = Modifier
                     .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(28.dp))
@@ -373,6 +374,7 @@ fun VideoPage(
                 IconButton(onClick = {
                     val next = engine.toggleMute()
                     isMuted = next
+                    lastMuteFeedback = next
                     muteFeedbackEvent = next to SystemClock.uptimeMillis()
                 }) {
                     AnimatedContent(

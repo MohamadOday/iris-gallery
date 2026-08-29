@@ -1,0 +1,5 @@
+• External Image Editors: Support opening photos with external editors (ImageToolbox, Adobe Lightroom, Snapseed, etc.) with a choice sheet and configurable default editor in Settings
+• App Lock UI Fix: Restructured PIN screen layout to prevent the keypad from overlapping the logo and header across all screen sizes
+• Video Player Glitch Fix: Resolved mute/unmute HUD indicator flickering the opposite state during exit animation
+• Android 8 & 9 Compatibility: Resolved media deletion issues on pre-Android 10 devices with enhanced fallback storage handling
+• Localization: Added new editor action translations across all 13 supported languages
