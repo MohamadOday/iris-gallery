@@ -16,6 +16,12 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Build
 import android.provider.MediaStore
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +30,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -68,8 +73,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import com.iris.gallery.data.MediaImage
@@ -133,97 +136,107 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
         }.let(::ColorMatrixColorFilter)
     }
 
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(topBar = { TopAppBar(title = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_title)) }, navigationIcon = {
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_close)) }
-            }, actions = {
-                Button(enabled = !saving && transformedPreview != null, onClick = {
-                    val session = editorView?.session ?: return@Button
-                    val crop = RectF(session.crop)
-                    val strokes = session.strokes.map { it.copy(points = it.points.toMutableList()) }
-                    saving = true
-                    scope.launch {
-                        val saved = runCatching {
-                            saveEditedCopy(context, image, rotation, flipHorizontal, flipVertical,
-                                brightness, saturation, contrast, warmth,
-                                crop, resizeWidth.toIntOrNull(), resizeHeight.toIntOrNull(), strokes)
-                        }.isSuccess
-                        saving = false; onSaved(saved)
+    BackHandler(onBack = onClose)
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Scaffold(topBar = { TopAppBar(title = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_title)) }, navigationIcon = {
+            IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_close)) }
+        }, actions = {
+            Button(enabled = !saving && transformedPreview != null, onClick = {
+                val session = editorView?.session ?: return@Button
+                val crop = RectF(session.crop)
+                val strokes = session.strokes.map { it.copy(points = it.points.toMutableList()) }
+                saving = true
+                scope.launch {
+                    val saved = runCatching {
+                        saveEditedCopy(context, image, rotation, flipHorizontal, flipVertical,
+                            brightness, saturation, contrast, warmth,
+                            crop, resizeWidth.toIntOrNull(), resizeHeight.toIntOrNull(), strokes)
+                    }.isSuccess
+                    saving = false; onSaved(saved)
+                }
+            }) { Text(if (saving) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_saving) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_save_copy)) }
+        }) }) { padding ->
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    AndroidView(factory = { EditorCanvasView(it).also { view -> editorView = view } },
+                        update = { view ->
+                            view.setSource(transformedPreview); view.tool = tool; view.brushRadius = brushSize
+                            view.effectStrength = strength.toInt(); view.erasing = erasing; view.colorFilter = androidFilter
+                        }, modifier = Modifier.fillMaxSize())
+                    if (transformedPreview == null) Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_preparing), color = Color.White)
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf(
+                        EditorTool.ADJUST to com.iris.gallery.R.string.editor_tool_adjust,
+                        EditorTool.CROP to com.iris.gallery.R.string.editor_tool_crop,
+                        EditorTool.TRANSFORM to com.iris.gallery.R.string.editor_tool_transform,
+                        EditorTool.RESIZE to com.iris.gallery.R.string.editor_tool_resize,
+                        EditorTool.PIXELATE to com.iris.gallery.R.string.editor_tool_pixelate,
+                        EditorTool.BLUR to com.iris.gallery.R.string.editor_tool_blur
+                    ).forEach { (value, strRes) ->
+                        FilterChip(tool == value, onClick = { tool = value }, label = { Text(androidx.compose.ui.res.stringResource(strRes)) })
                     }
-                }) { Text(if (saving) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_saving) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_save_copy)) }
-            }) }) { padding ->
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (landscape) 130.dp else 210.dp)
                 ) {
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        AndroidView(factory = { EditorCanvasView(it).also { view -> editorView = view } },
-                            update = { view ->
-                                view.setSource(transformedPreview); view.tool = tool; view.brushRadius = brushSize
-                                view.effectStrength = strength.toInt(); view.erasing = erasing; view.colorFilter = androidFilter
-                            }, modifier = Modifier.fillMaxSize())
-                        if (transformedPreview == null) Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_preparing), color = Color.White)
-                    }
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        listOf(
-                            EditorTool.ADJUST to com.iris.gallery.R.string.editor_tool_adjust,
-                            EditorTool.CROP to com.iris.gallery.R.string.editor_tool_crop,
-                            EditorTool.TRANSFORM to com.iris.gallery.R.string.editor_tool_transform,
-                            EditorTool.RESIZE to com.iris.gallery.R.string.editor_tool_resize,
-                            EditorTool.PIXELATE to com.iris.gallery.R.string.editor_tool_pixelate,
-                            EditorTool.BLUR to com.iris.gallery.R.string.editor_tool_blur
-                        ).forEach { (value, strRes) ->
-                            FilterChip(tool == value, onClick = { tool = value }, label = { Text(androidx.compose.ui.res.stringResource(strRes)) })
-                        }
-                    }
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = if (landscape) 140.dp else 220.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(bottom = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        when (tool) {
-                            EditorTool.CROP -> CropControls(cropPreset, { label, aspect ->
-                                cropPreset = label; if (aspect != null) editorView?.setCropAspect(aspect)
-                            })
-                            EditorTool.TRANSFORM -> TransformControls(
-                                rotation = rotation,
-                                flipH = flipHorizontal,
-                                flipV = flipVertical,
-                                onRotateLeft = { rotation = (rotation - 90 + 360) % 360 },
-                                onRotateRight = { rotation = (rotation + 90) % 360 },
-                                onToggleFlipH = { flipHorizontal = !flipHorizontal },
-                                onToggleFlipV = { flipVertical = !flipVertical },
-                                onReset = {
-                                    rotation = 0
-                                    flipHorizontal = false
-                                    flipVertical = false
-                                }
-                            )
-                            EditorTool.RESIZE -> ResizeControls(baseWidth, baseHeight, resizeWidth, resizeHeight, lockAspect,
-                                onWidth = { value ->
-                                    resizeWidth = value.filter(Char::isDigit)
-                                    if (lockAspect) value.toIntOrNull()?.let { resizeHeight = (it * baseHeight.toFloat() / baseWidth).toInt().toString() }
-                                }, onHeight = { value ->
-                                    resizeHeight = value.filter(Char::isDigit)
-                                    if (lockAspect) value.toIntOrNull()?.let { resizeWidth = (it * baseWidth.toFloat() / baseHeight).toInt().toString() }
-                                }, onLock = { lockAspect = it })
-                            EditorTool.PIXELATE, EditorTool.BLUR -> BrushControls(tool, brushSize, strength, erasing,
-                                onSize = { brushSize = it }, onStrength = { strength = it }, onErase = { erasing = it },
-                                onUndo = { editorView?.undoStroke() }, onRedo = { editorView?.redoStroke() },
-                                onClear = { editorView?.clearStrokes() })
-                            else -> AdjustControls(brightness, saturation, contrast, warmth,
-                                { brightness = it }, { saturation = it }, { contrast = it }, { warmth = it })
+                    AnimatedContent(
+                        targetState = tool,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(120))
+                        },
+                        label = "EditorToolSwitch"
+                    ) { currentTool ->
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            when (currentTool) {
+                                EditorTool.CROP -> CropControls(cropPreset, { label, aspect ->
+                                    cropPreset = label; if (aspect != null) editorView?.setCropAspect(aspect)
+                                })
+                                EditorTool.TRANSFORM -> TransformControls(
+                                    rotation = rotation,
+                                    flipH = flipHorizontal,
+                                    flipV = flipVertical,
+                                    onRotateLeft = { rotation = (rotation - 90 + 360) % 360 },
+                                    onRotateRight = { rotation = (rotation + 90) % 360 },
+                                    onToggleFlipH = { flipHorizontal = !flipHorizontal },
+                                    onToggleFlipV = { flipVertical = !flipVertical },
+                                    onReset = {
+                                        rotation = 0
+                                        flipHorizontal = false
+                                        flipVertical = false
+                                    }
+                                )
+                                EditorTool.RESIZE -> ResizeControls(baseWidth, baseHeight, resizeWidth, resizeHeight, lockAspect,
+                                    onWidth = { value ->
+                                        resizeWidth = value.filter(Char::isDigit)
+                                        if (lockAspect) value.toIntOrNull()?.let { resizeHeight = (it * baseHeight.toFloat() / baseWidth).toInt().toString() }
+                                    }, onHeight = { value ->
+                                        resizeHeight = value.filter(Char::isDigit)
+                                        if (lockAspect) value.toIntOrNull()?.let { resizeWidth = (it * baseWidth.toFloat() / baseHeight).toInt().toString() }
+                                    }, onLock = { lockAspect = it })
+                                EditorTool.PIXELATE, EditorTool.BLUR -> BrushControls(currentTool, brushSize, strength, erasing,
+                                    onSize = { brushSize = it }, onStrength = { strength = it }, onErase = { erasing = it },
+                                    onUndo = { editorView?.undoStroke() }, onRedo = { editorView?.redoStroke() },
+                                    onClear = { editorView?.clearStrokes() })
+                                else -> AdjustControls(brightness, saturation, contrast, warmth,
+                                    { brightness = it }, { saturation = it }, { contrast = it }, { warmth = it })
+                            }
                         }
                     }
                 }
@@ -400,14 +413,30 @@ private suspend fun saveEditedCopy(
     val height = requestedHeight?.coerceIn(1, 16384) ?: adjusted.height
     val resized = if (width != adjusted.width || height != adjusted.height) Bitmap.createScaledBitmap(adjusted, width, height, true) else adjusted
     renderBrushes(resized, strokes, crop)
+    val nowMs = System.currentTimeMillis()
+    val nowSec = nowMs / 1000L
     val values = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, image.name.substringBeforeLast('.') + "_iris.jpg")
         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-        if (Build.VERSION.SDK_INT >= 29) { put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Iris"); put(MediaStore.Images.Media.IS_PENDING, 1) }
+        put(MediaStore.Images.Media.DATE_ADDED, nowSec)
+        put(MediaStore.Images.Media.DATE_MODIFIED, nowSec)
+        put(MediaStore.Images.Media.DATE_TAKEN, nowMs)
+        if (Build.VERSION.SDK_INT >= 29) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Iris")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
     }
     val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error("Could not create copy")
     context.contentResolver.openOutputStream(uri)?.use { resized.compress(Bitmap.CompressFormat.JPEG, 94, it) } ?: error("Could not write copy")
-    if (Build.VERSION.SDK_INT >= 29) context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+    if (Build.VERSION.SDK_INT >= 29) {
+        val updateValues = ContentValues().apply {
+            put(MediaStore.Images.Media.IS_PENDING, 0)
+            put(MediaStore.Images.Media.DATE_ADDED, nowSec)
+            put(MediaStore.Images.Media.DATE_MODIFIED, nowSec)
+            put(MediaStore.Images.Media.DATE_TAKEN, nowMs)
+        }
+        context.contentResolver.update(uri, updateValues, null, null)
+    }
     if (source !== cropped) source.recycle(); if (cropped !== adjusted) cropped.recycle()
     if (adjusted !== resized) adjusted.recycle(); resized.recycle()
 }

@@ -131,8 +131,12 @@ class MediaRepository(private val context: Context) {
                 }
             }
         }
-        if (!trashed) saveSnapshot(result)
-        result
+        val sorted = result.sortedWith(
+            compareByDescending<MediaImage> { it.dateTaken }
+                .thenByDescending { it.id }
+        )
+        if (!trashed) saveSnapshot(sorted)
+        sorted
     }
 
     private fun saveSnapshot(media: List<MediaImage>) {

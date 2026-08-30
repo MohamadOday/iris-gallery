@@ -1,0 +1,6 @@
+• Live Media Sync: Real-time automatic gallery updates when capturing camera photos or downloading media without app restarts
+• Photo Editor Insets Fix: Restructured editor overlay with true system navigation insets, eliminating navigation bar overlap and slider clipping
+• Rock-Solid Preview: Stable viewport prevents image resizing/jumping when switching between edit tools
+• Fluid Transitions: Added smooth AnimatedContent crossfades between tools and animated editor entry/dismissal
+• Strict Chronological Indexing: Fixed saved edits placement, ensuring newly edited photos immediately appear at position #1 with correct swipe navigation
+• Android 8 & 9 Deletion Fix: Robust MediaStore table URI resolution and ghost-record purging for legacy Android versions

@@ -1544,12 +1544,24 @@ private fun GalleryScaffold(
             createAlbumDir = createAlbumDir,
         )
     }
-    editorImage?.let { image ->
-        EditorScreen(image, onClose = { editorImage = null }, onSaved = { saved ->
-            if (saved) editorImage = null
-            Toast.makeText(context, if (saved) context.getString(R.string.toast_edited_saved) else context.getString(R.string.toast_edited_failed),
-                Toast.LENGTH_SHORT).show()
-        })
+    AnimatedVisibility(
+        visible = editorImage != null,
+        enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(220)) + slideInVertically(
+            initialOffsetY = { it / 10 },
+            animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+        ),
+        exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(180)) + androidx.compose.animation.slideOutVertically(
+            targetOffsetY = { it / 10 },
+            animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+        )
+    ) {
+        editorImage?.let { image ->
+            EditorScreen(image, onClose = { editorImage = null }, onSaved = { saved ->
+                if (saved) editorImage = null
+                Toast.makeText(context, if (saved) context.getString(R.string.toast_edited_saved) else context.getString(R.string.toast_edited_failed),
+                    Toast.LENGTH_SHORT).show()
+            })
+        }
     }
 
         AnimatedVisibility(
