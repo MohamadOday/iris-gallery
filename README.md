@@ -51,16 +51,20 @@ Download the signed APK directly from the [Releases](https://github.com/MohamadO
 
 ## Highlights
 
-- **100% Offline**: No `INTERNET` permission in the manifest. Photos and videos stay strictly on your device.
-- **App Lock & Biometrics**: Lock the gallery with a custom PIN and optional fingerprint unlock. Persists across multitasking and protects image picker intents.
-- **Fluid Grid & Pinch Resize**: Smoothly resize the photos grid (2–6 columns) and albums grid (1–4 columns) with pinch gestures.
-- **Built-in Editor**: Crop, rotate, flip, freehand blur/pixelate brushes, adjustment sliders, and save seamless copies.
-- **Media3 Video Player**: Integrated ExoPlayer playback with sensor-aware landscape/portrait rotation and gesture seeking.
-- **EXIF Inspector & GPS**: Inspect camera metadata (ISO, aperture, shutter speed, focal length) and open GPS coordinates directly in maps.
-- **Private Vault & Trash**: Move sensitive files to a biometric-protected vault or restore accidentally deleted media from the trash.
+- **100% Offline & Private**: Zero `INTERNET` permission in the manifest. Photos, videos, and metadata never leave your device.
+- **Live Media Sync**: Automatic real-time timeline detection for new camera photos and downloads without needing app restarts.
+- **Fluid Grid & Pinch Resize**: Smoothly resize the photos grid (2–6 columns) and albums grid (1–4 columns) with responsive pinch gestures.
+- **Built-in Photo Editor**: Crop with aspect presets, rotate, flip, adjustments (Brightness, Contrast, Saturation, Warmth), freehand blur/pixelate brushes, resize, and external editor integration (Snapseed, Lightroom, ImageToolbox).
+- **High-Res Viewer & EXIF/GPS Inspector**: Hardware canvas rendering with multi-level zoom (up to 7×), detailed camera metadata (ISO, aperture, shutter speed, focal length), and one-tap map location launcher.
+- **Media3 Video Player**: Powered by ExoPlayer with sensor-aware hardware rotation, gesture seeking, auto-play, and mute controls.
+- **App Lock & Private Vault**: Protect the entire app or media picker with a custom PIN and biometric fingerprint unlock, plus a dedicated encrypted vault for sensitive media.
+- **Safe 30-Day Trash**: Move deleted items to the trash with easy restoration or one-tap permanent purge.
+- **Album Management**: Create custom albums, move/copy media between folders, customize album covers, pin favorites, and sort by name, date, or count.
+- **Duplicate & Similar Photo Finder**: Scan and clean up redundant media to reclaim device storage.
+- **Smart Media Categorization**: Dedicated filters for RAW photos, animated GIFs, Motion Photos, Panoramas, and Screenshots.
+- **Home Screen Photo Widget**: Customizable home screen widget with automatic memory rotation.
+- **Multilingual Support**: Fully localized in 13+ languages with in-app language switcher.
 - **Deep Customization**: Material You dynamic theming, pure AMOLED dark mode, adjustable corner rounding, startup tab selection, and thumbnail grid density sliders.
-- **Media Categorization**: Quick filters for RAW, GIFs, Motion Photos, Panoramas, and Screenshots.
-- **Photo Widget**: Customizable home screen widget with automatic rotation.
 
 ## Building
 
