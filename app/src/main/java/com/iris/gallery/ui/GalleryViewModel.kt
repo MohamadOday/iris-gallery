@@ -21,6 +21,12 @@ import com.iris.gallery.data.DuplicateGroup
 import com.iris.gallery.data.AlbumRepository
 import com.iris.gallery.data.AlbumAction
 import com.iris.gallery.data.AlbumOperationResult
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import kotlinx.coroutines.delay
 import java.io.File
 
 data class GalleryUiState(
@@ -136,15 +142,50 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         preferences.edit().putStringSet("favorites", updated.mapTo(mutableSetOf()) { it.toString() }).apply()
     }
 
-    fun refresh() {
+    private var contentObserver: ContentObserver? = null
+    private var liveReloadJob: Job? = null
+
+    fun registerObserver() {
+        if (contentObserver != null) return
+        runCatching {
+            val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    super.onChange(selfChange, uri)
+                    liveReloadJob?.cancel()
+                    liveReloadJob = viewModelScope.launch {
+                        delay(350)
+                        refresh(showLoading = false)
+                    }
+                }
+            }
+            val resolver = getApplication<Application>().contentResolver
+            resolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
+            resolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer)
+            contentObserver = observer
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        contentObserver?.let {
+            runCatching {
+                getApplication<Application>().contentResolver.unregisterContentObserver(it)
+            }
+        }
+        contentObserver = null
+    }
+
+    fun refresh(showLoading: Boolean = true) {
         viewModelScope.launch {
             vaultRepository.loadVaultItems()
             val trashList = trashRepository.loadTrashItems()
-            _uiState.value = _uiState.value.copy(loading = true, trashed = trashList, error = null)
+            if (showLoading) {
+                _uiState.value = _uiState.value.copy(loading = true, trashed = trashList, error = null)
+            }
             val media = runCatching { repository.loadImages() }
             media.fold(
                 onSuccess = {
-                    _uiState.value = _uiState.value.copy(images = it, loading = false, error = null)
+                    _uiState.value = _uiState.value.copy(images = it, loading = false, trashed = trashList, error = null)
                     if (_duplicateState.value.hasScanned) _duplicateState.value = DuplicateScanState()
                 },
                 onFailure = { _uiState.value = _uiState.value.copy(loading = false,

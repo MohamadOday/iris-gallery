@@ -382,6 +382,10 @@ private fun GalleryApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 lockedAuthorized = false // Only lock private vault albums
+            } else if (event == Lifecycle.Event.ON_RESUME) {
+                if (permitted) {
+                    viewModel.refresh(showLoading = false)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -415,7 +419,12 @@ private fun GalleryApp(
         }
     }
 
-    LaunchedEffect(permitted) { if (permitted) viewModel.refresh() }
+    LaunchedEffect(permitted) {
+        if (permitted) {
+            viewModel.refresh()
+            viewModel.registerObserver()
+        }
+    }
     LaunchedEffect(Unit) {
         MemoriesNotifications.schedule(context)
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,

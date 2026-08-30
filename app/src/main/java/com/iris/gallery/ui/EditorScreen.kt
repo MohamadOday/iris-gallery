@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -154,8 +156,14 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                     }
                 }) { Text(if (saving) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_saving) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.action_save_copy)) }
             }) }) { padding ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         AndroidView(factory = { EditorCanvasView(it).also { view -> editorView = view } },
                             update = { view ->
@@ -176,8 +184,14 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                             FilterChip(tool == value, onClick = { tool = value }, label = { Text(androidx.compose.ui.res.stringResource(strRes)) })
                         }
                     }
-                    Column(Modifier.fillMaxWidth().height(if (landscape) 132.dp else 205.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp, max = if (landscape) 150.dp else 250.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         when (tool) {
                             EditorTool.CROP -> CropControls(cropPreset, { label, aspect ->
                                 cropPreset = label; if (aspect != null) editorView?.setCropAspect(aspect)
@@ -297,11 +311,42 @@ private fun TransformControls(
     onUndo: () -> Unit, onRedo: () -> Unit, onClear: () -> Unit) {
     val effectLabel = if (tool == EditorTool.PIXELATE) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_pixelation)
                       else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_blur)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_hint, effectLabel),
-        style = MaterialTheme.typography.titleSmall)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_size, (size * 100).toInt())); Slider(size, onSize, valueRange = .015f.. .25f)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_strength, strength.toInt())); Slider(strength, onStrength, valueRange = 4f..48f)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text(
+        androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_hint, effectLabel),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brush_size, (size * 100).toInt()), style = MaterialTheme.typography.bodyMedium)
+    }
+    Slider(
+        value = size,
+        onValueChange = onSize,
+        valueRange = .015f.. .25f,
+        modifier = Modifier.fillMaxWidth().height(34.dp)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_strength, strength.toInt()), style = MaterialTheme.typography.bodyMedium)
+    }
+    Slider(
+        value = strength,
+        onValueChange = onStrength,
+        valueRange = 4f..48f,
+        modifier = Modifier.fillMaxWidth().height(34.dp)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         FilterChip(erasing, onClick = { onErase(!erasing) }, label = { Text(if (erasing) androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_eraser_on) else androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_erase)) })
         IconButton(onClick = onUndo) { Icon(Icons.Outlined.Undo, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_undo_stroke)) }
         IconButton(onClick = onRedo) { Icon(Icons.Outlined.Redo, androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_redo_stroke)) }
@@ -309,12 +354,62 @@ private fun TransformControls(
     }
 }
 
-@Composable private fun AdjustControls(brightness: Float, saturation: Float, contrast: Float, warmth: Float,
-    onBrightness: (Float) -> Unit, onSaturation: (Float) -> Unit, onContrast: (Float) -> Unit, onWarmth: (Float) -> Unit) {
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brightness)); Slider(brightness, onBrightness, valueRange = -.5f.. .5f)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_saturation)); Slider(saturation, onSaturation, valueRange = 0f..2f)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_contrast)); Slider(contrast, onContrast, valueRange = .5f..1.5f)
-    Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_warmth)); Slider(warmth, onWarmth, valueRange = -1f..1f)
+@Composable private fun AdjustControls(
+    brightness: Float, saturation: Float, contrast: Float, warmth: Float,
+    onBrightness: (Float) -> Unit, onSaturation: (Float) -> Unit, onContrast: (Float) -> Unit, onWarmth: (Float) -> Unit
+) {
+    AdjustSlider(
+        label = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_brightness),
+        value = brightness,
+        onValueChange = onBrightness,
+        valueRange = -.5f.. .5f,
+        valueText = "${if (brightness > 0) "+" else ""}${(brightness * 200).toInt()}%"
+    )
+    AdjustSlider(
+        label = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_saturation),
+        value = saturation,
+        onValueChange = onSaturation,
+        valueRange = 0f..2f,
+        valueText = "${(saturation * 100).toInt()}%"
+    )
+    AdjustSlider(
+        label = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_contrast),
+        value = contrast,
+        onValueChange = onContrast,
+        valueRange = .5f..1.5f,
+        valueText = "${(contrast * 100).toInt()}%"
+    )
+    AdjustSlider(
+        label = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_warmth),
+        value = warmth,
+        onValueChange = onWarmth,
+        valueRange = -1f..1f,
+        valueText = "${if (warmth > 0) "+" else ""}${(warmth * 100).toInt()}%"
+    )
+}
+
+@Composable
+private fun AdjustSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueText: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(valueText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+    }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        modifier = Modifier.fillMaxWidth().height(34.dp)
+    )
 }
 
 private suspend fun loadPreview(context: Context, image: MediaImage): Bitmap? = withContext(Dispatchers.IO) {
