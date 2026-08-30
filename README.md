@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/MohamadOday/iris-gallery/releases/latest"><img src="https://img.shields.io/github/v/release/MohamadOday/iris-gallery?label=GitHub%20Release&color=blue" alt="Latest Release" /></a>
-  <a href="obtainium://app/https://github.com/MohamadOday/iris-gallery"><img src="https://img.shields.io/badge/Obtainium-Add%20to%20App-4080FF?logo=android&logoColor=white" alt="Add to Obtainium" /></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=https://github.com/MohamadOday/iris-gallery"><img src="https://img.shields.io/badge/Obtainium-Add%20App-4080FF?logo=android&logoColor=white" alt="Add to Obtainium" /></a>
   <a href="https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46638"><img src="https://img.shields.io/badge/F--Droid-Pending-3DDC84?logo=f-droid&logoColor=white" alt="F-Droid" /></a>
   <a href="https://apt.izzysoft.de/fdroid/index/apk/com.iris.gallery"><img src="https://img.shields.io/badge/IzzyOnDroid-Repository-009688?logo=f-droid&logoColor=white" alt="IzzyOnDroid" /></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-green.svg" alt="Android 8.0+" />
@@ -34,9 +34,9 @@ Iris Gallery is designed to be a private, responsive, and customizable local med
 
 ### 1. Obtainium (Recommended for Auto-Updates)
 Track and install updates directly from GitHub Releases:
-- **One-Click Install**: Click the badge below if you have Obtainium installed:
+- **One-Click Add**: Click the badge below to add Iris Gallery directly into Obtainium:
   <p align="left">
-    <a href="obtainium://app/https://github.com/MohamadOday/iris-gallery"><img src="https://img.shields.io/badge/Obtainium-Add%20Iris%20Gallery-4080FF?style=for-the-badge&logo=android&logoColor=white" alt="Add to Obtainium" /></a>
+    <a href="https://apps.obtainium.imranr.dev/redirect?r=https://github.com/MohamadOday/iris-gallery"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="52" /></a>
   </p>
 - **Manual Setup**: Open **Obtainium** → **Add App** → Paste `https://github.com/MohamadOday/iris-gallery` → Click **Add**.
 
