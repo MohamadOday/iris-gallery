@@ -2,7 +2,7 @@
 <resources>
     <!-- App & General -->
     <string name="app_name">Galeria Iris</string>
-    <string name="app_description">Czysta, offline'owa, inspirowana botaniką galeria multimediów na Androida</string>
+    <string name="app_description">Działająca w pełni offline, inspirowana botaniką galeria multimediów na Androida</string>
     <string name="version_format">Wersja %1$s (Build %2$d)</string>
 
     <!-- Navigation Tabs -->
