@@ -441,6 +441,15 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_show_user_comments_title),
+                        subtitle = stringResource(R.string.settings_show_user_comments_desc),
+                        checked = settings.showViewerUserComments,
+                        onCheckedChange = { preferences.setShowViewerUserComments(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
                     Text(stringResource(R.string.settings_zoom_scale_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),

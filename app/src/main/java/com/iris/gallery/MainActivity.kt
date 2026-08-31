@@ -97,6 +97,7 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Comment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -195,7 +196,10 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.drawscope.withTransform
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.ExifMetadata
+import com.iris.gallery.data.ExifEditRequest
 import com.iris.gallery.data.loadExifMetadata
+import com.iris.gallery.data.saveExifToMedia
+import com.iris.gallery.ui.ExifEditorSheet
 import com.iris.gallery.data.isRaw
 import com.iris.gallery.data.isGif
 import com.iris.gallery.data.isPanorama
@@ -364,13 +368,16 @@ private fun GalleryApp(
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
         if (it.resultCode == Activity.RESULT_OK) viewModel.refresh()
     }
-    var pendingMetadata by remember { mutableStateOf<Pair<MediaImage, ContentValues>?>(null) }
+    var pendingMetadata by remember { mutableStateOf<Triple<MediaImage, ContentValues, ExifEditRequest>?>(null) }
     val metadataWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
         val pending = pendingMetadata
         pendingMetadata = null
         if (it.resultCode == Activity.RESULT_OK && pending != null) {
-            context.contentResolver.update(canonicalMediaUri(pending.first), pending.second, null, null)
+            val (media, values, request) = pending
+            context.contentResolver.update(canonicalMediaUri(media), values, null, null)
+            saveExifToMedia(context, canonicalMediaUri(media), media.path, request)
             viewModel.refresh()
+            Toast.makeText(context, R.string.toast_metadata_updated, Toast.LENGTH_SHORT).show()
         }
     }
     var lockedAuthorized by remember { mutableStateOf(false) }
@@ -635,19 +642,26 @@ private fun GalleryApp(
                                 }
                             }
                         },
-                        onEditMetadata = { media, name, title, captured, orientation ->
+                        onEditMetadata = { media, request ->
                             val values = ContentValues().apply {
-                                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                                put(MediaStore.MediaColumns.TITLE, title)
-                                put(MediaStore.Images.Media.DATE_TAKEN, captured)
-                                put(MediaStore.Images.Media.ORIENTATION, orientation)
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, request.displayName)
+                                put(MediaStore.MediaColumns.TITLE, request.title)
+                                put(MediaStore.Images.Media.DATE_TAKEN, request.dateTakenMillis)
+                                put(MediaStore.Images.Media.ORIENTATION, request.orientation)
                             }
                             if (Build.VERSION.SDK_INT >= 30) runCatching {
-                                pendingMetadata = media to values
-                                val request = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
-                                metadataWriteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                            }.onFailure { pendingMetadata = null; Toast.makeText(context, context.getString(R.string.toast_could_not_request_metadata), Toast.LENGTH_LONG).show() }
-                            else runCatching { context.contentResolver.update(canonicalMediaUri(media), values, null, null); viewModel.refresh() }
+                                pendingMetadata = Triple(media, values, request)
+                                val writeReq = MediaStore.createWriteRequest(context.contentResolver, listOf(canonicalMediaUri(media)))
+                                metadataWriteLauncher.launch(IntentSenderRequest.Builder(writeReq.intentSender).build())
+                            }.onFailure {
+                                pendingMetadata = null
+                                Toast.makeText(context, context.getString(R.string.toast_could_not_request_metadata), Toast.LENGTH_LONG).show()
+                            } else runCatching {
+                                context.contentResolver.update(canonicalMediaUri(media), values, null, null)
+                                saveExifToMedia(context, canonicalMediaUri(media), media.path, request)
+                                viewModel.refresh()
+                                Toast.makeText(context, R.string.toast_metadata_updated, Toast.LENGTH_SHORT).show()
+                            }
                         },
                         duplicateState = duplicateState,
                         onScanDuplicates = viewModel::scanDuplicates,
@@ -780,7 +794,7 @@ private fun GalleryScaffold(
     onTrash: (List<MediaImage>) -> Unit,
     onRestore: (List<MediaImage>) -> Unit,
     onDeletePermanently: (List<MediaImage>) -> Unit,
-    onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
+    onEditMetadata: (MediaImage, ExifEditRequest) -> Unit,
     onMoveToAlbum: (List<MediaImage>, java.io.File, String) -> Unit,
     onCopyToAlbum: (List<MediaImage>, java.io.File, String) -> Unit,
     getAlbumDir: (MediaAlbum) -> java.io.File,
@@ -1505,6 +1519,7 @@ private fun GalleryScaffold(
             favorites = favorites,
             autoPlay = settings.autoPlayVideo,
             loop = settings.loopVideo,
+            showViewerUserComments = settings.showViewerUserComments,
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
             isLocked = isViewingLocked,
             isInTrash = isViewingTrash,
@@ -2102,6 +2117,7 @@ private fun PhotoViewer(
     favorites: Set<Long>,
     autoPlay: Boolean = true,
     loop: Boolean = true,
+    showViewerUserComments: Boolean = true,
     doubleTapZoomLevel: Float = 2.5f,
     isLocked: Boolean = false,
     isInTrash: Boolean = false,
@@ -2113,7 +2129,7 @@ private fun PhotoViewer(
     onClose: () -> Unit,
     onDelete: (MediaImage, Boolean) -> Unit,
     onRestore: (MediaImage) -> Unit = {},
-    onEditMetadata: (MediaImage, String, String, Long, Int) -> Unit,
+    onEditMetadata: (MediaImage, ExifEditRequest) -> Unit,
     onEdit: (MediaImage) -> Unit,
     onLock: (MediaImage) -> Unit,
     onUnlock: (MediaImage) -> Unit = {},
@@ -2147,6 +2163,14 @@ private fun PhotoViewer(
     var viewerMenuExpanded by remember { mutableStateOf(false) }
     var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
     val current = images[pagerState.currentPage]
+    val currentExif by produceState<ExifMetadata?>(initialValue = null, current.id, current.uri) {
+        value = withContext(Dispatchers.IO) {
+            loadExifMetadata(context, current.uri)
+        }
+    }
+    val viewerComment = remember(current.id, currentExif, current.description) {
+        currentExif?.userComment?.ifBlank { null } ?: current.description.ifBlank { null }
+    }
 
     fun handleEditClick(image: MediaImage) {
         when (preferredEditor) {
@@ -2263,6 +2287,59 @@ private fun PhotoViewer(
           }
           }
         }
+        // Floating User Comment Overlay in Viewer
+        if (showViewerUserComments && !viewerComment.isNullOrBlank()) {
+            AnimatedVisibility(
+                visible = controlsVisible,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, bottom = 84.dp),
+                enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                        slideInVertically(
+                            animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                            initialOffsetY = { it / 2 }
+                        ),
+                exit = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
+                       slideOutVertically(
+                           animationSpec = tween(180, easing = FastOutSlowInEasing),
+                           targetOffsetY = { it / 2 }
+                       ),
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth()
+                        .clickable { showInfo = true },
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 4.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Comment,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = viewerComment,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+
         AnimatedVisibility(
           visible = controlsVisible,
           modifier = Modifier
@@ -2383,8 +2460,8 @@ private fun PhotoViewer(
       }
     }
 
-    if (showInfo) PhotoDetailsSheet(current, onDismiss = { showInfo = false }, onSave = { name, title, captured, orientation ->
-        onEditMetadata(current, name, title, captured, orientation); showInfo = false
+    if (showInfo) PhotoDetailsSheet(current, onDismiss = { showInfo = false }, onSave = { request ->
+        onEditMetadata(current, request); showInfo = false
     })
     if (confirmDelete) {
         val isPermanentlyDeleting = isLocked || isInTrash
@@ -2688,8 +2765,11 @@ private fun ViewerIconButton(
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
-    onSave: (String, String, Long, Int) -> Unit) {
+private fun PhotoDetailsSheet(
+    image: MediaImage,
+    onDismiss: () -> Unit,
+    onSave: (ExifEditRequest) -> Unit,
+) {
     val context = LocalContext.current
     val exif by produceState<ExifMetadata?>(initialValue = null, image.id, image.uri) {
         value = withContext(Dispatchers.IO) {
@@ -2697,20 +2777,46 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
         }
     }
     var editing by remember { mutableStateOf(false) }
-    var editedName by remember(image.id) { mutableStateOf(image.name) }
-    var editedTitle by remember(image.id) { mutableStateOf(image.title) }
-    var editedOrientation by remember(image.id) { mutableStateOf(image.orientation.toString()) }
-    val metadataFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-    var editedDate by remember(image.id) { mutableStateOf(metadataFormat.format(Date(image.dateTaken))) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
     ) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(image.name.ifBlank { stringResource(R.string.details_photo_details) }, style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                image.name.ifBlank { stringResource(R.string.details_photo_details) },
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
 
+            // User Comment / Notes Card
             exif?.let { data ->
+                val commentText = data.userComment?.ifBlank { null } ?: image.description.ifBlank { null }
+                if (commentText != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Outlined.Comment, stringResource(R.string.details_user_comment), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Text(stringResource(R.string.details_user_comment), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            SelectionContainer {
+                                Text(commentText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+
                 val hasCamera = data.cameraModel != null || data.aperture != null || data.shutterSpeed != null || data.iso != null || data.focalLength != null
                 if (hasCamera) {
                     Card(
@@ -2723,12 +2829,19 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
                                 Icon(Icons.Outlined.CameraAlt, stringResource(R.string.details_camera), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 Text(data.cameraModel ?: stringResource(R.string.details_camera_capture), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
+                            if (!data.lensModel.isNullOrBlank()) {
+                                Text(data.lensModel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                            }
                             val specs = listOfNotNull(data.aperture, data.shutterSpeed, data.focalLength, data.iso).joinToString(" · ")
                             if (specs.isNotBlank()) {
                                 Text(specs, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            if (data.flash != null) {
-                                Text(data.flash, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val extraSpecs = listOfNotNull(data.flash, data.whiteBalance?.let { "${stringResource(R.string.details_white_balance)}: $it" }).joinToString(" · ")
+                            if (extraSpecs.isNotBlank()) {
+                                Text(extraSpecs, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (!data.software.isNullOrBlank()) {
+                                Text("${stringResource(R.string.details_software)}: ${data.software}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -2750,8 +2863,9 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
                                     Icon(Icons.Outlined.LocationOn, stringResource(R.string.details_location), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                     Text(stringResource(R.string.details_location), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 }
-                                Text("%.4f, %.4f".format(Locale.US, data.latitude, data.longitude),
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val locStr = "%.4f, %.4f".format(Locale.US, data.latitude, data.longitude) +
+                                    (data.altitude?.let { " (%.0f m)".format(Locale.US, it) } ?: "")
+                                Text(locStr, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             TextButton(onClick = {
                                 val uri = Uri.parse("geo:${data.latitude},${data.longitude}?q=${data.latitude},${data.longitude}(Photo+Location)")
@@ -2768,41 +2882,41 @@ private fun PhotoDetailsSheet(image: MediaImage, onDismiss: () -> Unit,
             }
 
             if (image.title.isNotBlank()) DetailBlock(stringResource(R.string.details_title_field), image.title)
-            if (image.description.isNotBlank()) DetailBlock(stringResource(R.string.details_desc_field), image.description)
+            exif?.artist?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_artist), it) }
+            exif?.copyright?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_copyright), it) }
             DetailItem(stringResource(R.string.details_captured), DateFormat.getDateTimeInstance().format(Date(image.dateTaken)))
-            DetailItem(stringResource(R.string.details_resolution), "${image.width} × ${image.height}")
+            val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
+            val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
+            DetailItem(stringResource(R.string.details_resolution), resText)
             DetailItem(stringResource(R.string.details_type), image.mimeType.ifBlank { if (image.isVideo) stringResource(R.string.format_video) else stringResource(R.string.format_image) })
             DetailItem(stringResource(R.string.details_size), formatFileSize(image.sizeBytes))
             if (image.orientation != 0) DetailItem(stringResource(R.string.details_orientation), "${image.orientation}°")
             if (image.isVideo) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
             DetailBlock(stringResource(R.string.details_path), image.path)
-            if (!image.isVideo) Button(onClick = { editing = true }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.details_edit_metadata)) }
+            if (!image.isVideo) {
+                Button(
+                    onClick = { editing = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Outlined.Edit, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.details_edit_metadata))
+                }
+            }
         }
     }
-    if (editing) AlertDialog(
-        onDismissRequest = { editing = false },
-        title = { Text(stringResource(R.string.details_edit_metadata)) },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            androidx.compose.material3.OutlinedTextField(editedName, { editedName = it },
-                label = { Text(stringResource(R.string.details_edit_filename)) }, singleLine = true)
-            androidx.compose.material3.OutlinedTextField(editedTitle, { editedTitle = it },
-                label = { Text(stringResource(R.string.details_edit_title)) }, singleLine = true)
-            androidx.compose.material3.OutlinedTextField(editedDate, { editedDate = it },
-                label = { Text(stringResource(R.string.details_edit_captured_hint)) }, singleLine = true)
-            androidx.compose.material3.OutlinedTextField(editedOrientation, { editedOrientation = it.filter(Char::isDigit) },
-                label = { Text(stringResource(R.string.details_edit_orientation_hint)) }, singleLine = true)
-            Text(stringResource(R.string.details_edit_permission_note),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } },
-        confirmButton = { TextButton(onClick = {
-            val timestamp = runCatching { metadataFormat.parse(editedDate)?.time }.getOrNull()
-            val orientation = editedOrientation.toIntOrNull()
-            if (editedName.isNotBlank() && timestamp != null && orientation in listOf(0, 90, 180, 270)) {
-                editing = false; onSave(editedName.trim(), editedTitle.trim(), timestamp, orientation!!)
-            }
-        }) { Text(stringResource(R.string.action_save)) } },
-        dismissButton = { TextButton(onClick = { editing = false }) { Text(stringResource(R.string.action_cancel)) } },
-    )
+    if (editing) {
+        ExifEditorSheet(
+            image = image,
+            exif = exif,
+            onDismiss = { editing = false },
+            onSave = { request ->
+                editing = false
+                onSave(request)
+            },
+        )
+    }
 }
 
 private fun formatFileSize(bytes: Long): String = when {
