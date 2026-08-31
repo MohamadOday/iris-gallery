@@ -30,6 +30,7 @@ val SUPPORTED_LANGUAGES = listOf(
     AppLanguage("pt", "Portuguese", "Português", "🇧🇷"),
     AppLanguage("it", "Italian", "Italiano", "🇮🇹"),
     AppLanguage("ja", "Japanese", "日本語", "🇯🇵"),
+    AppLanguage("pl", "Polish", "Polski", "🇵🇱"),
     AppLanguage("ru", "Russian", "Русский", "🇷🇺"),
     AppLanguage("tr", "Turkish", "Türkçe", "🇹🇷"),
 )
