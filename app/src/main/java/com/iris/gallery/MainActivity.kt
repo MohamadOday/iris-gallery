@@ -1065,18 +1065,22 @@ private fun GalleryScaffold(
                                 Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
-                        if (destination == 3 && librarySection == null) {
-                            IconButton(onClick = { librarySection = "settings" }) {
-                                Icon(Icons.Outlined.Settings, stringResource(R.string.section_settings))
-                            }
-                        }
-                        if (destination != 1 || selectedAlbum != null) {
+                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "duplicates" || librarySection == "memories"))
+                        if (canToggleGrid) {
                             IconButton(onClick = {
                                 compactGrid = !compactGrid
                                 customCellSize = if (compactGrid) 80.dp else 112.dp
                                 settingsPreferences.setPhotoGridSize(customCellSize.value)
                             }) {
                                 Icon(Icons.Outlined.GridView, if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid))
+                            }
+                        }
+                        if (librarySection == null && selectedAlbum == null) {
+                            IconButton(onClick = {
+                                tabScope.launch { tabPagerState.scrollToPage(3) }
+                                librarySection = "settings"
+                            }) {
+                                Icon(Icons.Outlined.Settings, stringResource(R.string.section_settings))
                             }
                         }
                     }
@@ -1892,7 +1896,7 @@ private fun PhotoGrid(
                         if (downChanges.size >= 2) {
                             val zoom = event.calculateZoom()
                             if (kotlin.math.abs(zoom - 1f) > 0.001f) {
-                                val nextSize = (currentCellSize.value * zoom).coerceIn(60f, 220f)
+                                val nextSize = (currentCellSize.value * zoom).coerceIn(36f, 320f)
                                 currentOnCellSizeChange?.invoke(nextSize.dp)
                                 event.changes.forEach { it.consume() }
                             }
@@ -1901,6 +1905,7 @@ private fun PhotoGrid(
                 }
             }
     ) {
+        val targetThumbnailPx = remember(cellSize) { com.iris.gallery.ui.getThumbnailTargetSizePx(cellSize.value) }
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(cellSize),
@@ -2027,6 +2032,7 @@ private fun PhotoGrid(
                             val selectedScale = if (selected) .91f else 1f
                             scaleX = selectedScale; scaleY = selectedScale
                         },
+                        targetSizePx = targetThumbnailPx,
                         showVideoDuration = showVideoDuration,
                         showFormatBadge = showFormatBadge,
                     )
@@ -2183,6 +2189,25 @@ private fun PhotoViewer(
     DisposableEffect(videoEngine) { onDispose { videoEngine.release() } }
     LaunchedEffect(current.id) {
         if (current.isVideo) videoEngine.load(current.uri) else videoEngine.player.pause()
+    }
+
+    // Preload adjacent images into memory for instant zero-delay swiping
+    val imageLoader = remember(context) { coil3.SingletonImageLoader.get(context) }
+    LaunchedEffect(pagerState.currentPage, images) {
+        val currentIdx = pagerState.currentPage
+        listOf(currentIdx - 1, currentIdx + 1, currentIdx + 2).forEach { idx ->
+            if (idx in images.indices) {
+                val media = images[idx]
+                if (!media.isVideo) {
+                    val req = ImageRequest.Builder(context)
+                        .data(media.uri)
+                        .size(coil3.size.Size.ORIGINAL)
+                        .precision(Precision.EXACT)
+                        .build()
+                    imageLoader.enqueue(req)
+                }
+            }
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF080808)) {
@@ -2589,7 +2614,13 @@ private fun ZoomablePhoto(
     var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
 
     // Instant zero-delay preview from memory cache while full image decodes
-    val cachedThumb = remember(image.id) { ThumbnailCache.get(image.id) }
+    var cachedThumb by remember(image.id) { mutableStateOf(com.iris.gallery.ui.ThumbnailCache.findForImage(image.id)) }
+    if (cachedThumb == null) {
+        LaunchedEffect(image.id, image.uri) {
+            val thumb = withContext(Dispatchers.IO) { com.iris.gallery.ui.loadThumbnailSync(context, image, 512) }
+            if (thumb != null) cachedThumb = thumb
+        }
+    }
     val thumbPainter = remember(cachedThumb) {
         cachedThumb?.let { BitmapPainter(it.asImageBitmap()) }
     }
@@ -2609,8 +2640,20 @@ private fun ZoomablePhoto(
         if (atScale <= 1f || containerSize == IntSize.Zero || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
         val intrinsic = painter.intrinsicSize
         val hasIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
-        val imgWidth = if (hasIntrinsic) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
-        val imgHeight = if (hasIntrinsic) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
+        val thumbIntrinsic = thumbPainter?.intrinsicSize
+        val hasThumbIntrinsic = thumbIntrinsic != null && thumbIntrinsic.isSpecified && thumbIntrinsic.width > 0f && thumbIntrinsic.height > 0f
+        val imgWidth = when {
+            hasIntrinsic -> intrinsic.width
+            hasThumbIntrinsic -> thumbIntrinsic!!.width
+            image.width > 0 -> image.width.toFloat()
+            else -> 1080f
+        }
+        val imgHeight = when {
+            hasIntrinsic -> intrinsic.height
+            hasThumbIntrinsic -> thumbIntrinsic!!.height
+            image.height > 0 -> image.height.toFloat()
+            else -> 1080f
+        }
         val imageAspect = imgWidth / imgHeight
         val containerAspect = containerSize.width.toFloat() / containerSize.height.coerceAtLeast(1)
         val displayedWidth: Float
@@ -2696,8 +2739,20 @@ private fun ZoomablePhoto(
         ) {
             val intrinsic = painter.intrinsicSize
             val hasValidIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
-            val imgWidth = if (hasValidIntrinsic) intrinsic.width else image.width.toFloat().coerceAtLeast(1f)
-            val imgHeight = if (hasValidIntrinsic) intrinsic.height else image.height.toFloat().coerceAtLeast(1f)
+            val thumbIntrinsic = thumbPainter?.intrinsicSize
+            val hasThumbIntrinsic = thumbIntrinsic != null && thumbIntrinsic.isSpecified && thumbIntrinsic.width > 0f && thumbIntrinsic.height > 0f
+            val imgWidth = when {
+                hasValidIntrinsic -> intrinsic.width
+                hasThumbIntrinsic -> thumbIntrinsic!!.width
+                image.width > 0 -> image.width.toFloat()
+                else -> 1080f
+            }
+            val imgHeight = when {
+                hasValidIntrinsic -> intrinsic.height
+                hasThumbIntrinsic -> thumbIntrinsic!!.height
+                image.height > 0 -> image.height.toFloat()
+                else -> 1080f
+            }
 
             if (imgWidth > 0f && imgHeight > 0f && size.width > 0f && size.height > 0f) {
                 val imageAspect = imgWidth / imgHeight

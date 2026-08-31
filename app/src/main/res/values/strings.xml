@@ -310,6 +310,8 @@
     <string name="settings_spacing_compact">Compact (2dp)</string>
     <string name="settings_spacing_standard">Standard (4dp)</string>
     <string name="settings_spacing_relaxed">Relaxed (8dp)</string>
+    <string name="settings_photos_tile_size">Photos Grid Tile Size</string>
+    <string name="settings_albums_tile_size">Albums Grid Tile Size</string>
     <string name="settings_show_timeline_title">Timeline Group Headers</string>
     <string name="settings_show_timeline_desc">Group photos by date taken with floating day headers</string>
 

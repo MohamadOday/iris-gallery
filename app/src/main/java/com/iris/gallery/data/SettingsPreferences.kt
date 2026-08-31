@@ -83,8 +83,8 @@ class SettingsPreferences(context: Context) {
     fun setAccentColor(color: AccentColor) = update { copy(accentColor = color) }
     fun setCornerStyle(style: CornerStyle) = update { copy(cornerStyle = style) }
     fun setGridSpacing(spacing: GridSpacing) = update { copy(gridSpacing = spacing) }
-    fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(60f, 220f)) }
-    fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(70f, 340f)) }
+    fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
+    fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
     fun setShowVideoDurationBadge(show: Boolean) = update { copy(showVideoDurationBadge = show) }
     fun setShowMediaFormatBadge(show: Boolean) = update { copy(showMediaFormatBadge = show) }
