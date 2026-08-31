@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AutoFixHigh
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -54,23 +54,29 @@ fun launchExternalEditor(context: Context, image: MediaImage) {
     } else {
         image.uri
     }
-    val mimeType = if (image.isVideo) "video/*" else "image/*"
+    val specificMime = image.mimeType.ifBlank {
+        if (image.isVideo) "video/*" else "image/*"
+    }
+
     val editIntent = Intent(Intent.ACTION_EDIT).apply {
-        setDataAndType(uri, mimeType)
+        setDataAndType(uri, specificMime)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         putExtra(Intent.EXTRA_STREAM, uri)
+        clipData = android.content.ClipData.newUri(context.contentResolver, "media", uri)
     }
+
+    val chooserTitle = if (image.isVideo) {
+        context.getString(R.string.edit_video_with_external_title)
+    } else {
+        context.getString(R.string.edit_with_external_title)
+    }
+
+    val chooserIntent = Intent.createChooser(editIntent, chooserTitle).apply {
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
     runCatching {
-        context.startActivity(Intent.createChooser(editIntent, context.getString(R.string.edit_with_external_title)))
-    }.onFailure {
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        runCatching {
-            context.startActivity(Intent.createChooser(sendIntent, context.getString(R.string.edit_with_external_title)))
-        }
+        context.startActivity(chooserIntent)
     }
 }
 
@@ -176,7 +182,7 @@ fun EditChoiceBottomSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)

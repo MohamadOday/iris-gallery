@@ -361,6 +361,7 @@
     <string name="editor_external_desc">Open in ImageToolbox, Lightroom, Snapseed, etc.</string>
     <string name="editor_remember_choice">Always use this option</string>
     <string name="edit_with_external_title">Edit photo with…</string>
+    <string name="edit_video_with_external_title">Edit video with…</string>
     <string name="action_edit_builtin">Edit with Iris Editor</string>
     <string name="action_edit_external">Edit with external app</string>
 

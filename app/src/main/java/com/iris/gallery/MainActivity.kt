@@ -69,6 +69,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.Dashboard
@@ -958,22 +960,29 @@ private fun GalleryScaffold(
                             destination == 3 && librarySection == "locked" -> stringResource(R.string.section_locked)
                             destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
                             destination == 3 && librarySection == "memories" -> stringResource(R.string.section_memories)
+                            destination == 3 && librarySection == "formats" -> stringResource(R.string.library_formats_title)
+                            destination == 3 && librarySection == "editor" -> stringResource(R.string.library_editor_title)
                             destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
                             destination == 2 -> favoritesTabLabel
                             destination == 1 -> albumsTabLabel
                             destination == 3 -> libraryTabLabel
                             else -> photoTabLabel
                         }
-                    AnimatedContent(count, label = "topbar title") { text -> Text(text,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    if (selectedIds.isNotEmpty()) {
+                        AnimatedContent(count, label = "selection count") { text ->
+                            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    } else {
+                        Text(count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 },
                 navigationIcon = {
                     if (selectedIds.isNotEmpty()) {
                         IconButton(onClick = ::clearSelection) { Icon(Icons.Outlined.Close, stringResource(R.string.action_clear_selection)) }
                     } else if (destination == 1 && selectedAlbum != null) {
-                        IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.Outlined.ArrowBack, albumsTabLabel) }
+                        IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, albumsTabLabel) }
                     } else if (destination == 3 && librarySection != null) {
-                        IconButton(onClick = { librarySection = null }) { Icon(Icons.Outlined.ArrowBack, libraryTabLabel) }
+                        IconButton(onClick = { librarySection = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, libraryTabLabel) }
                     }
                 },
                 actions = {
@@ -2324,7 +2333,16 @@ private fun PhotoViewer(
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_edit_external)) },
-                                leadingIcon = { Icon(Icons.Outlined.OpenInNew, null) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
+                                onClick = {
+                                    viewerMenuExpanded = false
+                                    launchExternalEditor(context, current)
+                                }
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_edit_external)) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 onClick = {
                                     viewerMenuExpanded = false
                                     launchExternalEditor(context, current)
@@ -2472,12 +2490,16 @@ private fun PhotoViewer(
                     scaleEffect = favScale,
                     modifier = Modifier.weight(1f),
                 ) { onToggleFavorite(current.id) }
-                if (!current.isVideo) {
-                    ViewerIconButton(
-                        icon = Icons.Outlined.Edit,
-                        label = stringResource(R.string.action_edit),
-                        modifier = Modifier.weight(1f),
-                    ) { handleEditClick(current) }
+                ViewerIconButton(
+                    icon = Icons.Outlined.Edit,
+                    label = stringResource(R.string.action_edit),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (current.isVideo) {
+                        launchExternalEditor(context, current)
+                    } else {
+                        handleEditClick(current)
+                    }
                 }
                 if (isLocked) {
                     ViewerIconButton(
