@@ -140,13 +140,23 @@
     <string name="action_move_down">Przenieś w dół</string>
 
     <!-- Library Screen Cards -->
-    <string name="library_header">Organizuj i odkrywaj na nowo</string>
+    <string name="library_header">Porządkuj i odkrywaj</string>
     <string name="library_memories_title">Wspomnienia</string>
-    <string name="library_memories_subtitle">Najciekawsze momenty z tego dnia oraz z minionych lat</string>
+    <string name="library_memories_subtitle">Najlepsze momenty z tego dnia i minionych lat</string>
     <string name="library_duplicates_title">Duplikaty</string>
-    <string name="library_duplicates_subtitle">Znajdź identyczne kopie i wizualnie podobne zdjęcia</string>
+    <string name="library_duplicates_subtitle">Znajdź identyczne kopie i podobne zdjęcia</string>
     <string name="library_locked_title">Zablokowane</string>
-    <string name="library_locked_subtitle">Prywatne: %1$d</string>
+    <string name="library_locked_subtitle">Prywatne elementy: %1$d</string>
+    <string name="library_trash_title">Kosz</string>
+    <string name="library_trash_subtitle">Elementy: %1$d · Android usuwa je po 30 dniach</string>
+    <string name="library_editor_title">Edytor</string>
+    <string name="library_editor_subtitle">Twórz ulepszone kopie bez modyfikowania oryginału</string>
+    <string name="library_formats_title">Formaty multimediów</string>
+    <string name="library_formats_subtitle">RAW, GIF, ruchome zdjęcia i panoramy</string>
+    <string name="library_settings_title">Ustawienia i personalizacja</string>
+    <string name="library_settings_subtitle">Motywy, palety, style siatki i gesty</string>
+    <string name="library_about_title">O aplikacji</string>
+    <string name="library_about_subtitle">Twórca, projekt open-source i szczegóły</string>
 
     <!-- Media Formats Filters -->
     <string name="format_all">Wszystkie (%1$d)</string>
