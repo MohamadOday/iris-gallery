@@ -876,6 +876,7 @@ private fun GalleryScaffold(
             }
         }
     }
+    var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
     val activeMedia = when {
         destination == 3 && librarySection == "trash" -> trashed
         destination == 3 && librarySection == "locked" -> lockedMedia
@@ -953,8 +954,6 @@ private fun GalleryScaffold(
                     val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
                         else when {
                             destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
-                            destination == 3 && librarySection == "settings" -> stringResource(R.string.section_settings)
-                            destination == 3 && librarySection == "about" -> stringResource(R.string.section_about)
                             destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
                             destination == 3 && librarySection == "locked" -> stringResource(R.string.section_locked)
                             destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
@@ -1065,7 +1064,7 @@ private fun GalleryScaffold(
                                 Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
-                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "duplicates" || librarySection == "memories"))
+                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "duplicates" || librarySection == "memories" || librarySection == "formats" || librarySection == "editor"))
                         if (canToggleGrid) {
                             IconButton(onClick = {
                                 compactGrid = !compactGrid
@@ -1077,8 +1076,7 @@ private fun GalleryScaffold(
                         }
                         if (librarySection == null && selectedAlbum == null) {
                             IconButton(onClick = {
-                                tabScope.launch { tabPagerState.scrollToPage(3) }
-                                librarySection = "settings"
+                                activeOverlayScreen = "settings"
                             }) {
                                 Icon(Icons.Outlined.Settings, stringResource(R.string.section_settings))
                             }
@@ -1159,16 +1157,6 @@ private fun GalleryScaffold(
             else -> {
                 if (page == 3) {
                     when (librarySection) {
-                        "settings" -> SettingsScreen(
-                            padding = padding,
-                            settings = settings,
-                            preferences = settingsPreferences,
-                            onBack = { librarySection = null }
-                        )
-                        "about" -> AboutScreen(
-                            padding = padding,
-                            onBack = { librarySection = null }
-                        )
                         "trash" -> if (trashed.isEmpty()) EmptyState("Trash is empty", padding) else PhotoGrid(
                             images = trashed,
                             padding = padding,
@@ -1670,6 +1658,43 @@ private fun GalleryScaffold(
                     }
                 }
             }
+        }
+
+        AnimatedVisibility(
+            visible = activeOverlayScreen == "settings",
+            enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(220)) + slideInVertically(
+                initialOffsetY = { it / 10 },
+                animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ),
+            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(180)) + androidx.compose.animation.slideOutVertically(
+                targetOffsetY = { it / 10 },
+                animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            )
+        ) {
+            BackHandler(enabled = true) { activeOverlayScreen = null }
+            SettingsScreen(
+                settings = settings,
+                preferences = settingsPreferences,
+                onOpenAbout = { activeOverlayScreen = "about" },
+                onBack = { activeOverlayScreen = null }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = activeOverlayScreen == "about",
+            enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(220)) + slideInVertically(
+                initialOffsetY = { it / 10 },
+                animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ),
+            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(180)) + androidx.compose.animation.slideOutVertically(
+                targetOffsetY = { it / 10 },
+                animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            )
+        ) {
+            BackHandler(enabled = true) { activeOverlayScreen = "settings" }
+            AboutScreen(
+                onBack = { activeOverlayScreen = "settings" }
+            )
         }
     }
 }

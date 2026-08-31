@@ -58,8 +58,6 @@ fun LibraryScreen(
         item { LibraryCard(Icons.Outlined.DeleteOutline, stringResource(R.string.library_trash_title), stringResource(R.string.library_trash_subtitle, trashCount)) { onOpen("trash") } }
         item { LibraryCard(Icons.Outlined.Edit, stringResource(R.string.library_editor_title), stringResource(R.string.library_editor_subtitle)) { onOpen("editor") } }
         item { LibraryCard(Icons.Outlined.PhotoLibrary, stringResource(R.string.library_formats_title), stringResource(R.string.library_formats_subtitle)) { onOpen("formats") } }
-        item { LibraryCard(Icons.Outlined.Settings, stringResource(R.string.library_settings_title), stringResource(R.string.library_settings_subtitle)) { onOpen("settings") } }
-        item { LibraryCard(Icons.Outlined.Info, stringResource(R.string.library_about_title), stringResource(R.string.library_about_subtitle)) { onOpen("about") } }
     }
 }
 
