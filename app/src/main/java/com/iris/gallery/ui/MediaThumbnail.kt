@@ -41,27 +41,51 @@ import com.iris.gallery.data.isRaw
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-internal object ThumbnailCache {
+object ThumbnailCache {
     private val maxKilobytes = (Runtime.getRuntime().maxMemory() / 1024 / 4).toInt() // 25% heap
     private val cache = object : LruCache<Long, Bitmap>(maxKilobytes) {
         override fun sizeOf(key: Long, value: Bitmap): Int = value.allocationByteCount / 1024
     }
 
-    fun get(id: Long): Bitmap? = cache.get(id)
-    fun put(id: Long, bitmap: Bitmap) = cache.put(id, bitmap)
+    fun get(key: Long): Bitmap? = cache.get(key)
+    fun put(key: Long, bitmap: Bitmap) = cache.put(key, bitmap)
+
+    fun findForImage(id: Long): Bitmap? {
+        cache.get(id)?.let { return it }
+        for (bucket in listOf(320, 180, 512, 768, 256)) {
+            val key = (id shl 16) xor (bucket.toLong() and 0xFFFFL)
+            cache.get(key)?.let { return it }
+        }
+        return null
+    }
 }
 
-private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
-    ThumbnailCache.get(image.id)?.let { return it }
+fun loadThumbnailSync(context: Context, image: MediaImage, targetSizePx: Int = 320): Bitmap? =
+    loadThumbnail(context, image, targetSizePx)
+
+fun getThumbnailTargetSizePx(cellSizeDp: Float, density: Float = 2.5f): Int {
+    val pixelSize = (cellSizeDp * density).toInt()
+    return when {
+        pixelSize <= 220 -> 180  // 5-6 columns: super lightweight, fast scroll
+        pixelSize <= 380 -> 320  // 3-4 columns: standard crisp grid thumbnail
+        pixelSize <= 600 -> 512  // 2 columns: high definition
+        else -> 768              // 1 column / tablets: full sharp resolution
+    }
+}
+
+private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int = 320): Bitmap? {
+    val cacheKey = (image.id shl 16) xor (targetSizePx.toLong() and 0xFFFFL)
+    ThumbnailCache.get(cacheKey)?.let { return it }
     val bitmap = try {
+        val size = Size(targetSizePx, targetSizePx)
         val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
         if (isFile) {
             val file = java.io.File(image.path)
             if (Build.VERSION.SDK_INT >= 29) {
                 if (image.isVideo) {
-                    android.media.ThumbnailUtils.createVideoThumbnail(file, Size(256, 256), null)
+                    android.media.ThumbnailUtils.createVideoThumbnail(file, size, null)
                 } else {
-                    android.media.ThumbnailUtils.createImageThumbnail(file, Size(256, 256), null)
+                    android.media.ThumbnailUtils.createImageThumbnail(file, size, null)
                 }
             } else {
                 if (image.isVideo) {
@@ -70,13 +94,13 @@ private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
                 } else {
                     val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     android.graphics.BitmapFactory.decodeFile(image.path, opts)
-                    val sample = maxOf(opts.outWidth / 256, opts.outHeight / 256, 1)
+                    val sample = maxOf(opts.outWidth / targetSizePx, opts.outHeight / targetSizePx, 1)
                     val opts2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
                     android.graphics.BitmapFactory.decodeFile(image.path, opts2)
                 }
             }
         } else if (Build.VERSION.SDK_INT >= 29) {
-            context.contentResolver.loadThumbnail(image.uri, Size(256, 256), null)
+            context.contentResolver.loadThumbnail(image.uri, size, null)
         } else {
             @Suppress("DEPRECATION")
             if (image.isVideo) {
@@ -93,7 +117,7 @@ private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
         null
     }
     bitmap?.prepareToDraw()
-    bitmap?.let { ThumbnailCache.put(image.id, it) }
+    bitmap?.let { ThumbnailCache.put(cacheKey, it) }
     return bitmap
 }
 
@@ -101,16 +125,18 @@ private fun loadThumbnail(context: Context, image: MediaImage): Bitmap? {
 fun MediaThumbnail(
     image: MediaImage,
     modifier: Modifier = Modifier,
+    targetSizePx: Int = 320,
     showVideoDuration: Boolean = true,
     showFormatBadge: Boolean = true,
 ) {
     val context = LocalContext.current
-    val cached = remember(image.id) { ThumbnailCache.get(image.id) }
-    var bitmap by remember(image.id) { mutableStateOf(cached) }
+    val cacheKey = remember(image.id, targetSizePx) { (image.id shl 16) xor (targetSizePx.toLong() and 0xFFFFL) }
+    val cached = remember(cacheKey) { ThumbnailCache.get(cacheKey) }
+    var bitmap by remember(cacheKey) { mutableStateOf(cached) }
 
     if (bitmap == null) {
-        LaunchedEffect(image.id, image.uri) {
-            val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, image) }
+        LaunchedEffect(cacheKey, image.uri) {
+            val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, image, targetSizePx) }
             bitmap = loaded
         }
     }

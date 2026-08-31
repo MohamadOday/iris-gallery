@@ -54,6 +54,7 @@ data class SettingsState(
     val showAlbumCount: Boolean = true,
     val autoPlayVideo: Boolean = true,
     val loopVideo: Boolean = true,
+    val showViewerUserComments: Boolean = true,
     val doubleTapZoomLevel: Float = 2.5f,
     val startupTab: StartupTab = StartupTab.PHOTOS,
     val biometricLockEnabled: Boolean = true,
@@ -82,14 +83,15 @@ class SettingsPreferences(context: Context) {
     fun setAccentColor(color: AccentColor) = update { copy(accentColor = color) }
     fun setCornerStyle(style: CornerStyle) = update { copy(cornerStyle = style) }
     fun setGridSpacing(spacing: GridSpacing) = update { copy(gridSpacing = spacing) }
-    fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(60f, 220f)) }
-    fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(70f, 340f)) }
+    fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
+    fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
     fun setShowVideoDurationBadge(show: Boolean) = update { copy(showVideoDurationBadge = show) }
     fun setShowMediaFormatBadge(show: Boolean) = update { copy(showMediaFormatBadge = show) }
     fun setShowAlbumCount(show: Boolean) = update { copy(showAlbumCount = show) }
     fun setAutoPlayVideo(autoPlay: Boolean) = update { copy(autoPlayVideo = autoPlay) }
     fun setLoopVideo(loop: Boolean) = update { copy(loopVideo = loop) }
+    fun setShowViewerUserComments(show: Boolean) = update { copy(showViewerUserComments = show) }
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
@@ -153,6 +155,7 @@ class SettingsPreferences(context: Context) {
             showAlbumCount = prefs.getBoolean("show_album_count", true),
             autoPlayVideo = prefs.getBoolean("auto_play_video", true),
             loopVideo = prefs.getBoolean("loop_video", true),
+            showViewerUserComments = prefs.getBoolean("show_viewer_user_comments", true),
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.PHOTOS),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
@@ -183,6 +186,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_album_count", state.showAlbumCount)
             .putBoolean("auto_play_video", state.autoPlayVideo)
             .putBoolean("loop_video", state.loopVideo)
+            .putBoolean("show_viewer_user_comments", state.showViewerUserComments)
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putString("startup_tab", state.startupTab.name)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)

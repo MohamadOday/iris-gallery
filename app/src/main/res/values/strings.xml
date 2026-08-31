@@ -227,12 +227,65 @@
     <string name="details_format">Format</string>
     <string name="details_type">Type</string>
     <string name="details_path">Path</string>
-    <string name="details_edit_metadata">Edit metadata</string>
+    <string name="details_edit_metadata">Edit metadata &amp; EXIF</string>
     <string name="details_edit_filename">File name</string>
     <string name="details_edit_title">Title</string>
     <string name="details_edit_captured_hint">Captured · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">Orientation · 0, 90, 180 or 270</string>
     <string name="details_edit_permission_note">Android will ask before changing media owned by another app.</string>
+
+    <!-- EXIF Metadata & Details -->
+    <string name="details_user_comment">User comment</string>
+    <string name="details_user_comment_hint">No comment added</string>
+    <string name="details_lens">Lens</string>
+    <string name="details_artist">Author / Artist</string>
+    <string name="details_copyright">Copyright</string>
+    <string name="details_software">Software</string>
+    <string name="details_altitude">Altitude</string>
+    <string name="details_white_balance">White balance</string>
+    <string name="details_white_balance_auto">Auto</string>
+    <string name="details_white_balance_manual">Manual</string>
+    <string name="details_megapixels">%1$s MP</string>
+
+    <!-- EXIF Editor -->
+    <string name="exif_editor_title">EXIF &amp; Metadata Editor</string>
+    <string name="exif_editor_subtitle">View, edit, or strip metadata tags</string>
+    <string name="exif_tab_notes">Notes &amp; Info</string>
+    <string name="exif_tab_camera">Camera &amp; Lens</string>
+    <string name="exif_tab_location">Location</string>
+    <string name="exif_tab_file">File &amp; Date</string>
+    <string name="exif_user_comment_label">User Comment / Note</string>
+    <string name="exif_user_comment_hint">Write personal comments, memories, or archival notes…</string>
+    <string name="exif_image_desc_label">Image Description</string>
+    <string name="exif_image_desc_hint">Caption or description of the image</string>
+    <string name="exif_artist_label">Author / Photographer</string>
+    <string name="exif_artist_hint">e.g. Jane Doe</string>
+    <string name="exif_copyright_label">Copyright Notice</string>
+    <string name="exif_copyright_hint">e.g. © 2026 Mohamad Oday</string>
+    <string name="exif_software_label">Software / Tool</string>
+    <string name="exif_camera_make_label">Camera Manufacturer</string>
+    <string name="exif_camera_make_hint">e.g. Sony, Canon, Google, Nikon</string>
+    <string name="exif_camera_model_label">Camera Model</string>
+    <string name="exif_camera_model_hint">e.g. Pixel 9 Pro, ILCE-7M4</string>
+    <string name="exif_lens_model_label">Lens Model</string>
+    <string name="exif_lens_model_hint">e.g. FE 24-70mm F2.8 GM II</string>
+    <string name="exif_iso_label">ISO Sensitivity</string>
+    <string name="exif_aperture_label">Aperture (f-number)</string>
+    <string name="exif_shutter_label">Shutter Speed (e.g. 1/250 or 0.004)</string>
+    <string name="exif_focal_length_label">Focal Length (mm)</string>
+    <string name="exif_latitude_label">Latitude (°)</string>
+    <string name="exif_longitude_label">Longitude (°)</string>
+    <string name="exif_altitude_label">Altitude (meters)</string>
+    <string name="exif_remove_gps">Remove Location Data</string>
+    <string name="exif_remove_gps_desc">Strip GPS coordinates from this photo for privacy</string>
+    <string name="exif_strip_all">Strip All EXIF</string>
+    <string name="exif_strip_all_desc">Clears camera specs, author, comments, and location for privacy</string>
+    <string name="exif_strip_all_dialog_title">Strip All EXIF Metadata?</string>
+    <string name="exif_strip_all_dialog_desc">This will erase all embedded camera settings, comments, author information, and GPS location tags from this photo.</string>
+    <string name="exif_set_current_time">Set Current Time</string>
+    <string name="exif_revert_changes">Revert</string>
+    <string name="toast_metadata_updated">Metadata and EXIF tags updated</string>
+    <string name="toast_metadata_failed">Could not update metadata</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
@@ -257,6 +310,8 @@
     <string name="settings_spacing_compact">Compact (2dp)</string>
     <string name="settings_spacing_standard">Standard (4dp)</string>
     <string name="settings_spacing_relaxed">Relaxed (8dp)</string>
+    <string name="settings_photos_tile_size">Photos Grid Tile Size</string>
+    <string name="settings_albums_tile_size">Albums Grid Tile Size</string>
     <string name="settings_show_timeline_title">Timeline Group Headers</string>
     <string name="settings_show_timeline_desc">Group photos by date taken with floating day headers</string>
 
@@ -269,11 +324,13 @@
     <string name="settings_album_count_desc">Display item numbers under album names</string>
 
     <string name="settings_section_viewer">Viewer &amp; Playback</string>
-    <string name="settings_autoplay_video_title">Auto-Play Videos</string>
-    <string name="settings_autoplay_video_desc">Start playing immediately when opening video in viewer</string>
-    <string name="settings_loop_video_title">Loop Videos</string>
+    <string name="settings_autoplay_video_title">Autoplay videos</string>
+    <string name="settings_autoplay_video_desc">Automatically start playback when opening videos in the viewer</string>
+    <string name="settings_loop_video_title">Loop videos</string>
     <string name="settings_loop_video_desc">Repeat video playback continuously</string>
-    <string name="settings_zoom_scale_title">Double-Tap Zoom Scale</string>
+    <string name="settings_show_user_comments_title">Show comments overlay</string>
+    <string name="settings_show_user_comments_desc">Display embedded user comments and notes directly on photos in the viewer</string>
+    <string name="settings_zoom_scale_title">Double-tap zoom scale</string>
 
     <string name="settings_section_behavior">Behavior &amp; Security</string>
     <string name="settings_startup_tab">Default Startup Tab</string>
@@ -304,6 +361,7 @@
     <string name="editor_external_desc">Open in ImageToolbox, Lightroom, Snapseed, etc.</string>
     <string name="editor_remember_choice">Always use this option</string>
     <string name="edit_with_external_title">Edit photo with…</string>
+    <string name="edit_video_with_external_title">Edit video with…</string>
     <string name="action_edit_builtin">Edit with Iris Editor</string>
     <string name="action_edit_external">Edit with external app</string>
 

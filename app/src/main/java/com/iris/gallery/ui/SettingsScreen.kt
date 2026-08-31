@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,11 +25,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
@@ -38,16 +41,21 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +66,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Landscape
+import androidx.compose.material.icons.outlined.PhotoAlbum
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.iris.gallery.R
 import com.iris.gallery.data.AccentColor
@@ -77,11 +101,13 @@ import com.iris.gallery.ui.LanguageSelectionBottomSheet
 import com.iris.gallery.ui.setAppLanguage
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    padding: PaddingValues,
+    padding: PaddingValues = PaddingValues(0.dp),
     settings: SettingsState,
     preferences: SettingsPreferences,
+    onOpenAbout: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -104,13 +130,26 @@ fun SettingsScreen(
             ?: SUPPORTED_LANGUAGES.first()
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.section_settings)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.action_back))
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            )
+        }
+    ) { scaffoldPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         // Section: Language & Region
         item {
             SettingsSectionHeader(Icons.Outlined.Language, stringResource(R.string.settings_section_language))
@@ -335,27 +374,335 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Column {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Photos Default Tile Size", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("${settings.photoGridSize.roundToInt()} dp", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    val screenWidthDp = LocalConfiguration.current.screenWidthDp.toFloat()
+                    val photoSpacingDp = settings.gridSpacing.dp.toFloat()
+                    val photoAvailableWidth = (screenWidthDp - 2 * photoSpacingDp).coerceAtLeast(100f)
+
+                    // Dynamic slider boundaries for Photos
+                    val minPhotoDp = maxOf(36f, ((photoAvailableWidth + photoSpacingDp) / 6.8f - photoSpacingDp).coerceAtLeast(36f))
+                    val maxPhotoDp = (photoAvailableWidth * 0.72f).coerceIn(160f, 320f)
+                    val currentPhotoSize = settings.photoGridSize.coerceIn(minPhotoDp, maxPhotoDp)
+                    val photoColumns = maxOf(1, ((photoAvailableWidth + photoSpacingDp) / (currentPhotoSize + photoSpacingDp + 0.001f)).toInt())
+
+                    // Dynamic slider boundaries for Albums
+                    val albumSpacingDp = 12f
+                    val albumPaddingDp = 16f
+                    val albumAvailableWidth = (screenWidthDp - 2 * albumPaddingDp).coerceAtLeast(100f)
+                    val minAlbumDp = maxOf(48f, ((albumAvailableWidth + albumSpacingDp) / 4.8f - albumSpacingDp).coerceAtLeast(48f))
+                    val maxAlbumDp = (albumAvailableWidth * 0.85f).coerceIn(200f, 420f)
+                    val currentAlbumSize = settings.albumGridSize.coerceIn(minAlbumDp, maxAlbumDp)
+                    val albumColumns = maxOf(1, ((albumAvailableWidth + albumSpacingDp) / (currentAlbumSize + albumSpacingDp + 0.001f)).toInt())
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    val colorScheme = MaterialTheme.colorScheme
+                    val materialYouTiles = listOf(
+                        Triple(
+                            listOf(colorScheme.primaryContainer, colorScheme.primary.copy(alpha = 0.35f)),
+                            colorScheme.onPrimaryContainer,
+                            Icons.Outlined.PhotoCamera
+                        ),
+                        Triple(
+                            listOf(colorScheme.secondaryContainer, colorScheme.secondary.copy(alpha = 0.3f)),
+                            colorScheme.onSecondaryContainer,
+                            Icons.Outlined.Landscape
+                        ),
+                        Triple(
+                            listOf(colorScheme.tertiaryContainer, colorScheme.tertiary.copy(alpha = 0.35f)),
+                            colorScheme.onTertiaryContainer,
+                            Icons.Outlined.Videocam
+                        ),
+                        Triple(
+                            listOf(colorScheme.surfaceVariant, colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                            colorScheme.onSurfaceVariant,
+                            Icons.Outlined.AutoAwesome
+                        ),
+                        Triple(
+                            listOf(colorScheme.inversePrimary.copy(alpha = 0.45f), colorScheme.primaryContainer),
+                            colorScheme.primary,
+                            Icons.Outlined.WbSunny
+                        ),
+                        Triple(
+                            listOf(colorScheme.secondary.copy(alpha = 0.25f), colorScheme.tertiaryContainer),
+                            colorScheme.onSecondaryContainer,
+                            Icons.Outlined.Folder
+                        ),
+                        Triple(
+                            listOf(colorScheme.tertiary.copy(alpha = 0.25f), colorScheme.primaryContainer),
+                            colorScheme.onTertiaryContainer,
+                            Icons.Outlined.Image
+                        ),
+                        Triple(
+                            listOf(colorScheme.primary.copy(alpha = 0.2f), colorScheme.secondaryContainer),
+                            colorScheme.onPrimaryContainer,
+                            Icons.Outlined.PhotoAlbum
+                        ),
+                    )
+
+                    // Photos Grid Tile Size & Live Preview
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(stringResource(R.string.settings_photos_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            ) {
+                                Text(
+                                    "${currentPhotoSize.roundToInt()} dp · $photoColumns ${if (photoColumns == 1) "col" else "cols"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                )
+                            }
                         }
+
+                        // Compact Scaled Live Photos Grid Mockup
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(108.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
+                            ) {
+                                for (row in 0 until 2) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        horizontalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
+                                    ) {
+                                        for (col in 0 until photoColumns) {
+                                            val index = (row * photoColumns + col) % materialYouTiles.size
+                                            val (gradient, tint, icon) = materialYouTiles[index]
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                                    .clip(RoundedCornerShape(settings.cornerStyle.dp.dp))
+                                                    .background(Brush.linearGradient(gradient)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    icon,
+                                                    contentDescription = null,
+                                                    tint = tint.copy(alpha = 0.45f),
+                                                    modifier = Modifier.size(15.dp),
+                                                )
+                                                if (index == 0 && settings.showVideoDurationBadge) {
+                                                    Surface(
+                                                        color = Color.Black.copy(alpha = 0.65f),
+                                                        shape = RoundedCornerShape(3.dp),
+                                                        modifier = Modifier.align(Alignment.BottomStart).padding(2.dp),
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Outlined.PlayArrow,
+                                                                contentDescription = null,
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(7.dp),
+                                                            )
+                                                            Text("0:24", color = Color.White, fontSize = 6.5.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                } else if (index == 1 && settings.showMediaFormatBadge) {
+                                                    Surface(
+                                                        color = Color.Black.copy(alpha = 0.65f),
+                                                        shape = RoundedCornerShape(3.dp),
+                                                        modifier = Modifier.align(Alignment.BottomStart).padding(2.dp),
+                                                    ) {
+                                                        Text("RAW", color = Color.White, fontSize = 6.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp))
+                                                    }
+                                                } else if (index == 2) {
+                                                    Icon(
+                                                        Icons.Filled.Favorite,
+                                                        contentDescription = null,
+                                                        tint = tint.copy(alpha = 0.9f),
+                                                        modifier = Modifier
+                                                            .align(Alignment.TopEnd)
+                                                            .padding(3.dp)
+                                                            .size(8.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Column Presets for Photos
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(2, 3, 4, 5, 6).forEach { targetCols ->
+                                val isCurrentCol = photoColumns == targetCols
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = isCurrentCol,
+                                    onClick = {
+                                        val idealDp = ((photoAvailableWidth + photoSpacingDp) / (targetCols + 0.45f) - photoSpacingDp).coerceIn(minPhotoDp, maxPhotoDp)
+                                        preferences.setPhotoGridSize(idealDp)
+                                    },
+                                    label = {
+                                        Text(
+                                            "$targetCols",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isCurrentCol) FontWeight.Bold else FontWeight.Medium,
+                                        )
+                                    },
+                                    shape = CircleShape,
+                                )
+                            }
+                        }
+
                         Slider(
-                            value = settings.photoGridSize,
+                            value = currentPhotoSize,
                             onValueChange = { preferences.setPhotoGridSize(it) },
-                            valueRange = 60f..220f
+                            valueRange = minPhotoDp..maxPhotoDp,
                         )
                     }
 
-                    Column {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Albums Default Tile Size", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("${settings.albumGridSize.roundToInt()} dp", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    // Albums Grid Tile Size & Live Preview
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(stringResource(R.string.settings_albums_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            ) {
+                                Text(
+                                    "${currentAlbumSize.roundToInt()} dp · $albumColumns ${if (albumColumns == 1) "col" else "cols"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                )
+                            }
                         }
+
+                        // Compact Scaled Live Albums Grid Mockup
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(98.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                val sampleAlbums = listOf(
+                                    Triple("Camera", listOf(colorScheme.primaryContainer, colorScheme.primary.copy(alpha = 0.35f)), colorScheme.onPrimaryContainer),
+                                    Triple("Screenshots", listOf(colorScheme.secondaryContainer, colorScheme.secondary.copy(alpha = 0.3f)), colorScheme.onSecondaryContainer),
+                                    Triple("Downloads", listOf(colorScheme.tertiaryContainer, colorScheme.tertiary.copy(alpha = 0.35f)), colorScheme.onTertiaryContainer),
+                                    Triple("Wallpapers", listOf(colorScheme.surfaceVariant, colorScheme.surfaceVariant.copy(alpha = 0.6f)), colorScheme.onSurfaceVariant),
+                                )
+                                val countShown = minOf(albumColumns, sampleAlbums.size)
+                                for (i in 0 until countShown) {
+                                    val (albumName, albumGrad, albumTint) = sampleAlbums[i]
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                                                .clip(RoundedCornerShape(settings.cornerStyle.dp.dp))
+                                                .background(Brush.linearGradient(albumGrad)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.PhotoAlbum,
+                                                contentDescription = null,
+                                                tint = albumTint.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                        Text(
+                                            albumName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontSize = 10.sp,
+                                        )
+                                        if (settings.showAlbumCount) {
+                                            Text(
+                                                "1,248",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontSize = 8.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Column Presets for Albums
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(1, 2, 3, 4).forEach { targetCols ->
+                                val isCurrentCol = albumColumns == targetCols
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = isCurrentCol,
+                                    onClick = {
+                                        val idealDp = ((albumAvailableWidth + albumSpacingDp) / (targetCols + 0.45f) - albumSpacingDp).coerceIn(minAlbumDp, maxAlbumDp)
+                                        preferences.setAlbumGridSize(idealDp)
+                                    },
+                                    label = {
+                                        Text(
+                                            "$targetCols",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isCurrentCol) FontWeight.Bold else FontWeight.Medium,
+                                        )
+                                    },
+                                    shape = CircleShape,
+                                )
+                            }
+                        }
+
                         Slider(
-                            value = settings.albumGridSize,
+                            value = currentAlbumSize,
                             onValueChange = { preferences.setAlbumGridSize(it) },
-                            valueRange = 70f..340f
+                            valueRange = minAlbumDp..maxAlbumDp,
                         )
                     }
                 }
@@ -437,6 +784,15 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_loop_video_desc),
                         checked = settings.loopVideo,
                         onCheckedChange = { preferences.setLoopVideo(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_show_user_comments_title),
+                        subtitle = stringResource(R.string.settings_show_user_comments_desc),
+                        checked = settings.showViewerUserComments,
+                        onCheckedChange = { preferences.setShowViewerUserComments(it) }
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -707,6 +1063,49 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // Section 7: About Iris Gallery
+        item {
+            SettingsSectionHeader(Icons.Outlined.Info, stringResource(R.string.library_about_title))
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenAbout() }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            stringResource(R.string.library_about_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            stringResource(R.string.library_about_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
     }
 
     if (showSetPinDialog) {
