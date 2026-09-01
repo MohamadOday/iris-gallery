@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">Перемещено %1$d объектов в %2$s</string>
     <string name="toast_copied_to_album_single">Объект скопирован в %1$s</string>
     <string name="toast_copied_to_album_multiple">Скопировано %1$d объектов в %2$s</string>
+    <string name="no_external_editor_found">Внешнее приложение для редактирования не найдено</string>
+    <string name="search_files_placeholder">Поиск фото, видео, форматов…</string>
+    <string name="empty_search_files">Нет файлов, соответствующих "%1$s"</string>
+    <string name="action_search">Поиск</string>
 </resources>

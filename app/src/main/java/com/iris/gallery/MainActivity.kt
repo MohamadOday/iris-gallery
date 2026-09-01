@@ -108,6 +108,13 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Comment
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.iris.gallery.data.isGif
+import com.iris.gallery.data.isRaw
+import com.iris.gallery.data.isMotionPhoto
+import com.iris.gallery.data.isPanorama
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -1058,12 +1065,38 @@ private fun GalleryScaffold(
         }
     }
     var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
+    var fileSearchQuery by remember { mutableStateOf("") }
+    var isFileSearching by remember { mutableStateOf(false) }
+
+    fun filterMediaList(list: List<MediaImage>, query: String): List<MediaImage> {
+        if (query.isBlank()) return list
+        val q = query.trim()
+        val qLower = q.lowercase()
+        return list.filter { item ->
+            item.name.contains(q, ignoreCase = true) ||
+            item.title.contains(q, ignoreCase = true) ||
+            item.bucketName.contains(q, ignoreCase = true) ||
+            item.path.contains(q, ignoreCase = true) ||
+            ((qLower == "video" || qLower == "videos" || qLower == ".mp4" || qLower == ".mkv" || qLower == ".mov" || qLower == ".webm" || qLower == ".3gp") && item.isVideo) ||
+            ((qLower == "photo" || qLower == "photos" || qLower == "image" || qLower == "images" || qLower == ".jpg" || qLower == ".jpeg" || qLower == ".png" || qLower == ".webp" || qLower == ".heic") && !item.isVideo) ||
+            ((qLower == "gif" || qLower == "gifs" || qLower == ".gif") && item.isGif) ||
+            ((qLower == "raw" || qLower == ".dng" || qLower == ".cr2" || qLower == ".nef" || qLower == ".arw") && item.isRaw) ||
+            ((qLower == "motion" || qLower == "live") && item.isMotionPhoto) ||
+            ((qLower == "pano" || qLower == "panorama") && item.isPanorama)
+        }
+    }
+
+    val displayedPhotos = remember(images, fileSearchQuery) { filterMediaList(images, fileSearchQuery) }
+    val displayedFavoritePhotos = remember(favoriteImages, fileSearchQuery) { filterMediaList(favoriteImages, fileSearchQuery) }
+    val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery) {
+        selectedAlbum?.let { filterMediaList(it.images, fileSearchQuery) } ?: emptyList()
+    }
     val activeMedia = when {
         destination == 3 && librarySection == "trash" -> trashed
         destination == 3 && librarySection == "locked" -> lockedMedia
-        destination == 1 && selectedAlbum != null -> selectedAlbum!!.images
-        destination == 2 -> favoriteImages
-        else -> images
+        destination == 1 && selectedAlbum != null -> displayedAlbumPhotos
+        destination == 2 -> displayedFavoritePhotos
+        else -> displayedPhotos
     }
     fun toggleSelection(id: Long) {
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
@@ -1132,31 +1165,60 @@ private fun GalleryScaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
-                        else when {
-                            destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
-                            destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
-                            destination == 3 && librarySection == "locked" -> stringResource(R.string.section_locked)
-                            destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
-                            destination == 3 && librarySection == "memories" -> stringResource(R.string.section_memories)
-                            destination == 3 && librarySection == "formats" -> stringResource(R.string.library_formats_title)
-                            destination == 3 && librarySection == "editor" -> stringResource(R.string.library_editor_title)
-                            destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
-                            destination == 2 -> favoritesTabLabel
-                            destination == 1 -> albumsTabLabel
-                            destination == 3 -> libraryTabLabel
-                            else -> photoTabLabel
-                        }
-                    if (selectedIds.isNotEmpty()) {
-                        AnimatedContent(count, label = "selection count") { text ->
-                            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+                    if (isFileSearching) {
+                        OutlinedTextField(
+                            value = fileSearchQuery,
+                            onValueChange = { fileSearchQuery = it },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            placeholder = { Text(stringResource(R.string.search_files_placeholder), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            trailingIcon = {
+                                if (fileSearchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { fileSearchQuery = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.clear_search))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
                     } else {
-                        Text(count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
+                            else when {
+                                destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
+                                destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
+                                destination == 3 && librarySection == "locked" -> stringResource(R.string.section_locked)
+                                destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
+                                destination == 3 && librarySection == "memories" -> stringResource(R.string.section_memories)
+                                destination == 3 && librarySection == "formats" -> stringResource(R.string.library_formats_title)
+                                destination == 3 && librarySection == "editor" -> stringResource(R.string.library_editor_title)
+                                destination == 3 && librarySection != null -> librarySection!!.replaceFirstChar { it.uppercase() }
+                                destination == 2 -> favoritesTabLabel
+                                destination == 1 -> albumsTabLabel
+                                destination == 3 -> libraryTabLabel
+                                else -> photoTabLabel
+                            }
+                        if (selectedIds.isNotEmpty()) {
+                            AnimatedContent(count, label = "selection count") { text ->
+                                Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        } else {
+                            Text(count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 },
                 navigationIcon = {
-                    if (selectedIds.isNotEmpty()) {
+                    if (isFileSearching) {
+                        IconButton(onClick = { isFileSearching = false; fileSearchQuery = "" }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.clear_search))
+                        }
+                    } else if (selectedIds.isNotEmpty()) {
                         IconButton(onClick = ::clearSelection) { Icon(Icons.Outlined.Close, stringResource(R.string.action_clear_selection)) }
                     } else if (destination == 1 && selectedAlbum != null) {
                         IconButton(onClick = { selectedAlbumId = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, albumsTabLabel) }
@@ -1244,7 +1306,13 @@ private fun GalleryScaffold(
                                     })
                             }
                         }
-                    } else {
+                    } else if (!isFileSearching) {
+                        val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null)
+                        if (canSearch) {
+                            IconButton(onClick = { isFileSearching = true }) {
+                                Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                            }
+                        }
                         if (destination == 3 && librarySection == "trash" && trashed.isNotEmpty()) {
                             TextButton(onClick = { confirmEmptyTrash = true }) {
                                 Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
@@ -1306,9 +1374,9 @@ private fun GalleryScaffold(
               onRefresh = onRefresh,
               modifier = Modifier.fillMaxSize(),
             ) {
-              if (images.isNotEmpty()) PhotoGrid(
-                images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
-                showTimeline = settings.showTimelineHeaders,
+              if (displayedPhotos.isNotEmpty()) PhotoGrid(
+                displayedPhotos, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                 timelineDateFormat = settings.timelineDateFormat,
                 customTimelineDateFormat = settings.customTimelineDateFormat,
                 useRelativeDates = settings.useRelativeDates,
@@ -1321,7 +1389,8 @@ private fun GalleryScaffold(
                 onToggleSelection = if (onPick == null) ::toggleSelection else null,
                 onSetSelection = if (onPick == null) ::setSelection else null,
                 onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-              ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = images; selectedId = it.id } }
+              ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedPhotos; selectedId = it.id } }
+              else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
               else EmptyState(stringResource(R.string.empty_photos), padding)
             }
             1 -> PullToRefreshBox(
@@ -1329,22 +1398,25 @@ private fun GalleryScaffold(
               onRefresh = onRefresh,
               modifier = Modifier.fillMaxSize(),
             ) {
-              if (selectedAlbum != null) PhotoGrid(
-                selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
-                showTimeline = settings.showTimelineHeaders,
-                timelineDateFormat = settings.timelineDateFormat,
-                customTimelineDateFormat = settings.customTimelineDateFormat,
-                useRelativeDates = settings.useRelativeDates,
-                showDayOfWeek = settings.showDayOfWeek,
-                cornerStyle = settings.cornerStyle,
-                gridSpacing = settings.gridSpacing,
-                showVideoDuration = settings.showVideoDurationBadge,
-                showFormatBadge = settings.showMediaFormatBadge,
-                selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
-                onSetSelection = if (onPick == null) ::setSelection else null,
-                onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-              ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
-              else AlbumsGrid(
+              if (selectedAlbum != null) {
+                if (displayedAlbumPhotos.isNotEmpty()) PhotoGrid(
+                  displayedAlbumPhotos, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                  showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
+                  timelineDateFormat = settings.timelineDateFormat,
+                  customTimelineDateFormat = settings.customTimelineDateFormat,
+                  useRelativeDates = settings.useRelativeDates,
+                  showDayOfWeek = settings.showDayOfWeek,
+                  cornerStyle = settings.cornerStyle,
+                  gridSpacing = settings.gridSpacing,
+                  showVideoDuration = settings.showVideoDurationBadge,
+                  showFormatBadge = settings.showMediaFormatBadge,
+                  selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                  onSetSelection = if (onPick == null) ::setSelection else null,
+                  onSetDateSelection = if (onPick == null) ::setDateSelection else null,
+                ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedAlbumPhotos; selectedId = it.id } }
+                else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
+                else EmptyState(stringResource(R.string.empty_photos), padding)
+              } else AlbumsGrid(
                 images = images,
                 padding = padding,
                 state = albumGridState,
@@ -1597,14 +1669,16 @@ private fun GalleryScaffold(
                     }
                     return@HorizontalPager
                 }
-                if (favoriteImages.isEmpty()) EmptyState(stringResource(R.string.empty_favorites), padding)
-                else PhotoGrid(
-                    images = favoriteImages,
+                if (displayedFavoritePhotos.isEmpty()) {
+                    if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
+                    else EmptyState(stringResource(R.string.empty_favorites), padding)
+                } else PhotoGrid(
+                    images = displayedFavoritePhotos,
                     padding = padding,
                     gridState = favoriteGridState,
                     cellSize = photoCellSize,
                     onCellSizeChange = onCellSizeChange,
-                    showTimeline = settings.showTimelineHeaders,
+                    showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
                     useRelativeDates = settings.useRelativeDates,
@@ -1618,7 +1692,7 @@ private fun GalleryScaffold(
                     onSetSelection = if (onPick == null) ::setSelection else null,
                     onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                 ) {
-                    if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = favoriteImages; selectedId = it.id }
+                    if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedFavoritePhotos; selectedId = it.id }
                 }
             }
           }
@@ -1766,7 +1840,8 @@ private fun GalleryScaffold(
         )
     }
 
-    BackHandler(enabled = selectedIds.isNotEmpty()) { clearSelection() }
+    BackHandler(enabled = isFileSearching) { isFileSearching = false; fileSearchQuery = "" }
+    BackHandler(enabled = !isFileSearching && selectedIds.isNotEmpty()) { clearSelection() }
     BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum != null) { selectedAlbumId = null }
     BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection != null) { librarySection = null }
     BackHandler(enabled = editorImage != null) { editorImage = null }

@@ -58,6 +58,10 @@ object ThumbnailCache {
         }
         return null
     }
+
+    fun clear() {
+        cache.evictAll()
+    }
 }
 
 fun loadThumbnailSync(context: Context, image: MediaImage, targetSizePx: Int = 320): Bitmap? =

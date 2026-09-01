@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">Przeniesiono %1$d elem. do: %2$s</string>
     <string name="toast_copied_to_album_single">Skopiowano element do: %1$s</string>
     <string name="toast_copied_to_album_multiple">Skopiowano %1$d elem. do: %2$s</string>
+    <string name="no_external_editor_found">Nie znaleziono zewnętrznej aplikacji do edycji</string>
+    <string name="search_files_placeholder">Szukaj zdjęć, filmów, formatów…</string>
+    <string name="empty_search_files">Brak plików pasujących do "%1$s"</string>
+    <string name="action_search">Szukaj</string>
 </resources>

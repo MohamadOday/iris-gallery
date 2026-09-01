@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">已移动 %1$d 个项目到 %2$s</string>
     <string name="toast_copied_to_album_single">已复制项目到 %1$s</string>
     <string name="toast_copied_to_album_multiple">已复制 %1$d 个项目到 %2$s</string>
+    <string name="no_external_editor_found">未找到外部编辑应用</string>
+    <string name="search_files_placeholder">搜索照片、视频、格式…</string>
+    <string name="empty_search_files">未找到匹配 "%1$s" 的文件</string>
+    <string name="action_search">搜索</string>
 </resources>

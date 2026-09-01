@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">%1$d öğe %2$s konumuna taşındı</string>
     <string name="toast_copied_to_album_single">Öğe %1$s konumuna kopyalandı</string>
     <string name="toast_copied_to_album_multiple">%1$d öğe %2$s konumuna kopyalandı</string>
+    <string name="no_external_editor_found">Harici düzenleme uygulaması bulunamadı</string>
+    <string name="search_files_placeholder">Fotoğraf, video, format ara…</string>
+    <string name="empty_search_files">"%1$s" ile eşleşen dosya yok</string>
+    <string name="action_search">Ara</string>
 </resources>

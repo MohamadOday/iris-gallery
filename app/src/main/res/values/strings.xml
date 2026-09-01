@@ -128,6 +128,9 @@
 
     <!-- Albums Screen -->
     <string name="search_albums_placeholder">Search %1$d albums…</string>
+    <string name="search_files_placeholder">Search photos, videos, formats…</string>
+    <string name="empty_search_files">No files matching \"%1$s\"</string>
+    <string name="action_search">Search</string>
     <string name="clear_search">Clear search</string>
     <string name="sort_recent">Recent</string>
     <string name="sort_name">Name</string>
@@ -388,6 +391,7 @@
     <string name="edit_video_with_external_title">Edit video with…</string>
     <string name="action_edit_builtin">Edit with Iris Editor</string>
     <string name="action_edit_external">Edit with external app</string>
+    <string name="no_external_editor_found">No external editing app found</string>
 
     <string name="settings_section_storage">Storage &amp; Reset</string>
     <string name="settings_clear_cache">Clear Image &amp; Video Thumbnail Cache</string>

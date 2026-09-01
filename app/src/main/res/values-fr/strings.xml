@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">%1$d éléments déplacés vers %2$s</string>
     <string name="toast_copied_to_album_single">Élément copié vers %1$s</string>
     <string name="toast_copied_to_album_multiple">%1$d éléments copiés vers %2$s</string>
+    <string name="no_external_editor_found">Aucune application d\'édition externe trouvée</string>
+    <string name="search_files_placeholder">Rechercher photos, vidéos, formats…</string>
+    <string name="empty_search_files">Aucun fichier correspondant à "%1$s"</string>
+    <string name="action_search">Rechercher</string>
 </resources>

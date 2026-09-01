@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">%1$d 個の項目を %2$s へ移動しました</string>
     <string name="toast_copied_to_album_single">%1$s へコピーしました</string>
     <string name="toast_copied_to_album_multiple">%1$d 個の項目を %2$s へコピーしました</string>
+    <string name="no_external_editor_found">外部編集アプリが見つかりません</string>
+    <string name="search_files_placeholder">写真、動画、フォーマットを検索…</string>
+    <string name="empty_search_files">"%1$s" に一致するファイルはありません</string>
+    <string name="action_search">検索</string>
 </resources>

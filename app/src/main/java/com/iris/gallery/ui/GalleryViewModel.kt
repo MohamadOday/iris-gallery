@@ -174,12 +174,21 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun refresh(showLoading: Boolean = true) {
         viewModelScope.launch {
+            if (showLoading) {
+                ThumbnailCache.clear()
+                runCatching {
+                    coil3.SingletonImageLoader.get(getApplication<Application>()).memoryCache?.clear()
+                }
+            }
             vaultRepository.loadVaultItems()
             val trashList = trashRepository.loadTrashItems()
             if (showLoading) {
                 _uiState.value = _uiState.value.copy(loading = true, trashed = trashList, error = null)
             }
             val media = runCatching { repository.loadImages() }
+            if (showLoading) {
+                delay(250)
+            }
             media.fold(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(images = it, loading = false, trashed = trashList, error = null)

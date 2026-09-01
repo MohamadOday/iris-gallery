@@ -495,4 +495,8 @@
     <string name="toast_moved_to_album_multiple">تم نقل %1$d عنصر إلى %2$s</string>
     <string name="toast_copied_to_album_single">تم نسخ العنصر إلى %1$s</string>
     <string name="toast_copied_to_album_multiple">تم نسخ %1$d عنصر إلى %2$s</string>
+    <string name="no_external_editor_found">لم يتم العثور على تطبيق تعديل خارجي</string>
+    <string name="search_files_placeholder">البحث في الصور، الفيديوهات، الصيغ…</string>
+    <string name="empty_search_files">لا توجد ملفات تطابق "%1$s"</string>
+    <string name="action_search">بحث</string>
 </resources>
