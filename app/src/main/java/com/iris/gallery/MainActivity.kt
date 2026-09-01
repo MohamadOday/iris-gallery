@@ -25,6 +25,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -2371,13 +2374,25 @@ private fun PhotoViewer(
         generateSequence(context) { (it as? ContextWrapper)?.baseContext }
             .filterIsInstance<Activity>().firstOrNull()
     }
-    DisposableEffect(activity) {
+    val window = activity?.window
+    val insetsController = remember(window) {
+        window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+    }
+    DisposableEffect(insetsController, activity) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            insetsController?.apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
     val handleClose = {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        insetsController?.apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            show(WindowInsetsCompat.Type.systemBars())
+        }
         onClose()
     }
     BackHandler(enabled = true) { handleClose() }
@@ -2387,6 +2402,18 @@ private fun PhotoViewer(
     var confirmDelete by remember { mutableStateOf(false) }
     var showEditChoiceSheet by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
+
+    LaunchedEffect(controlsVisible, insetsController) {
+        insetsController?.let { controller ->
+            if (controlsVisible) {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
     var zoomedImageId by remember { mutableStateOf<Long?>(null) }
     var viewerMenuExpanded by remember { mutableStateOf(false) }
     var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
