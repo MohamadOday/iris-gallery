@@ -204,6 +204,7 @@ import com.iris.gallery.data.ExifMetadata
 import com.iris.gallery.data.ExifEditRequest
 import com.iris.gallery.data.loadExifMetadata
 import com.iris.gallery.data.saveExifToMedia
+import com.iris.gallery.data.resolveMediaUri
 import com.iris.gallery.ui.ExifEditorSheet
 import com.iris.gallery.data.isRaw
 import com.iris.gallery.data.isGif
@@ -293,19 +294,28 @@ data class TrashFeedback(
 )
 
 class MainActivity : ComponentActivity() {
+    private val currentIntentState = mutableStateOf<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentIntentState.value = intent
         IrisPhotoWidget.refreshAll(this)
         enableEdgeToEdge()
-        val pickerMode = intent.action == Intent.ACTION_PICK || intent.action == Intent.ACTION_GET_CONTENT
-        val isViewAction = intent.action == Intent.ACTION_VIEW || intent.action == "com.android.camera.action.REVIEW"
-        val requestedType = intent.type
-        val viewUri = intent.data.takeIf { isViewAction }
         val settingsPreferences = SettingsPreferences(this)
         if (settingsPreferences.state.value.language.isNotEmpty()) {
             com.iris.gallery.ui.setAppLanguage(this, settingsPreferences.state.value.language)
         }
         setContent {
+            val activeIntent = currentIntentState.value ?: intent
+            val pickerMode = activeIntent.action == Intent.ACTION_PICK || activeIntent.action == Intent.ACTION_GET_CONTENT
+            val isViewAction = activeIntent.action == Intent.ACTION_VIEW ||
+                activeIntent.action == Intent.ACTION_EDIT ||
+                activeIntent.action == "com.android.camera.action.REVIEW"
+            val requestedType = activeIntent.type
+            val viewUri = (activeIntent.data ?: activeIntent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri)
+                .takeIf { isViewAction }
+            val isEditAction = activeIntent.action == Intent.ACTION_EDIT
+
             val settings by settingsPreferences.state.collectAsStateWithLifecycle()
             IrisTheme(
                 themeMode = settings.themeMode,
@@ -317,7 +327,8 @@ class MainActivity : ComponentActivity() {
                     settingsPreferences = settingsPreferences,
                     requestedType = requestedType.takeIf { pickerMode },
                     initialViewUri = viewUri,
-                    initialMemories = intent.getBooleanExtra("open_memories", false),
+                    initialEditMode = isEditAction,
+                    initialMemories = activeIntent.getBooleanExtra("open_memories", false),
                     onPick = if (pickerMode) {{ media ->
                         val result = Intent().apply {
                             data = media.uri
@@ -330,6 +341,12 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        currentIntentState.value = intent
     }
 }
 
@@ -359,6 +376,7 @@ private fun GalleryApp(
     settingsPreferences: SettingsPreferences,
     requestedType: String? = null,
     initialViewUri: Uri? = null,
+    initialEditMode: Boolean = false,
     initialMemories: Boolean = false,
     onPick: ((MediaImage) -> Unit)? = null,
     viewModel: GalleryViewModel = viewModel(),
@@ -452,6 +470,20 @@ private fun GalleryApp(
         }
     }
 
+    var standaloneExternalMedia by remember { mutableStateOf<MediaImage?>(null) }
+    var standaloneEditorMedia by remember { mutableStateOf<MediaImage?>(null) }
+
+    LaunchedEffect(initialViewUri, initialEditMode, permitted) {
+        if (!permitted && initialViewUri != null) {
+            val resolved = withContext(Dispatchers.IO) { resolveMediaUri(context, initialViewUri) }
+            if (initialEditMode) {
+                standaloneEditorMedia = resolved
+            } else {
+                standaloneExternalMedia = resolved
+            }
+        }
+    }
+
     LaunchedEffect(permitted) {
         if (permitted) {
             viewModel.refresh()
@@ -467,7 +499,43 @@ private fun GalleryApp(
     }
 
     if (!permitted) {
-        PermissionScreen { permissionLauncher.launch(permissions) }
+        if (standaloneEditorMedia != null) {
+            EditorScreen(standaloneEditorMedia!!, onClose = { standaloneEditorMedia = null }, onSaved = { saved ->
+                if (saved) standaloneEditorMedia = null
+                Toast.makeText(context, if (saved) context.getString(R.string.toast_edited_saved) else context.getString(R.string.toast_edited_failed), Toast.LENGTH_SHORT).show()
+            })
+        } else if (standaloneExternalMedia != null) {
+            PhotoViewer(
+                images = listOf(standaloneExternalMedia!!),
+                initialPage = 0,
+                favorites = emptySet(),
+                autoPlay = settings.autoPlayVideo,
+                loop = settings.loopVideo,
+                showViewerUserComments = settings.showViewerUserComments,
+                doubleTapZoomLevel = settings.doubleTapZoomLevel,
+                isLocked = false,
+                isInTrash = false,
+                confirmDeleteSetting = settings.confirmDelete,
+                preferredEditor = settings.preferredEditor,
+                onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
+                availableAlbums = emptyList(),
+                onToggleFavorite = { },
+                onClose = { standaloneExternalMedia = null },
+                onDelete = { item, _ ->
+                    standaloneExternalMedia = null
+                    runCatching { context.contentResolver.delete(item.uri, null, null) }
+                },
+                onRestore = { },
+                onEditMetadata = { _, _ -> },
+                onEdit = { standaloneEditorMedia = it; standaloneExternalMedia = null },
+                onLock = { },
+                onUnlock = { },
+                onMoveToAlbum = { _, _, _ -> },
+                onCopyToAlbum = { _, _, _ -> },
+            )
+        } else {
+            PermissionScreen { permissionLauncher.launch(permissions) }
+        }
     } else {
         AnimatedContent(
             targetState = (!settings.appLockEnabled || !settings.hasPin || isAppUnlocked),
@@ -758,6 +826,7 @@ private fun GalleryApp(
                         createAlbumDir = viewModel::createNewAlbumDirectory,
                         initialMemories = initialMemories,
                         initialViewUri = initialViewUri,
+                        initialEditMode = initialEditMode,
                     )
                 }
 
@@ -882,6 +951,7 @@ private fun GalleryScaffold(
     onCancelDuplicateScan: () -> Unit,
     initialMemories: Boolean,
     initialViewUri: Uri? = null,
+    initialEditMode: Boolean = false,
 ) {
     val context = LocalContext.current
     val tabPagerState = rememberPagerState(
@@ -891,17 +961,42 @@ private fun GalleryScaffold(
     val tabScope = rememberCoroutineScope()
     val destination = tabPagerState.currentPage
     var selectedId by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(images, initialViewUri) {
-        if (initialViewUri != null && selectedId == null && images.isNotEmpty()) {
-            images.firstOrNull { it.uri == initialViewUri || it.uri.lastPathSegment == initialViewUri.lastPathSegment }?.let {
-                selectedId = it.id
-            }
-        }
-    }
+    var externalMedia by remember { mutableStateOf<MediaImage?>(null) }
     var viewerImages by remember { mutableStateOf<List<MediaImage>?>(null) }
     var selectedAlbumId by remember { mutableStateOf<Long?>(null) }
     var librarySection by remember { mutableStateOf<String?>(if (initialMemories) "memories" else null) }
     var editorImage by remember { mutableStateOf<MediaImage?>(null) }
+
+    LaunchedEffect(images, initialViewUri, initialEditMode) {
+        if (initialViewUri != null) {
+            val resolved = withContext(Dispatchers.IO) { resolveMediaUri(context, initialViewUri) }
+            val matched = images.firstOrNull {
+                it.uri == initialViewUri ||
+                (resolved.path.isNotBlank() && it.path == resolved.path) ||
+                it.uri.lastPathSegment == initialViewUri.lastPathSegment
+            }
+            if (matched != null) {
+                if (initialEditMode) {
+                    editorImage = matched
+                    selectedId = null
+                    externalMedia = null
+                } else {
+                    viewerImages = null
+                    selectedId = matched.id
+                    externalMedia = null
+                }
+            } else {
+                if (initialEditMode) {
+                    editorImage = resolved
+                    selectedId = null
+                    externalMedia = null
+                } else {
+                    externalMedia = resolved
+                    selectedId = null
+                }
+            }
+        }
+    }
     var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
     var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
     var compactGrid by remember { mutableStateOf(settings.photoGridSize < 95f) }
@@ -1600,6 +1695,40 @@ private fun GalleryScaffold(
     BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum != null) { selectedAlbumId = null }
     BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection != null) { librarySection = null }
     BackHandler(enabled = editorImage != null) { editorImage = null }
+    BackHandler(enabled = externalMedia != null) { externalMedia = null }
+
+    externalMedia?.let { media ->
+        PhotoViewer(
+            images = listOf(media),
+            initialPage = 0,
+            favorites = favorites,
+            autoPlay = settings.autoPlayVideo,
+            loop = settings.loopVideo,
+            showViewerUserComments = settings.showViewerUserComments,
+            doubleTapZoomLevel = settings.doubleTapZoomLevel,
+            isLocked = false,
+            isInTrash = false,
+            confirmDeleteSetting = settings.confirmDelete,
+            preferredEditor = settings.preferredEditor,
+            onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
+            availableAlbums = availableAlbums,
+            onToggleFavorite = { },
+            onClose = { externalMedia = null },
+            onDelete = { item, _ ->
+                externalMedia = null
+                runCatching { context.contentResolver.delete(item.uri, null, null) }
+            },
+            onRestore = { },
+            onEditMetadata = onEditMetadata,
+            onEdit = { editorImage = it; externalMedia = null },
+            onLock = { },
+            onUnlock = { },
+            onMoveToAlbum = { _, _, _ -> },
+            onCopyToAlbum = { _, _, _ -> },
+            getAlbumDir = getAlbumDir,
+            createAlbumDir = createAlbumDir,
+        )
+    }
 
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
@@ -2698,13 +2827,15 @@ private fun PhotoViewer(
                     }
                     context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
                 }
-                ViewerIconButton(
-                    icon = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    label = if (isFav) stringResource(R.string.action_favorited) else stringResource(R.string.action_favorite),
-                    tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    scaleEffect = favScale,
-                    modifier = Modifier.weight(1f),
-                ) { onToggleFavorite(current.id) }
+                if (current.id > 0) {
+                    ViewerIconButton(
+                        icon = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        label = if (isFav) stringResource(R.string.action_favorited) else stringResource(R.string.action_favorite),
+                        tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        scaleEffect = favScale,
+                        modifier = Modifier.weight(1f),
+                    ) { onToggleFavorite(current.id) }
+                }
                 ViewerIconButton(
                     icon = Icons.Outlined.Edit,
                     label = stringResource(R.string.action_edit),
@@ -2716,18 +2847,20 @@ private fun PhotoViewer(
                         handleEditClick(current)
                     }
                 }
-                if (isLocked) {
-                    ViewerIconButton(
-                        icon = Icons.Outlined.LockOpen,
-                        label = stringResource(R.string.action_unlock),
-                        modifier = Modifier.weight(1f),
-                    ) { onUnlock(current) }
-                } else {
-                    ViewerIconButton(
-                        icon = Icons.Outlined.Lock,
-                        label = stringResource(R.string.action_lock),
-                        modifier = Modifier.weight(1f),
-                    ) { onLock(current) }
+                if (current.id > 0) {
+                    if (isLocked) {
+                        ViewerIconButton(
+                            icon = Icons.Outlined.LockOpen,
+                            label = stringResource(R.string.action_unlock),
+                            modifier = Modifier.weight(1f),
+                        ) { onUnlock(current) }
+                    } else {
+                        ViewerIconButton(
+                            icon = Icons.Outlined.Lock,
+                            label = stringResource(R.string.action_lock),
+                            modifier = Modifier.weight(1f),
+                        ) { onLock(current) }
+                    }
                 }
                 ViewerIconButton(
                     icon = Icons.Outlined.DeleteOutline,

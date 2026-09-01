@@ -1,6 +1,11 @@
 package com.iris.gallery.data
 
+import android.content.ContentUris
+import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
+import android.provider.MediaStore
+import java.io.File
 
 data class MediaImage(
     val id: Long,
@@ -370,5 +375,276 @@ fun saveExifToMedia(context: android.content.Context, uri: Uri, path: String, re
     }
     return saved
 }
+
+private fun extractStoragePath(raw: String): String? {
+    if (raw.isBlank()) return null
+    val emulatedIdx = raw.indexOf("/storage/emulated/")
+    if (emulatedIdx != -1) {
+        return raw.substring(emulatedIdx).substringBefore('?').substringBefore('#')
+    }
+    val storageIdx = raw.indexOf("/storage/")
+    if (storageIdx != -1) {
+        return raw.substring(storageIdx).substringBefore('?').substringBefore('#')
+    }
+    val sdcardIdx = raw.indexOf("/sdcard/")
+    if (sdcardIdx != -1) {
+        val rel = raw.substring(sdcardIdx + "/sdcard/".length).substringBefore('?').substringBefore('#')
+        return "/storage/emulated/0/$rel"
+    }
+    return null
+}
+
+private fun queryDataColumn(context: Context, uri: Uri): String? {
+    return runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(
+                MediaStore.MediaColumns.DATA,
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                MediaStore.MediaColumns.DISPLAY_NAME,
+            ),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val dataIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                if (dataIdx != -1) {
+                    val data = cursor.getString(dataIdx)
+                    if (!data.isNullOrBlank() && File(data).exists()) return data
+                }
+                val relIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                if (relIdx != -1 && nameIdx != -1) {
+                    val relPath = cursor.getString(relIdx).orEmpty()
+                    val dispName = cursor.getString(nameIdx).orEmpty()
+                    if (relPath.isNotBlank() || dispName.isNotBlank()) {
+                        return "/storage/emulated/0/${relPath.trimStart('/')}$dispName"
+                    }
+                }
+                if (dataIdx != -1) {
+                    val data = cursor.getString(dataIdx)
+                    if (!data.isNullOrBlank()) return data
+                }
+            }
+            null
+        }
+    }.getOrNull()
+}
+
+fun resolvePhysicalPath(context: Context, uri: Uri): String? {
+    val scheme = uri.scheme
+    if (scheme.equals("file", ignoreCase = true)) {
+        return Uri.decode(uri.path)
+    }
+    if (!scheme.equals("content", ignoreCase = true)) {
+        return null
+    }
+
+    val uriString = uri.toString()
+    val decodedUriString = runCatching { Uri.decode(uriString) }.getOrDefault(uriString)
+    val pathString = uri.path.orEmpty()
+    val decodedPath = runCatching { Uri.decode(pathString) }.getOrDefault(pathString)
+
+    // 1. Direct scan for embedded storage paths (MT Manager, Telegram, etc.)
+    extractStoragePath(decodedUriString)?.let { candidate ->
+        if (File(candidate).exists()) return candidate
+    }
+    extractStoragePath(decodedPath)?.let { candidate ->
+        if (File(candidate).exists()) return candidate
+    }
+
+    val authority = uri.authority.orEmpty()
+
+    // 2. Storage Access Framework (SAF) Documents Provider
+    if (DocumentsContract.isDocumentUri(context, uri) || authority.endsWith(".documents")) {
+        runCatching {
+            val docId = DocumentsContract.getDocumentId(uri)
+            when (authority) {
+                "com.android.externalstorage.documents" -> {
+                    val split = docId.split(":")
+                    val type = split.getOrNull(0).orEmpty()
+                    val relPath = if (split.size > 1) split[1].removePrefix("/") else ""
+                    val path = if (type.equals("primary", ignoreCase = true)) {
+                        "/storage/emulated/0/$relPath"
+                    } else {
+                        "/storage/$type/$relPath"
+                    }
+                    if (File(path).exists() || path.isNotBlank()) return path
+                }
+                "com.android.providers.downloads.documents" -> {
+                    if (docId.startsWith("raw:")) {
+                        val path = docId.removePrefix("raw:")
+                        if (File(path).exists() || path.startsWith("/storage/")) return path
+                    }
+                    val id = docId.removePrefix("msf:")
+                    if (id.toLongOrNull() != null) {
+                        val downloadUri = ContentUris.withAppendedId(
+                            Uri.parse("content://downloads/public_downloads"),
+                            id.toLong()
+                        )
+                        queryDataColumn(context, downloadUri)?.let { return it }
+                    }
+                }
+                "com.android.providers.media.documents" -> {
+                    val split = docId.split(":")
+                    val type = split.getOrNull(0).orEmpty()
+                    val id = split.getOrNull(1)?.toLongOrNull()
+                    if (id != null) {
+                        val mediaUri = when (type) {
+                            "image" -> ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                            "video" -> ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                            "audio" -> ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                            else -> ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
+                        }
+                        queryDataColumn(context, mediaUri)?.let { return it }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. MediaStore content URIs or any ContentProvider supporting _data / RELATIVE_PATH
+    queryDataColumn(context, uri)?.let { return it }
+
+    // 4. FileProvider known path aliases
+    if (decodedPath.contains("/external_files/")) {
+        val rel = decodedPath.substringAfter("/external_files/").removePrefix("/")
+        val path = "/storage/emulated/0/$rel"
+        if (File(path).exists() || path.isNotBlank()) return path
+    }
+    if (decodedPath.contains("/root_files/") || decodedPath.contains("/root/")) {
+        val rel = if (decodedPath.contains("/root_files/")) decodedPath.substringAfter("/root_files/")
+                  else decodedPath.substringAfter("/root/")
+        val path = "/${rel.removePrefix("/")}"
+        if (File(path).exists()) return path
+    }
+    if (decodedPath.contains("/internal_files/") || decodedPath.contains("/files/")) {
+        val rel = if (decodedPath.contains("/internal_files/")) decodedPath.substringAfter("/internal_files/")
+                  else decodedPath.substringAfter("/files/")
+        val path = "${context.filesDir.absolutePath}/${rel.removePrefix("/")}"
+        if (File(path).exists()) return path
+    }
+
+    // 5. Fallback extractStoragePath without requiring File.exists()
+    extractStoragePath(decodedUriString)?.let { return it }
+    extractStoragePath(decodedPath)?.let { return it }
+
+    return null
+}
+
+fun resolveMediaUri(context: Context, uri: Uri): MediaImage {
+    val cr = context.contentResolver
+    val physicalPath = resolvePhysicalPath(context, uri)
+    val physicalFile = physicalPath?.let { File(it) }?.takeIf { it.exists() }
+
+    var mimeType = cr.getType(uri)
+    if (mimeType.isNullOrBlank()) {
+        val extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(uri.toString())
+            .ifBlank { uri.path.orEmpty().substringAfterLast('.', "") }
+            .ifBlank { physicalPath.orEmpty().substringAfterLast('.', "") }
+        if (extension.isNotBlank()) {
+            mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+        }
+    }
+    val resolvedMime = mimeType.orEmpty().ifBlank {
+        val path = physicalPath ?: uri.path.orEmpty()
+        if (path.endsWith(".mp4", ignoreCase = true) ||
+            path.endsWith(".mkv", ignoreCase = true) ||
+            path.endsWith(".webm", ignoreCase = true) ||
+            path.endsWith(".mov", ignoreCase = true) ||
+            path.endsWith(".3gp", ignoreCase = true)
+        ) "video/mp4" else "image/jpeg"
+    }
+    val isVideo = resolvedMime.startsWith("video/", ignoreCase = true)
+
+    var name = ""
+    var size = 0L
+
+    runCatching {
+        cr.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (nameIdx != -1) name = cursor.getString(nameIdx).orEmpty()
+                if (sizeIdx != -1) size = cursor.getLong(sizeIdx)
+            }
+        }
+    }
+
+    if (name.isBlank()) {
+        name = physicalFile?.name
+            ?: physicalPath?.substringAfterLast('/')
+            ?: if (uri.scheme == "file") File(uri.path.orEmpty()).name
+            else uri.lastPathSegment?.substringAfterLast('/') ?: "Media"
+    }
+    if (size == 0L) {
+        size = physicalFile?.length()
+            ?: runCatching { cr.openFileDescriptor(uri, "r")?.use { it.statSize } ?: 0L }.getOrDefault(0L)
+    }
+
+    var width = 0
+    var height = 0
+    var orientation = 0
+    var durationMs = 0L
+    var dateTaken = physicalFile?.lastModified()?.takeIf { it > 0L } ?: System.currentTimeMillis()
+
+    if (isVideo) {
+        val retriever = android.media.MediaMetadataRetriever()
+        runCatching {
+            retriever.setDataSource(context, uri)
+            width = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            height = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            orientation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            durationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        }
+        runCatching { retriever.release() }
+    } else {
+        runCatching {
+            cr.openInputStream(uri)?.use { stream ->
+                val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeStream(stream, null, opts)
+                width = opts.outWidth
+                height = opts.outHeight
+            }
+        }
+        runCatching {
+            cr.openInputStream(uri)?.use { stream ->
+                val exif = androidx.exifinterface.media.ExifInterface(stream)
+                orientation = exif.rotationDegrees
+                val dateStr = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL)
+                    ?: exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+                if (!dateStr.isNullOrBlank()) {
+                    val sdf = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US)
+                    sdf.parse(dateStr)?.time?.let { dateTaken = it }
+                }
+            }
+        }
+    }
+
+    val bucketName = physicalFile?.parentFile?.name
+        ?: physicalPath?.substringBeforeLast('/', "")?.substringAfterLast('/')?.ifBlank { null }
+        ?: "External"
+
+    val uniqueId = -kotlin.math.abs(uri.hashCode().toLong().coerceAtLeast(1L))
+
+    return MediaImage(
+        id = uniqueId,
+        uri = uri,
+        name = name.ifBlank { if (isVideo) "Video" else "Photo" },
+        dateTaken = dateTaken,
+        width = width,
+        height = height,
+        path = physicalPath ?: (if (uri.scheme == "file") uri.path.orEmpty() else uri.toString()),
+        bucketId = -1L,
+        bucketName = bucketName,
+        isVideo = isVideo,
+        durationMs = durationMs,
+        mimeType = resolvedMime,
+        sizeBytes = size,
+        orientation = orientation,
+    )
+}
+
 
 
