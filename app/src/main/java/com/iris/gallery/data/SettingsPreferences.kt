@@ -5,12 +5,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+import com.iris.gallery.R
+
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_AMBER, ROSE }
 enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCLE(18) }
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
 enum class StartupTab(val pageIndex: Int) { PHOTOS(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
 enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
+
+enum class TimelineDateFormat {
+    SYSTEM_DEFAULT,
+    DAY_MONTH_YEAR,
+    MONTH_DAY_YEAR,
+    YEAR_MONTH_DAY,
+    NUMERIC_DMY,
+    NUMERIC_MDY,
+    NUMERIC_YMD,
+    CUSTOM;
+
+    fun getDisplayNameRes(): Int = when (this) {
+        SYSTEM_DEFAULT -> R.string.settings_date_format_system
+        DAY_MONTH_YEAR -> R.string.settings_date_format_dmy
+        MONTH_DAY_YEAR -> R.string.settings_date_format_mdy
+        YEAR_MONTH_DAY -> R.string.settings_date_format_ymd
+        NUMERIC_DMY -> R.string.settings_date_format_num_dmy
+        NUMERIC_MDY -> R.string.settings_date_format_num_mdy
+        NUMERIC_YMD -> R.string.settings_date_format_num_ymd
+        CUSTOM -> R.string.settings_date_format_custom
+    }
+}
 
 data class AppLanguage(
     val code: String, // "" for system, or "en", "ar", "es", etc.
@@ -50,6 +74,10 @@ data class SettingsState(
     val photoGridSize: Float = 105f,
     val albumGridSize: Float = 156f,
     val showTimelineHeaders: Boolean = true,
+    val timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
+    val customTimelineDateFormat: String = "d. MMMM yyyy",
+    val useRelativeDates: Boolean = true,
+    val showDayOfWeek: Boolean = false,
     val showVideoDurationBadge: Boolean = true,
     val showMediaFormatBadge: Boolean = true,
     val showAlbumCount: Boolean = true,
@@ -87,6 +115,10 @@ class SettingsPreferences(context: Context) {
     fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
     fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
+    fun setTimelineDateFormat(format: TimelineDateFormat) = update { copy(timelineDateFormat = format) }
+    fun setCustomTimelineDateFormat(pattern: String) = update { copy(customTimelineDateFormat = pattern) }
+    fun setUseRelativeDates(use: Boolean) = update { copy(useRelativeDates = use) }
+    fun setShowDayOfWeek(show: Boolean) = update { copy(showDayOfWeek = show) }
     fun setShowVideoDurationBadge(show: Boolean) = update { copy(showVideoDurationBadge = show) }
     fun setShowMediaFormatBadge(show: Boolean) = update { copy(showMediaFormatBadge = show) }
     fun setShowAlbumCount(show: Boolean) = update { copy(showAlbumCount = show) }
@@ -141,6 +173,7 @@ class SettingsPreferences(context: Context) {
         val cornerStr = prefs.getString("corner_style", null)
         val spacingStr = prefs.getString("grid_spacing", null)
         val startupStr = prefs.getString("startup_tab", null)
+        val dateFormatStr = prefs.getString("timeline_date_format", null)
 
         return SettingsState(
             themeMode = runCatching { ThemeMode.valueOf(themeModeStr.orEmpty()) }.getOrDefault(ThemeMode.SYSTEM),
@@ -151,6 +184,10 @@ class SettingsPreferences(context: Context) {
             photoGridSize = prefs.getFloat("photo_grid_size", 105f),
             albumGridSize = prefs.getFloat("album_grid_size", 156f),
             showTimelineHeaders = prefs.getBoolean("show_timeline_headers", true),
+            timelineDateFormat = runCatching { TimelineDateFormat.valueOf(dateFormatStr.orEmpty()) }.getOrDefault(TimelineDateFormat.SYSTEM_DEFAULT),
+            customTimelineDateFormat = prefs.getString("custom_timeline_date_format", "d. MMMM yyyy").orEmpty().ifBlank { "d. MMMM yyyy" },
+            useRelativeDates = prefs.getBoolean("use_relative_dates", true),
+            showDayOfWeek = prefs.getBoolean("show_day_of_week", false),
             showVideoDurationBadge = prefs.getBoolean("show_video_duration_badge", true),
             showMediaFormatBadge = prefs.getBoolean("show_media_format_badge", true),
             showAlbumCount = prefs.getBoolean("show_album_count", true),
@@ -182,6 +219,10 @@ class SettingsPreferences(context: Context) {
             .putFloat("photo_grid_size", state.photoGridSize)
             .putFloat("album_grid_size", state.albumGridSize)
             .putBoolean("show_timeline_headers", state.showTimelineHeaders)
+            .putString("timeline_date_format", state.timelineDateFormat.name)
+            .putString("custom_timeline_date_format", state.customTimelineDateFormat)
+            .putBoolean("use_relative_dates", state.useRelativeDates)
+            .putBoolean("show_day_of_week", state.showDayOfWeek)
             .putBoolean("show_video_duration_badge", state.showVideoDurationBadge)
             .putBoolean("show_media_format_badge", state.showMediaFormatBadge)
             .putBoolean("show_album_count", state.showAlbumCount)

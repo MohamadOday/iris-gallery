@@ -236,6 +236,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.iris.gallery.ui.theme.IrisTheme
+import com.iris.gallery.data.TimelineDateFormat
+import com.iris.gallery.ui.rememberAppLocale
+import com.iris.gallery.ui.getTimelineFormatter
+import com.iris.gallery.ui.formatTimelineDate
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -1125,6 +1129,10 @@ private fun GalleryScaffold(
             0 -> if (images.isNotEmpty()) PhotoGrid(
               images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
               showTimeline = settings.showTimelineHeaders,
+              timelineDateFormat = settings.timelineDateFormat,
+              customTimelineDateFormat = settings.customTimelineDateFormat,
+              useRelativeDates = settings.useRelativeDates,
+              showDayOfWeek = settings.showDayOfWeek,
               cornerStyle = settings.cornerStyle,
               gridSpacing = settings.gridSpacing,
               showVideoDuration = settings.showVideoDurationBadge,
@@ -1134,10 +1142,14 @@ private fun GalleryScaffold(
               onSetSelection = if (onPick == null) ::setSelection else null,
               onSetDateSelection = if (onPick == null) ::setDateSelection else null,
             ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = images; selectedId = it.id } }
-            else EmptyState("No photos found", padding)
+            else EmptyState(stringResource(R.string.empty_photos), padding)
             1 -> if (selectedAlbum != null) PhotoGrid(
               selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
               showTimeline = settings.showTimelineHeaders,
+              timelineDateFormat = settings.timelineDateFormat,
+              customTimelineDateFormat = settings.customTimelineDateFormat,
+              useRelativeDates = settings.useRelativeDates,
+              showDayOfWeek = settings.showDayOfWeek,
               cornerStyle = settings.cornerStyle,
               gridSpacing = settings.gridSpacing,
               showVideoDuration = settings.showVideoDurationBadge,
@@ -1166,7 +1178,7 @@ private fun GalleryScaffold(
             else -> {
                 if (page == 3) {
                     when (librarySection) {
-                        "trash" -> if (trashed.isEmpty()) EmptyState("Trash is empty", padding) else PhotoGrid(
+                        "trash" -> if (trashed.isEmpty()) EmptyState(stringResource(R.string.empty_trash), padding) else PhotoGrid(
                             images = trashed,
                             padding = padding,
                             gridState = libraryGridState,
@@ -1188,10 +1200,10 @@ private fun GalleryScaffold(
                         }
                         "locked" -> if (!lockedAuthorized) {
                             LaunchedEffect(Unit) { onRequestUnlock() }
-                            EmptyState("Unlock to view private items", padding)
+                            EmptyState(stringResource(R.string.empty_locked_locked_state), padding)
                         } else {
                             val locked = lockedMedia
-                            if (locked.isEmpty()) EmptyState("No locked items", padding) else PhotoGrid(
+                            if (locked.isEmpty()) EmptyState(stringResource(R.string.empty_locked), padding) else PhotoGrid(
                                 images = locked,
                                 padding = padding,
                                 gridState = libraryGridState,
@@ -1218,8 +1230,12 @@ private fun GalleryScaffold(
                                 val date = Instant.ofEpochMilli(it.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
                                 date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth
                             } }
-                            if (memories.isEmpty()) EmptyState("No memories for today yet", padding) else PhotoGrid(
+                            if (memories.isEmpty()) EmptyState(stringResource(R.string.empty_memories), padding) else PhotoGrid(
                                 memories, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+                                timelineDateFormat = settings.timelineDateFormat,
+                                customTimelineDateFormat = settings.customTimelineDateFormat,
+                                useRelativeDates = settings.useRelativeDates,
+                                showDayOfWeek = settings.showDayOfWeek,
                                 cornerStyle = settings.cornerStyle,
                                 gridSpacing = settings.gridSpacing,
                                 showVideoDuration = settings.showVideoDurationBadge,
@@ -1347,6 +1363,10 @@ private fun GalleryScaffold(
                     cellSize = photoCellSize,
                     onCellSizeChange = onCellSizeChange,
                     showTimeline = settings.showTimelineHeaders,
+                    timelineDateFormat = settings.timelineDateFormat,
+                    customTimelineDateFormat = settings.customTimelineDateFormat,
+                    useRelativeDates = settings.useRelativeDates,
+                    showDayOfWeek = settings.showDayOfWeek,
                     cornerStyle = settings.cornerStyle,
                     gridSpacing = settings.gridSpacing,
                     showVideoDuration = settings.showVideoDurationBadge,
@@ -1841,6 +1861,10 @@ private fun PhotoGrid(
     cellSize: androidx.compose.ui.unit.Dp,
     onCellSizeChange: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
     showTimeline: Boolean = false,
+    timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
+    customTimelineDateFormat: String = "d. MMMM yyyy",
+    useRelativeDates: Boolean = true,
+    showDayOfWeek: Boolean = false,
     cornerStyle: CornerStyle = CornerStyle.ROUNDED,
     gridSpacing: GridSpacing = GridSpacing.STANDARD,
     showVideoDuration: Boolean = true,
@@ -1851,20 +1875,34 @@ private fun PhotoGrid(
     onSetDateSelection: ((List<Long>, Boolean) -> Unit)? = null,
     onOpen: (MediaImage) -> Unit,
 ) {
-    val groups = remember(images, showTimeline) {
+    val currentLocale = rememberAppLocale()
+    val todayString = stringResource(R.string.timeline_today)
+    val yesterdayString = stringResource(R.string.timeline_yesterday)
+
+    val sameYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, customTimelineDateFormat) {
+        getTimelineFormatter(timelineDateFormat, isSameYear = true, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat)
+    }
+    val otherYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, customTimelineDateFormat) {
+        getTimelineFormatter(timelineDateFormat, isSameYear = false, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat)
+    }
+
+    val groups = remember(images, showTimeline, timelineDateFormat, customTimelineDateFormat, useRelativeDates, showDayOfWeek, currentLocale, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
         if (showTimeline) {
             val zone = ZoneId.systemDefault()
-            val today = LocalDate.now(zone)
-            val yesterday = today.minusDays(1)
+            val today = LocalDate.now()
             val dayCache = HashMap<LocalDate, String>()
             images.groupBy { image ->
                 val date = Instant.ofEpochMilli(image.dateTaken).atZone(zone).toLocalDate()
                 dayCache.getOrPut(date) {
-                    when (date) {
-                        today -> "Today"
-                        yesterday -> "Yesterday"
-                        else -> date.format(if (date.year == today.year) timelinePatternSameYear else timelinePatternOtherYear)
-                    }
+                    formatTimelineDate(
+                        date = date,
+                        today = today,
+                        sameYearFormatter = sameYearFormatter,
+                        otherYearFormatter = otherYearFormatter,
+                        useRelativeDates = useRelativeDates,
+                        todayString = todayString,
+                        yesterdayString = yesterdayString,
+                    )
                 }
             }.entries.toList()
         } else listOf("" to images).map { object : Map.Entry<String, List<MediaImage>> {
@@ -1916,6 +1954,23 @@ private fun PhotoGrid(
     val currentSetSelection by rememberUpdatedState(onSetSelection)
     val currentCellSize by rememberUpdatedState(cellSize)
     val currentOnCellSizeChange by rememberUpdatedState(onCellSizeChange)
+    val formatTimelineLabel: (Long) -> String = remember(currentLocale, timelineDateFormat, customTimelineDateFormat, showDayOfWeek, useRelativeDates, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now()
+        val labelFn: (Long) -> String = { timestamp ->
+            val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
+            formatTimelineDate(
+                date = date,
+                today = today,
+                sameYearFormatter = sameYearFormatter,
+                otherYearFormatter = otherYearFormatter,
+                useRelativeDates = useRelativeDates,
+                todayString = todayString,
+                yesterdayString = yesterdayString,
+            )
+        }
+        labelFn
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -2045,7 +2100,7 @@ private fun PhotoGrid(
                         Text(group.key, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         AnimatedVisibility(selectedIds.isNotEmpty()) {
-                            Text(if (wholeDateSelected) "Deselect date" else "Select date",
+                            Text(if (wholeDateSelected) stringResource(R.string.action_deselect_date) else stringResource(R.string.action_select_date),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary)
                         }
@@ -2123,29 +2178,13 @@ private fun PhotoGrid(
                 exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = .9f)) {
                 Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 8.dp,
                     color = MaterialTheme.colorScheme.primaryContainer) {
-                    Text(visibleDate?.let { timelineLabel(it.dateTaken) } ?: "",
+                    Text(visibleDate?.let { formatTimelineLabel(it.dateTaken) } ?: "",
                         Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
-    }
-}
-
-private val timelinePatternSameYear = DateTimeFormatter.ofPattern("MMMM d", Locale.getDefault())
-private val timelinePatternOtherYear = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())
-
-private fun timelineLabel(
-    timestamp: Long,
-    zone: ZoneId = ZoneId.systemDefault(),
-    today: LocalDate = LocalDate.now(zone),
-): String {
-    val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
-    return when (date) {
-        today -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else -> date.format(if (date.year == today.year) timelinePatternSameYear else timelinePatternOtherYear)
     }
 }
 
@@ -2983,10 +3022,14 @@ private fun PhotoDetailsSheet(
                 }
             }
 
+            val currentLocale = rememberAppLocale()
             if (image.title.isNotBlank()) DetailBlock(stringResource(R.string.details_title_field), image.title)
             exif?.artist?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_artist), it) }
             exif?.copyright?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_copyright), it) }
-            DetailItem(stringResource(R.string.details_captured), DateFormat.getDateTimeInstance().format(Date(image.dateTaken)))
+            val formattedDate = remember(image.dateTaken, currentLocale) {
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, currentLocale).format(Date(image.dateTaken))
+            }
+            DetailItem(stringResource(R.string.details_captured), formattedDate)
             val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
             val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
             DetailItem(stringResource(R.string.details_resolution), resText)

@@ -97,6 +97,7 @@ import com.iris.gallery.data.SettingsState
 import com.iris.gallery.data.StartupTab
 import com.iris.gallery.data.SUPPORTED_LANGUAGES
 import com.iris.gallery.data.ThemeMode
+import com.iris.gallery.data.TimelineDateFormat
 import com.iris.gallery.ui.LanguageSelectionBottomSheet
 import com.iris.gallery.ui.setAppLanguage
 import kotlin.math.roundToInt
@@ -116,6 +117,7 @@ fun SettingsScreen(
     var showChangePinDialog by remember { mutableStateOf(false) }
     var showDisablePinDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showDateFormatDialog by remember { mutableStateOf(false) }
 
     fun clearCache() {
         runCatching {
@@ -463,24 +465,21 @@ fun SettingsScreen(
 
                         // Compact Scaled Live Photos Grid Mockup
                         Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(108.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                             shape = RoundedCornerShape(14.dp),
                         ) {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
                             ) {
-                                for (row in 0 until 2) {
+                                val previewRows = if (photoColumns >= 4) 2 else 1
+                                for (row in 0 until previewRows) {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f),
+                                        modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
                                     ) {
                                         for (col in 0 until photoColumns) {
@@ -489,7 +488,7 @@ fun SettingsScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .weight(1f)
-                                                    .fillMaxHeight()
+                                                    .aspectRatio(1f)
                                                     .clip(RoundedCornerShape(settings.cornerStyle.dp.dp))
                                                     .background(Brush.linearGradient(gradient)),
                                                 contentAlignment = Alignment.Center,
@@ -498,7 +497,7 @@ fun SettingsScreen(
                                                     icon,
                                                     contentDescription = null,
                                                     tint = tint.copy(alpha = 0.45f),
-                                                    modifier = Modifier.size(15.dp),
+                                                    modifier = Modifier.size(if (photoColumns >= 5) 12.dp else 16.dp),
                                                 )
                                                 if (index == 0 && settings.showVideoDurationBadge) {
                                                     Surface(
@@ -727,6 +726,63 @@ fun SettingsScreen(
                         checked = settings.showTimelineHeaders,
                         onCheckedChange = { preferences.setShowTimelineHeaders(it) }
                     )
+
+                    if (settings.showTimelineHeaders) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showDateFormatDialog = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    stringResource(R.string.settings_date_format_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    if (settings.timelineDateFormat == TimelineDateFormat.CUSTOM) {
+                                        "${stringResource(R.string.settings_date_format_custom)} (${settings.customTimelineDateFormat})"
+                                    } else {
+                                        stringResource(settings.timelineDateFormat.getDisplayNameRes())
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.settings_relative_dates_title),
+                            subtitle = stringResource(R.string.settings_relative_dates_desc),
+                            checked = settings.useRelativeDates,
+                            onCheckedChange = { preferences.setUseRelativeDates(it) }
+                        )
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.settings_show_day_of_week_title),
+                            subtitle = stringResource(R.string.settings_show_day_of_week_desc),
+                            checked = settings.showDayOfWeek,
+                            onCheckedChange = { preferences.setShowDayOfWeek(it) }
+                        )
+                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
@@ -1172,6 +1228,21 @@ fun SettingsScreen(
             onLanguageSelected = { code ->
                 preferences.setLanguage(code)
                 setAppLanguage(context, code)
+            }
+        )
+    }
+
+    if (showDateFormatDialog) {
+        DateFormatBottomSheet(
+            currentFormat = settings.timelineDateFormat,
+            customPattern = settings.customTimelineDateFormat,
+            showDayOfWeek = settings.showDayOfWeek,
+            onDismiss = { showDateFormatDialog = false },
+            onFormatSelected = { format ->
+                preferences.setTimelineDateFormat(format)
+            },
+            onCustomPatternChange = { pattern ->
+                preferences.setCustomTimelineDateFormat(pattern)
             }
         )
     }
