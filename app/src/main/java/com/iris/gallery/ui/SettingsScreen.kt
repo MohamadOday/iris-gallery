@@ -276,22 +276,23 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         listOf(
-                            AccentColor.IRIS to Color(0xFF8A4AF3),
-                            AccentColor.LAPIS_MESOPOTAMIA to Color(0xFF1976D2),
-                            AccentColor.EMERALD to Color(0xFF00897B),
-                            AccentColor.ISHTAR_AMBER to Color(0xFFF57C00),
-                            AccentColor.ROSE to Color(0xFFD81B60),
-                        ).forEach { (accent, color) ->
+                            AccentColor.IRIS to Brush.linearGradient(listOf(Color(0xFF8A4AF3), Color(0xFF6C5CE7))),
+                            AccentColor.LAPIS_MESOPOTAMIA to Brush.linearGradient(listOf(Color(0xFF1976D2), Color(0xFF0288D1))),
+                            AccentColor.EMERALD to Brush.linearGradient(listOf(Color(0xFF00897B), Color(0xFF26A69A))),
+                            AccentColor.ISHTAR_AMBER to Brush.linearGradient(listOf(Color(0xFFF57C00), Color(0xFFFFA726))),
+                            AccentColor.ROSE to Brush.linearGradient(listOf(Color(0xFFD81B60), Color(0xFFEC407A))),
+                            AccentColor.MONOCHROME to Brush.linearGradient(listOf(Color(0xFF18181B), Color(0xFFA1A1AA))),
+                        ).forEach { (accent, brush) ->
                             val isSelected = settings.accentColor == accent
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(color)
+                                    .background(brush)
                                     .clickable { preferences.setAccentColor(accent) }
                                     .then(
-                                        if (isSelected) Modifier.border(3.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                        else Modifier
+                                        if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                        else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape)
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -300,7 +301,7 @@ fun SettingsScreen(
                                         Icons.Outlined.Check,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }

@@ -59,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.iris.gallery.R
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -128,9 +129,19 @@ fun VideoPage(
 
     fun duration() = engine.player.duration.takeIf { it > 0 } ?: media.durationMs
     fun clamp(candidate: Offset, zoom: Float): Offset {
-        if (zoom <= 1f || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
-        val maxX = size.width * (zoom - 1f) / 2f
-        val maxY = size.height * (zoom - 1f) / 2f
+        if (zoom <= 1f || size.width <= 0 || size.height <= 0 || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
+        val containerAspect = size.width.toFloat() / size.height.coerceAtLeast(1)
+        val displayedWidth: Float
+        val displayedHeight: Float
+        if (displayAspect > containerAspect) {
+            displayedWidth = size.width.toFloat()
+            displayedHeight = displayedWidth / displayAspect
+        } else {
+            displayedHeight = size.height.toFloat()
+            displayedWidth = displayedHeight * displayAspect
+        }
+        val maxX = (displayedWidth * zoom - size.width).coerceAtLeast(0f) / 2f
+        val maxY = (displayedHeight * zoom - size.height).coerceAtLeast(0f) / 2f
         val clampedX = candidate.x.coerceIn(-maxX, maxX)
         val clampedY = candidate.y.coerceIn(-maxY, maxY)
         if (clampedX.isNaN() || clampedY.isNaN()) return Offset.Zero
@@ -138,6 +149,7 @@ fun VideoPage(
     }
 
     LaunchedEffect(engine, active, autoPlay, loop) {
+        if (!active) return@LaunchedEffect
         engine.player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         isMuted = engine.player.volume == 0f
         val listener = object : Player.Listener {
@@ -145,12 +157,23 @@ fun VideoPage(
             override fun onVolumeChanged(volume: Float) { isMuted = volume == 0f }
         }
         engine.player.addListener(listener)
-        if (active && autoPlay) engine.player.play()
-        else if (!active) engine.player.pause()
-        try { while (true) {
-            if (!scrubbing && duration() > 0) progress = engine.player.currentPosition.toFloat() / duration()
-            delay(200)
-        } } finally { engine.player.removeListener(listener) }
+        if (autoPlay) engine.player.play()
+        try {
+            while (true) {
+                if (!scrubbing && duration() > 0) progress = engine.player.currentPosition.toFloat() / duration()
+                delay(200)
+            }
+        } finally {
+            engine.player.removeListener(listener)
+        }
+    }
+
+    DisposableEffect(active) {
+        onDispose {
+            if (active) {
+                engine.player.pause()
+            }
+        }
     }
     LaunchedEffect(media.id) {
         val fetched = withContext(Dispatchers.IO) {

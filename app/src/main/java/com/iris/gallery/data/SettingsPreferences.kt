@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import com.iris.gallery.R
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
-enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_AMBER, ROSE }
+enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_AMBER, ROSE, MONOCHROME }
 enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCLE(18) }
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
 enum class StartupTab(val pageIndex: Int) { PHOTOS(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }

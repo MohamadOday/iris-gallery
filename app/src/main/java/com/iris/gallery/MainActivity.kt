@@ -28,6 +28,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -114,6 +118,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.produceState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -825,6 +830,7 @@ private fun GalleryApp(
                         },
                         getAlbumDir = viewModel::getAlbumDirectory,
                         createAlbumDir = viewModel::createNewAlbumDirectory,
+                        onRefresh = { viewModel.refresh() },
                         initialMemories = initialMemories,
                         initialViewUri = initialViewUri,
                         initialEditMode = initialEditMode,
@@ -950,6 +956,7 @@ private fun GalleryScaffold(
     duplicateState: DuplicateScanState,
     onScanDuplicates: () -> Unit,
     onCancelDuplicateScan: () -> Unit,
+    onRefresh: () -> Unit = {},
     initialMemories: Boolean,
     initialViewUri: Uri? = null,
     initialEditMode: Boolean = false,
@@ -1294,39 +1301,50 @@ private fun GalleryScaffold(
           modifier = Modifier.fillMaxSize(),
         ) { page ->
           when (page) {
-            0 -> if (images.isNotEmpty()) PhotoGrid(
-              images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
-              showTimeline = settings.showTimelineHeaders,
-              timelineDateFormat = settings.timelineDateFormat,
-              customTimelineDateFormat = settings.customTimelineDateFormat,
-              useRelativeDates = settings.useRelativeDates,
-              showDayOfWeek = settings.showDayOfWeek,
-              cornerStyle = settings.cornerStyle,
-              gridSpacing = settings.gridSpacing,
-              showVideoDuration = settings.showVideoDurationBadge,
-              showFormatBadge = settings.showMediaFormatBadge,
-              selectedIds = selectedIds,
-              onToggleSelection = if (onPick == null) ::toggleSelection else null,
-              onSetSelection = if (onPick == null) ::setSelection else null,
-              onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-            ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = images; selectedId = it.id } }
-            else EmptyState(stringResource(R.string.empty_photos), padding)
-            1 -> if (selectedAlbum != null) PhotoGrid(
-              selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
-              showTimeline = settings.showTimelineHeaders,
-              timelineDateFormat = settings.timelineDateFormat,
-              customTimelineDateFormat = settings.customTimelineDateFormat,
-              useRelativeDates = settings.useRelativeDates,
-              showDayOfWeek = settings.showDayOfWeek,
-              cornerStyle = settings.cornerStyle,
-              gridSpacing = settings.gridSpacing,
-              showVideoDuration = settings.showVideoDurationBadge,
-              showFormatBadge = settings.showMediaFormatBadge,
-              selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
-              onSetSelection = if (onPick == null) ::setSelection else null,
-              onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-            ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
-            else AlbumsGrid(
+            0 -> PullToRefreshBox(
+              isRefreshing = loading,
+              onRefresh = onRefresh,
+              modifier = Modifier.fillMaxSize(),
+            ) {
+              if (images.isNotEmpty()) PhotoGrid(
+                images, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                showTimeline = settings.showTimelineHeaders,
+                timelineDateFormat = settings.timelineDateFormat,
+                customTimelineDateFormat = settings.customTimelineDateFormat,
+                useRelativeDates = settings.useRelativeDates,
+                showDayOfWeek = settings.showDayOfWeek,
+                cornerStyle = settings.cornerStyle,
+                gridSpacing = settings.gridSpacing,
+                showVideoDuration = settings.showVideoDurationBadge,
+                showFormatBadge = settings.showMediaFormatBadge,
+                selectedIds = selectedIds,
+                onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                onSetSelection = if (onPick == null) ::setSelection else null,
+                onSetDateSelection = if (onPick == null) ::setDateSelection else null,
+              ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = images; selectedId = it.id } }
+              else EmptyState(stringResource(R.string.empty_photos), padding)
+            }
+            1 -> PullToRefreshBox(
+              isRefreshing = loading,
+              onRefresh = onRefresh,
+              modifier = Modifier.fillMaxSize(),
+            ) {
+              if (selectedAlbum != null) PhotoGrid(
+                selectedAlbum!!.images, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                showTimeline = settings.showTimelineHeaders,
+                timelineDateFormat = settings.timelineDateFormat,
+                customTimelineDateFormat = settings.customTimelineDateFormat,
+                useRelativeDates = settings.useRelativeDates,
+                showDayOfWeek = settings.showDayOfWeek,
+                cornerStyle = settings.cornerStyle,
+                gridSpacing = settings.gridSpacing,
+                showVideoDuration = settings.showVideoDurationBadge,
+                showFormatBadge = settings.showMediaFormatBadge,
+                selectedIds = selectedIds, onToggleSelection = if (onPick == null) ::toggleSelection else null,
+                onSetSelection = if (onPick == null) ::setSelection else null,
+                onSetDateSelection = if (onPick == null) ::setDateSelection else null,
+              ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = selectedAlbum!!.images; selectedId = it.id } }
+              else AlbumsGrid(
                 images = images,
                 padding = padding,
                 state = albumGridState,
@@ -1342,7 +1360,8 @@ private fun GalleryScaffold(
                 onTogglePinned = onTogglePinnedAlbum,
                 onSortChanged = onSetAlbumSort,
                 onOrderChanged = onSetAlbumOrder
-            ) { selectedAlbumId = it.id }
+              ) { selectedAlbumId = it.id }
+            }
             else -> {
                 if (page == 3) {
                     when (librarySection) {
@@ -3060,8 +3079,9 @@ private fun ZoomablePhoto(
     onZoomChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    var scale by remember(image.id) { mutableFloatStateOf(1f) }
-    var offset by remember(image.id) { mutableStateOf(Offset.Zero) }
+    val scaleAnim = remember(image.id) { Animatable(1f) }
+    val offsetAnim = remember(image.id) { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val coroutineScope = rememberCoroutineScope()
     var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
 
     // Instant zero-delay preview from memory cache while full image decodes
@@ -3133,18 +3153,22 @@ private fun ZoomablePhoto(
                     detectTapGestures(
                         onTap = { onTap() },
                         onDoubleTap = { tapPos ->
-                            if (scale > 1.05f) {
-                                scale = 1f
-                                offset = Offset.Zero
-                                onZoomChanged(false)
-                            } else {
-                                val targetScale = doubleTapZoomLevel
-                                val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                val z = targetScale / scale
-                                val targetOffset = offset + (tapPos - center - offset) * (1f - z)
-                                offset = clampOffset(targetOffset, targetScale)
-                                scale = targetScale
-                                onZoomChanged(true)
+                            coroutineScope.launch {
+                                val currentScale = scaleAnim.value
+                                val currentOffset = offsetAnim.value
+                                if (currentScale > 1.05f) {
+                                    launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                    onZoomChanged(false)
+                                } else {
+                                    val targetScale = doubleTapZoomLevel
+                                    val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                    val z = targetScale / currentScale
+                                    val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), targetScale)
+                                    launch { scaleAnim.animateTo(targetScale, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
+                                    onZoomChanged(true)
+                                }
                             }
                         },
                     )
@@ -3155,6 +3179,8 @@ private fun ZoomablePhoto(
                         do {
                             val event = awaitPointerEvent()
                             val pointersDown = event.changes.count { it.pressed }
+                            val scale = scaleAnim.value
+                            val offset = offsetAnim.value
                             if (pointersDown >= 2 || (pointersDown == 1 && scale > 1f)) {
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
@@ -3165,29 +3191,33 @@ private fun ZoomablePhoto(
 
                                 val calculatedScale = (scale * validZoom).coerceIn(1f, 7f)
                                 val nextScale = if (calculatedScale < 1.02f) 1f else calculatedScale
-
-                                if (pointersDown >= 2 && containerSize != IntSize.Zero) {
+                                val nextOffset = if (pointersDown >= 2 && containerSize != IntSize.Zero) {
                                     val centroid = event.calculateCentroid(useCurrent = true)
                                     if (centroid.isSpecified && !centroid.x.isNaN() && !centroid.y.isNaN()) {
                                         val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
                                         val effectiveZoom = nextScale / scale
                                         val focalOffset = (offset + validPan) + (centroid - center - offset) * (1f - effectiveZoom)
-                                        offset = clampOffset(focalOffset, nextScale)
+                                        clampOffset(focalOffset, nextScale)
                                     } else {
-                                        offset = clampOffset(offset + validPan, nextScale)
+                                        clampOffset(offset + validPan, nextScale)
                                     }
                                 } else {
-                                    offset = clampOffset(offset + validPan, nextScale)
+                                    clampOffset(offset + validPan, nextScale)
                                 }
 
-                                scale = nextScale
-                                onZoomChanged(scale > 1.01f)
+                                coroutineScope.launch {
+                                    scaleAnim.snapTo(nextScale)
+                                    offsetAnim.snapTo(nextOffset)
+                                }
+                                onZoomChanged(nextScale > 1.01f)
                                 if (isTransforming) event.changes.forEach { it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
                     }
                 },
         ) {
+            val scale = scaleAnim.value
+            val offset = offsetAnim.value
             val intrinsic = painter.intrinsicSize
             val hasValidIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
             val thumbIntrinsic = thumbPainter?.intrinsicSize
