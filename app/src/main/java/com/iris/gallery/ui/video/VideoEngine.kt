@@ -25,8 +25,11 @@ interface VideoEngine {
 class Media3VideoEngine(context: Context) : VideoEngine {
     private val exoPlayer = ExoPlayer.Builder(context).build()
     override val player: Player = exoPlayer
+    private var currentUri: Uri? = null
 
     override fun load(uri: Uri) {
+        if (currentUri == uri) return
+        currentUri = uri
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
     }

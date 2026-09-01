@@ -1,0 +1,10 @@
+• Video Gestures & Playback: Added center double-tap for Play/Pause with animated HUD, ±10s seek, 2× speed hold, autoplay fix, and gapless first-frame transitions
+• Image Editor Crop: Added locked aspect ratio constraints for preset ratios (1:1, 4:3, 16:9, 3:4) and fixed stretched output on save
+• EXIF Editor & Notes: Full EXIF metadata editor, 1-tap GPS/EXIF stripper, and floating viewer user comments
+• Monochrome Theme: Pure grayscale Material 3 palette for Light, Dark, and AMOLED modes
+• Immersive Viewer: Smooth system bars fade out in fullscreen view
+• Pull-to-Refresh: Swipe down to refresh on Photos and Albums tabs
+• External Files & Editors: Open media from file managers and configure external photo editors
+• Scoped Storage Trash: Fixed trashed media queries to eliminate ghost duplicates
+• Memories Scheduling: Customizable notification time picker and toggle in Settings
+• Timeline & Locale: Custom date formatter, fast scrubber physics, and Polish translation

@@ -24,6 +24,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -43,6 +46,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -110,6 +114,8 @@ fun VideoPage(
     var isMuted by remember { mutableStateOf(engine.player.volume == 0f) }
     var muteFeedbackEvent by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
     var lastMuteFeedback by remember { mutableStateOf<Boolean?>(null) }
+    var playPauseFeedbackEvent by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
+    var lastPlayPauseFeedback by remember { mutableStateOf<Boolean?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
     var scrubbing by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
@@ -118,6 +124,7 @@ fun VideoPage(
     var size by remember { mutableStateOf(IntSize.Zero) }
     var gestureFeedback by remember { mutableStateOf<String?>(null) }
     var feedbackOnLeft by remember { mutableStateOf(false) }
+    var isFirstFrameRendered by remember(media.id) { mutableStateOf(false) }
     var suppressTapUntil by remember { mutableLongStateOf(0L) }
     var displayAspect by remember(media.id) {
         val quarterTurn = ((media.orientation % 360) + 360) % 360 in setOf(90, 270)
@@ -149,12 +156,16 @@ fun VideoPage(
     }
 
     LaunchedEffect(engine, active, autoPlay, loop) {
-        if (!active) return@LaunchedEffect
+        if (!active) {
+            isFirstFrameRendered = false
+            return@LaunchedEffect
+        }
         engine.player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         isMuted = engine.player.volume == 0f
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(value: Boolean) { playing = value }
             override fun onVolumeChanged(volume: Float) { isMuted = volume == 0f }
+            override fun onRenderedFirstFrame() { isFirstFrameRendered = true }
         }
         engine.player.addListener(listener)
         if (autoPlay) engine.player.play()
@@ -223,6 +234,12 @@ fun VideoPage(
             muteFeedbackEvent = null
         }
     }
+    LaunchedEffect(playPauseFeedbackEvent) {
+        if (playPauseFeedbackEvent != null) {
+            delay(650)
+            playPauseFeedbackEvent = null
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().background(Color.Black).onSizeChanged { size = it }
@@ -232,10 +249,28 @@ fun VideoPage(
                         if (SystemClock.uptimeMillis() >= suppressTapUntil) onTap()
                     },
                     onDoubleTap = { position ->
-                        feedbackOnLeft = position.x < size.width / 2f
-                        val delta = if (feedbackOnLeft) -10_000L else 10_000L
-                        engine.player.seekTo((engine.player.currentPosition + delta).coerceIn(0L, duration()))
-                        gestureFeedback = if (feedbackOnLeft) "−10" else "+10"
+                        val leftBoundary = size.width * 0.35f
+                        val rightBoundary = size.width * 0.65f
+                        when {
+                            position.x < leftBoundary -> {
+                                feedbackOnLeft = true
+                                val delta = -10_000L
+                                engine.player.seekTo((engine.player.currentPosition + delta).coerceIn(0L, duration()))
+                                gestureFeedback = "−10"
+                            }
+                            position.x > rightBoundary -> {
+                                feedbackOnLeft = false
+                                val delta = 10_000L
+                                engine.player.seekTo((engine.player.currentPosition + delta).coerceIn(0L, duration()))
+                                gestureFeedback = "+10"
+                            }
+                            else -> {
+                                val nextPlaying = !engine.player.isPlaying
+                                if (engine.player.isPlaying) engine.player.pause() else engine.player.play()
+                                lastPlayPauseFeedback = nextPlaying
+                                playPauseFeedbackEvent = nextPlaying to SystemClock.uptimeMillis()
+                            }
+                        }
                     },
                     // Declaring long-press handling prevents Compose from also
                     // dispatching a normal tap when the 2× hold is released.
@@ -299,7 +334,7 @@ fun VideoPage(
             } }
     ) {
         Box(
-            Modifier.fillMaxSize().graphicsLayer(
+            Modifier.fillMaxSize().background(Color.Black).graphicsLayer(
                 scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y,
             ),
         ) {
@@ -309,6 +344,15 @@ fun VideoPage(
                         PlayerView(ctx).apply {
                             player = engine.player
                             useController = false
+                            controllerAutoShow = false
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            useArtwork = false
+                            hideController()
+                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            findViewById<android.view.View>(androidx.media3.ui.R.id.exo_controller)?.visibility = android.view.View.GONE
+                            findViewById<android.view.View>(androidx.media3.ui.R.id.exo_buffering)?.visibility = android.view.View.GONE
+                            findViewById<android.view.View>(androidx.media3.ui.R.id.exo_artwork)?.visibility = android.view.View.GONE
+                            findViewById<android.view.View>(androidx.media3.ui.R.id.exo_shutter)?.visibility = android.view.View.GONE
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             layoutParams = android.view.ViewGroup.LayoutParams(
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
@@ -316,11 +360,30 @@ fun VideoPage(
                             )
                         }
                     },
-                    update = { it.player = engine.player },
+                    update = {
+                        it.player = engine.player
+                        it.useController = false
+                        it.controllerAutoShow = false
+                        it.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        it.hideController()
+                        it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_controller)?.visibility = android.view.View.GONE
+                        it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_buffering)?.visibility = android.view.View.GONE
+                        it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_artwork)?.visibility = android.view.View.GONE
+                        it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_shutter)?.visibility = android.view.View.GONE
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
-            } else {
-                MediaThumbnail(media, Modifier.fillMaxSize())
+            }
+            if (!active || !isFirstFrameRendered) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(media.uri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().background(Color.Black)
+                )
             }
         }
         AnimatedVisibility(
@@ -364,6 +427,33 @@ fun VideoPage(
                     text = stringResource(if (muted) R.string.video_muted else R.string.video_unmuted),
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = playPauseFeedbackEvent != null,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(tween(140)) + scaleIn(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                initialScale = 0.7f
+            ),
+            exit = fadeOut(tween(200, easing = FastOutSlowInEasing)) + scaleOut(
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                targetScale = 0.85f
+            ),
+        ) {
+            val isPlay = lastPlayPauseFeedback ?: (playPauseFeedbackEvent?.first == true)
+            Box(
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.72f), CircleShape)
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isPlay) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(36.dp)
                 )
             }
         }

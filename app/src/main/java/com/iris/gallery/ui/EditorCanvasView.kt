@@ -60,15 +60,33 @@ class EditorCanvasView(context: Context) : View(context) {
         bitmap = null
     }
 
-    fun setCropAspect(aspect: Float) {
-        if (aspect <= 0f) return
+    var lockedAspect: Float? = null
+
+    fun setCropAspect(aspect: Float?) {
+        lockedAspect = aspect?.takeIf { it > 0f }
+        val targetAspect = lockedAspect ?: run {
+            invalidate()
+            return
+        }
         val source = bitmap ?: return
-        val normalizedAspect = aspect * source.height / source.width
-        val centerX = session.crop.centerX(); val centerY = session.crop.centerY()
-        var width = session.crop.width(); var height = width / normalizedAspect
-        if (height > 1f) { height = 1f; width = height * normalizedAspect }
-        session.crop.set(centerX - width / 2, centerY - height / 2, centerX + width / 2, centerY + height / 2)
-        keepCropInBounds(); invalidate()
+        val normalizedAspect = targetAspect * source.height / source.width
+        val centerX = session.crop.centerX()
+        val centerY = session.crop.centerY()
+        var width = session.crop.width()
+        var height = width / normalizedAspect
+        if (height > 1f) {
+            height = 1f
+            width = height * normalizedAspect
+        }
+        if (width > 1f) {
+            width = 1f
+            height = width / normalizedAspect
+        }
+        val left = (centerX - width / 2f).coerceIn(0f, (1f - width).coerceAtLeast(0f))
+        val top = (centerY - height / 2f).coerceIn(0f, (1f - height).coerceAtLeast(0f))
+        session.crop.set(left, top, left + width, top + height)
+        keepCropInBounds()
+        invalidate()
     }
 
     fun undoStroke() {
@@ -98,45 +116,51 @@ class EditorCanvasView(context: Context) : View(context) {
     }
 
     private fun drawStroke(canvas: Canvas, stroke: BrushStroke) {
-        if (stroke.points.isEmpty()) return
-        val effect = (if (stroke.effect == BrushEffect.PIXELATE) pixelated else blurred) ?: return
-        val matrix = Matrix().apply { setRectToRect(sourcePixelRectF(effect), destination, Matrix.ScaleToFit.FILL) }
-        val shader = BitmapShader(effect, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply { setLocalMatrix(matrix) }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-            strokeWidth = stroke.radius / visibleWidth() * destination.width(); this.shader = shader
-            colorFilter = this@EditorCanvasView.colorFilter
-        }
         val path = Path()
         stroke.points.forEachIndexed { index, point ->
-            val x = destination.left + (point.x - visibleLeft()) / visibleWidth() * destination.width()
-            val y = destination.top + (point.y - visibleTop()) / visibleHeight() * destination.height()
-            if (index == 0) { path.moveTo(x, y); path.lineTo(x + .1f, y + .1f) } else path.lineTo(x, y)
+            val vx = destination.left + (point.x - visibleLeft()) / visibleWidth() * destination.width()
+            val vy = destination.top + (point.y - visibleTop()) / visibleHeight() * destination.height()
+            if (index == 0) path.moveTo(vx, vy) else path.lineTo(vx, vy)
         }
-        canvas.drawPath(path, paint)
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            strokeWidth = stroke.radius * destination.width()
+            shader = BitmapShader(if (stroke.effect == BrushEffect.PIXELATE) pixelated ?: return else blurred ?: return,
+                Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
+        canvas.drawPath(path, strokePaint)
     }
 
     private fun drawCrop(canvas: Canvas) {
-        val crop = cropViewRect()
-        val shade = Paint().apply { color = 0x99000000.toInt() }
-        canvas.drawRect(destination.left, destination.top, destination.right, crop.top, shade)
-        canvas.drawRect(destination.left, crop.bottom, destination.right, destination.bottom, shade)
-        canvas.drawRect(destination.left, crop.top, crop.left, crop.bottom, shade)
-        canvas.drawRect(crop.right, crop.top, destination.right, crop.bottom, shade)
-        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f }
-        canvas.drawRect(crop, border)
-        val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x88FFFFFF.toInt(); strokeWidth = 1f }
-        canvas.drawLine(crop.left + crop.width() / 3, crop.top, crop.left + crop.width() / 3, crop.bottom, grid)
-        canvas.drawLine(crop.left + crop.width() * 2 / 3, crop.top, crop.left + crop.width() * 2 / 3, crop.bottom, grid)
-        canvas.drawLine(crop.left, crop.top + crop.height() / 3, crop.right, crop.top + crop.height() / 3, grid)
-        canvas.drawLine(crop.left, crop.top + crop.height() * 2 / 3, crop.right, crop.top + crop.height() * 2 / 3, grid)
-        val handle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-        listOf(crop.left to crop.top, crop.right to crop.top, crop.right to crop.bottom, crop.left to crop.bottom)
-            .forEach { canvas.drawCircle(it.first, it.second, 10f, handle) }
+        val cropRect = cropViewRect()
+        val dimPaint = Paint().apply { color = Color.argb(160, 0, 0, 0) }
+        canvas.drawRect(destination.left, destination.top, destination.right, cropRect.top, dimPaint)
+        canvas.drawRect(destination.left, cropRect.bottom, destination.right, destination.bottom, dimPaint)
+        canvas.drawRect(destination.left, cropRect.top, cropRect.left, cropRect.bottom, dimPaint)
+        canvas.drawRect(cropRect.right, cropRect.top, destination.right, cropRect.bottom, dimPaint)
+
+        val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f }
+        canvas.drawRect(cropRect, framePaint)
+
+        val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(90, 255, 255, 255); strokeWidth = 1.5f }
+        val thirdW = cropRect.width() / 3f; val thirdH = cropRect.height() / 3f
+        canvas.drawLine(cropRect.left + thirdW, cropRect.top, cropRect.left + thirdW, cropRect.bottom, gridPaint)
+        canvas.drawLine(cropRect.left + thirdW * 2, cropRect.top, cropRect.left + thirdW * 2, cropRect.bottom, gridPaint)
+        canvas.drawLine(cropRect.left, cropRect.top + thirdH, cropRect.right, cropRect.top + thirdH, gridPaint)
+        canvas.drawLine(cropRect.left, cropRect.top + thirdH * 2, cropRect.right, cropRect.top + thirdH * 2, gridPaint)
+
+        val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
+        val handleSize = 14f
+        listOf(cropRect.left to cropRect.top, cropRect.right to cropRect.top,
+            cropRect.right to cropRect.bottom, cropRect.left to cropRect.bottom).forEach { (hx, hy) ->
+            canvas.drawCircle(hx, hy, handleSize, handlePaint)
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (bitmap == null) return true
+        if (tool != EditorTool.CROP && tool != EditorTool.PIXELATE && tool != EditorTool.BLUR) return super.onTouchEvent(event)
         if (event.action == MotionEvent.ACTION_DOWN && !destination.contains(event.x, event.y)) return true
         val point = viewToNormalized(event.x, event.y)
         if (tool == EditorTool.CROP) handleCropTouch(event, point)
@@ -175,16 +199,82 @@ class EditorCanvasView(context: Context) : View(context) {
                 lastCropPoint = point
             }
             MotionEvent.ACTION_MOVE -> {
+                val source = bitmap
                 if (cropHandle == 4) {
-                    val dx = point.x - lastCropPoint.x; val dy = point.y - lastCropPoint.y
+                    val dx = point.x - lastCropPoint.x
+                    val dy = point.y - lastCropPoint.y
                     session.crop.offset(dx, dy)
-                } else when (cropHandle) {
-                    0 -> { session.crop.left = point.x; session.crop.top = point.y }
-                    1 -> { session.crop.right = point.x; session.crop.top = point.y }
-                    2 -> { session.crop.right = point.x; session.crop.bottom = point.y }
-                    3 -> { session.crop.left = point.x; session.crop.bottom = point.y }
+                    keepCropInBounds()
+                } else if (lockedAspect != null && source != null) {
+                    val normalizedAspect = lockedAspect!! * source.height / source.width
+                    when (cropHandle) {
+                        0 -> {
+                            val rawW = session.crop.right - point.x
+                            val rawH = session.crop.bottom - point.y
+                            val maxW = session.crop.right.coerceIn(0.08f, 1f)
+                            val maxH = session.crop.bottom.coerceIn(0.08f, 1f)
+                            val w = maxOf(rawW, rawH * normalizedAspect).coerceIn(0.08f, minOf(maxW, maxH * normalizedAspect))
+                            val h = w / normalizedAspect
+                            session.crop.left = session.crop.right - w
+                            session.crop.top = session.crop.bottom - h
+                        }
+                        1 -> {
+                            val rawW = point.x - session.crop.left
+                            val rawH = session.crop.bottom - point.y
+                            val maxW = (1f - session.crop.left).coerceIn(0.08f, 1f)
+                            val maxH = session.crop.bottom.coerceIn(0.08f, 1f)
+                            val w = maxOf(rawW, rawH * normalizedAspect).coerceIn(0.08f, minOf(maxW, maxH * normalizedAspect))
+                            val h = w / normalizedAspect
+                            session.crop.right = session.crop.left + w
+                            session.crop.top = session.crop.bottom - h
+                        }
+                        2 -> {
+                            val rawW = point.x - session.crop.left
+                            val rawH = point.y - session.crop.top
+                            val maxW = (1f - session.crop.left).coerceIn(0.08f, 1f)
+                            val maxH = (1f - session.crop.top).coerceIn(0.08f, 1f)
+                            val w = maxOf(rawW, rawH * normalizedAspect).coerceIn(0.08f, minOf(maxW, maxH * normalizedAspect))
+                            val h = w / normalizedAspect
+                            session.crop.right = session.crop.left + w
+                            session.crop.bottom = session.crop.top + h
+                        }
+                        3 -> {
+                            val rawW = session.crop.right - point.x
+                            val rawH = point.y - session.crop.top
+                            val maxW = session.crop.right.coerceIn(0.08f, 1f)
+                            val maxH = (1f - session.crop.top).coerceIn(0.08f, 1f)
+                            val w = maxOf(rawW, rawH * normalizedAspect).coerceIn(0.08f, minOf(maxW, maxH * normalizedAspect))
+                            val h = w / normalizedAspect
+                            session.crop.left = session.crop.right - w
+                            session.crop.bottom = session.crop.top + h
+                        }
+                    }
+                    normalizeCrop()
+                    keepCropInBounds()
+                } else {
+                    when (cropHandle) {
+                        0 -> {
+                            session.crop.left = point.x.coerceIn(0f, session.crop.right - 0.08f)
+                            session.crop.top = point.y.coerceIn(0f, session.crop.bottom - 0.08f)
+                        }
+                        1 -> {
+                            session.crop.right = point.x.coerceIn(session.crop.left + 0.08f, 1f)
+                            session.crop.top = point.y.coerceIn(0f, session.crop.bottom - 0.08f)
+                        }
+                        2 -> {
+                            session.crop.right = point.x.coerceIn(session.crop.left + 0.08f, 1f)
+                            session.crop.top = point.y.coerceIn(session.crop.top + 0.08f, 1f)
+                        }
+                        3 -> {
+                            session.crop.left = point.x.coerceIn(0f, session.crop.right - 0.08f)
+                            session.crop.bottom = point.y.coerceIn(session.crop.top + 0.08f, 1f)
+                        }
+                    }
+                    normalizeCrop()
+                    keepCropInBounds()
                 }
-                normalizeCrop(); keepCropInBounds(); lastCropPoint = point; invalidate()
+                lastCropPoint = point
+                invalidate()
             }
         }
     }

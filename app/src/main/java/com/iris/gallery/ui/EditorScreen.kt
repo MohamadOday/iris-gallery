@@ -105,6 +105,7 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
     val baseHeight = if (rotation == 90 || rotation == 270) image.width else image.height
     var resizeWidth by remember(image.id, rotation) { mutableStateOf(baseWidth.toString()) }
     var resizeHeight by remember(image.id, rotation) { mutableStateOf(baseHeight.toString()) }
+    var isCustomResized by remember(image.id, rotation) { mutableStateOf(false) }
     var lockAspect by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
 
@@ -151,7 +152,10 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                     val saved = runCatching {
                         saveEditedCopy(context, image, rotation, flipHorizontal, flipVertical,
                             brightness, saturation, contrast, warmth,
-                            crop, resizeWidth.toIntOrNull(), resizeHeight.toIntOrNull(), strokes)
+                            crop,
+                            if (isCustomResized) resizeWidth.toIntOrNull() else null,
+                            if (isCustomResized) resizeHeight.toIntOrNull() else null,
+                            strokes)
                     }.isSuccess
                     saving = false; onSaved(saved)
                 }
@@ -206,7 +210,8 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                         ) {
                             when (currentTool) {
                                 EditorTool.CROP -> CropControls(cropPreset, { label, aspect ->
-                                    cropPreset = label; if (aspect != null) editorView?.setCropAspect(aspect)
+                                    cropPreset = label
+                                    editorView?.setCropAspect(aspect)
                                 })
                                 EditorTool.TRANSFORM -> TransformControls(
                                     rotation = rotation,
@@ -224,12 +229,20 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                 )
                                 EditorTool.RESIZE -> ResizeControls(baseWidth, baseHeight, resizeWidth, resizeHeight, lockAspect,
                                     onWidth = { value ->
+                                        isCustomResized = true
                                         resizeWidth = value.filter(Char::isDigit)
                                         if (lockAspect) value.toIntOrNull()?.let { resizeHeight = (it * baseHeight.toFloat() / baseWidth).toInt().toString() }
                                     }, onHeight = { value ->
+                                        isCustomResized = true
                                         resizeHeight = value.filter(Char::isDigit)
                                         if (lockAspect) value.toIntOrNull()?.let { resizeWidth = (it * baseWidth.toFloat() / baseHeight).toInt().toString() }
-                                    }, onLock = { lockAspect = it })
+                                    }, onLock = { lockAspect = it },
+                                    onReset = {
+                                        isCustomResized = false
+                                        resizeWidth = baseWidth.toString()
+                                        resizeHeight = baseHeight.toString()
+                                    }
+                                )
                                 EditorTool.PIXELATE, EditorTool.BLUR -> BrushControls(currentTool, brushSize, strength, erasing,
                                     onSize = { brushSize = it }, onStrength = { strength = it }, onErase = { erasing = it },
                                     onUndo = { editorView?.undoStroke() }, onRedo = { editorView?.redoStroke() },
@@ -307,7 +320,7 @@ private fun TransformControls(
 }
 
 @Composable private fun ResizeControls(baseWidth: Int, baseHeight: Int, width: String, height: String, locked: Boolean,
-    onWidth: (String) -> Unit, onHeight: (String) -> Unit, onLock: (Boolean) -> Unit) {
+    onWidth: (String) -> Unit, onHeight: (String) -> Unit, onLock: (Boolean) -> Unit, onReset: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(width, onWidth, Modifier.weight(1f), label = { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_width_px)) }, singleLine = true)
         Text("×")
@@ -315,7 +328,7 @@ private fun TransformControls(
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Switch(locked, onLock); Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_lock_aspect))
-        TextButton(onClick = { onWidth(baseWidth.toString()); onHeight(baseHeight.toString()) }) { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_original)) }
+        TextButton(onClick = onReset) { Text(androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.editor_original)) }
     }
 }
 
