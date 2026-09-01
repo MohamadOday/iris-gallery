@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Modifier les métadonnées</string>
     <string name="details_edit_filename">Nom du fichier</string>
     <string name="details_edit_title">Titre</string>
+    <string name="details_title_hint">Titre facultatif</string>
     <string name="details_edit_captured_hint">Prise de vue · aaaa-MM-jj HH:mm</string>
     <string name="details_edit_orientation_hint">Orientation · 0, 90, 180 ou 270</string>
     <string name="details_edit_permission_note">Android demandera votre accord avant de modifier un média appartenant à une autre application.</string>

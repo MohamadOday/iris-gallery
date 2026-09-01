@@ -2469,7 +2469,7 @@ private fun PhotoGrid(
                 item(key = "header:${group.key}", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
                     val ids = remember(group.value) { group.value.map { it.id } }
                     val wholeDateSelected = ids.isNotEmpty() && ids.all { it in selectedIds }
-                    Row(Modifier.animateItem().fillMaxWidth().combinedClickable(
+                    Row((if (scrubberDragging) Modifier else Modifier.animateItem()).fillMaxWidth().combinedClickable(
                         onClick = {
                             if (selectedIds.isNotEmpty()) onSetDateSelection?.invoke(ids, !wholeDateSelected)
                         },
@@ -2488,7 +2488,7 @@ private fun PhotoGrid(
               }
               items(group.value, key = { it.id }, contentType = { "photo" }) { image ->
                 val selected = image.id in selectedIds
-                Box(Modifier.animateItem().aspectRatio(1f).clip(RoundedCornerShape(if (selected) 14.dp else cornerStyle.dp.dp))
+                Box((if (scrubberDragging) Modifier else Modifier.animateItem()).aspectRatio(1f).clip(RoundedCornerShape(if (selected) 14.dp else cornerStyle.dp.dp))
                     .combinedClickable(onClick = {
                         if (suppressReleaseClickId == image.id) suppressReleaseClickId = null
                         else onOpen(image)
@@ -2665,6 +2665,10 @@ private fun PhotoViewer(
         window?.let { WindowCompat.getInsetsController(it, it.decorView) }
     }
     DisposableEffect(insetsController, activity) {
+        insetsController?.apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             insetsController?.apply {
@@ -3500,7 +3504,16 @@ private fun PhotoDetailsSheet(
             }
 
             val currentLocale = rememberAppLocale()
-            if (image.title.isNotBlank()) DetailBlock(stringResource(R.string.details_title_field), image.title)
+            val isAutoTitle = image.title.isBlank() ||
+                image.title == image.name ||
+                image.title == image.name.substringBeforeLast('.')
+            DetailBlock(stringResource(R.string.details_file_name), image.name)
+            if (!isAutoTitle) {
+                DetailBlock(stringResource(R.string.details_title_field), image.title)
+            }
+            exif?.imageDescription?.takeIf { it.isNotBlank() && it != image.title }?.let {
+                DetailBlock(stringResource(R.string.details_desc_field), it)
+            }
             exif?.artist?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_artist), it) }
             exif?.copyright?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_copyright), it) }
             val formattedDate = remember(image.dateTaken, currentLocale) {

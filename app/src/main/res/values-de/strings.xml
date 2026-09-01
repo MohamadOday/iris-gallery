@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Metadaten bearbeiten</string>
     <string name="details_edit_filename">Dateiname</string>
     <string name="details_edit_title">Titel</string>
+    <string name="details_title_hint">Optionaler Titel</string>
     <string name="details_edit_captured_hint">Aufgenommen · JJJJ-MM-TT HH:mm</string>
     <string name="details_edit_orientation_hint">Ausrichtung · 0, 90, 180 oder 270</string>
     <string name="details_edit_permission_note">Android wird vor dem Ändern von Medien einer anderen App nachfragen.</string>

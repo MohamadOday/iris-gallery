@@ -233,6 +233,7 @@
     <string name="details_edit_metadata">Edit metadata &amp; EXIF</string>
     <string name="details_edit_filename">File name</string>
     <string name="details_edit_title">Title</string>
+    <string name="details_title_hint">Optional title</string>
     <string name="details_edit_captured_hint">Captured · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">Orientation · 0, 90, 180 or 270</string>
     <string name="details_edit_permission_note">Android will ask before changing media owned by another app.</string>

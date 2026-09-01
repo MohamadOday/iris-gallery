@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Modifica metadati</string>
     <string name="details_edit_filename">Nome file</string>
     <string name="details_edit_title">Titolo</string>
+    <string name="details_title_hint">Titolo opzionale</string>
     <string name="details_edit_captured_hint">Data di scatto · aaaa-MM-gg HH:mm</string>
     <string name="details_edit_orientation_hint">Orientamento · 0, 90, 180 o 270</string>
     <string name="details_edit_permission_note">Android richiederà una conferma prima di modificare file appartenenti a un\'altra app.</string>

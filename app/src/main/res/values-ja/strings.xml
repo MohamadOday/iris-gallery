@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">メタデータを編集</string>
     <string name="details_edit_filename">ファイル名</string>
     <string name="details_edit_title">タイトル</string>
+    <string name="details_title_hint">任意のタイトル</string>
     <string name="details_edit_captured_hint">撮影日時 · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">向き · 0、90、180 または 270</string>
     <string name="details_edit_permission_note">他のアプリが所有するメディアを変更する前に、Android から確認が求められます。</string>

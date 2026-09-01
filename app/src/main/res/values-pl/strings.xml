@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Edytuj metadane</string>
     <string name="details_edit_filename">Nazwa pliku</string>
     <string name="details_edit_title">Tytuł</string>
+    <string name="details_title_hint">Opcjonalny tytuł</string>
     <string name="details_edit_captured_hint">Zrobiono · rrrr-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">Orientacja · 0, 90, 180 lub 270</string>
     <string name="details_edit_permission_note">System Android poprosi o potwierdzenie przed zmianą multimediów należących do innej aplikacji.</string>

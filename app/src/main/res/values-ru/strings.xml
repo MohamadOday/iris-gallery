@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Изменить метаданные</string>
     <string name="details_edit_filename">Имя файла</string>
     <string name="details_edit_title">Название</string>
+    <string name="details_title_hint">Необязательный заголовок</string>
     <string name="details_edit_captured_hint">Снято · гггг-ММ-дд ЧЧ:мм</string>
     <string name="details_edit_orientation_hint">Ориентация · 0, 90, 180 или 270</string>
     <string name="details_edit_permission_note">Android запросит подтверждение перед изменением файла другого приложения.</string>

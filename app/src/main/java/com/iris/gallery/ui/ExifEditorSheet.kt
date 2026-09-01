@@ -90,7 +90,10 @@ fun ExifEditorSheet(
 
     // File & MediaStore State
     var fileName by remember(image.id) { mutableStateOf(image.name) }
-    var mediaTitle by remember(image.id) { mutableStateOf(image.title) }
+    val isInitialAutoTitle = remember(image.id, image.title, image.name) {
+        image.title.isBlank() || image.title == image.name || image.title == image.name.substringBeforeLast('.')
+    }
+    var mediaTitle by remember(image.id) { mutableStateOf(if (isInitialAutoTitle) "" else image.title) }
     var dateTakenStr by remember(image.id) { mutableStateOf(dateFormat.format(Date(image.dateTaken))) }
     var orientation by remember(image.id) { mutableIntStateOf((image.orientation % 360 + 360) % 360) }
 
@@ -119,7 +122,8 @@ fun ExifEditorSheet(
 
     fun revertAll() {
         fileName = image.name
-        mediaTitle = image.title
+        val isAuto = image.title.isBlank() || image.title == image.name || image.title == image.name.substringBeforeLast('.')
+        mediaTitle = if (isAuto) "" else image.title
         dateTakenStr = dateFormat.format(Date(image.dateTaken))
         orientation = (image.orientation % 360 + 360) % 360
 
@@ -540,6 +544,7 @@ fun ExifEditorSheet(
                             value = mediaTitle,
                             onValueChange = { mediaTitle = it },
                             label = { Text(stringResource(R.string.details_edit_title)) },
+                            placeholder = { Text(stringResource(R.string.details_title_hint)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -616,13 +621,19 @@ fun ExifEditorSheet(
                             shutterSpeedStr.toDoubleOrNull()
                         }
 
+                        val customTitle = mediaTitle.trim()
+                        val effectiveTitle = customTitle.ifBlank {
+                            fileName.trim().substringBeforeLast('.').ifBlank { image.name.substringBeforeLast('.') }
+                        }
+                        val effectiveDesc = imageDescription.trim().ifBlank { if (customTitle.isNotBlank()) customTitle else null }
+
                         val request = ExifEditRequest(
                             displayName = fileName.trim().ifBlank { image.name },
-                            title = mediaTitle.trim(),
+                            title = effectiveTitle,
                             dateTakenMillis = parsedTime,
                             orientation = orientation,
                             userComment = userComment.trim().ifBlank { null },
-                            imageDescription = imageDescription.trim().ifBlank { null },
+                            imageDescription = effectiveDesc,
                             artist = artist.trim().ifBlank { null },
                             copyright = copyright.trim().ifBlank { null },
                             software = software.trim().ifBlank { null },

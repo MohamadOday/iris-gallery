@@ -296,7 +296,9 @@ fun applyExifToExifInterface(exif: androidx.exifinterface.media.ExifInterface, r
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD, null)
     } else {
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT, request.userComment?.trim()?.ifBlank { null })
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION, request.imageDescription?.trim()?.ifBlank { null })
+        val effectiveExifDesc = request.imageDescription?.trim()?.ifBlank { null }
+            ?: request.title.trim().takeIf { it.isNotBlank() && it != request.displayName && it != request.displayName.substringBeforeLast('.') }
+        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION, effectiveExifDesc)
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_ARTIST, request.artist?.trim()?.ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT, request.copyright?.trim()?.ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, request.software?.trim()?.ifBlank { null })

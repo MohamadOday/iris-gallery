@@ -1,0 +1,7 @@
+• Media Search: Added fast real-time search across Photos, Albums, and Favorites with format and keyword filters
+• External Editors: Resolved external video editor intent handling (via ACTION_SEND) and OEM camera editor fallbacks
+• Light Theme Status Bar: Fixed status bar icons visibility and theme adaptation across Light, Dark, and AMOLED modes
+• Metadata & Titles: Differentiated custom titles from filenames in details sheet and metadata editor
+• Ghost Files & Refresh: Purged stale MediaStore rows on modern Android (API 29+) and cleared thumbnail cache on refresh
+• Fast Scrubber: Decoupled scrollbar from timeline headers, enabled live drag scrolling, and removed drag fade delays
+• Navigation: Smoothed bottom tab switching and eliminated intermediate screen flicker

@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">编辑元数据</string>
     <string name="details_edit_filename">文件名</string>
     <string name="details_edit_title">标题</string>
+    <string name="details_title_hint">可选标题</string>
     <string name="details_edit_captured_hint">拍摄时间 · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">方向 · 0、90、180 或 270</string>
     <string name="details_edit_permission_note">修改属于其他应用的媒体文件前，Android 系统会提示确认。</string>

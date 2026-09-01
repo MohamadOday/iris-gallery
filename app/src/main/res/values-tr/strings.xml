@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Meta verileri düzenle</string>
     <string name="details_edit_filename">Dosya adı</string>
     <string name="details_edit_title">Başlık</string>
+    <string name="details_title_hint">İsteğe bağlı başlık</string>
     <string name="details_edit_captured_hint">Çekim · yyyy-AA-gg SS:dd</string>
     <string name="details_edit_orientation_hint">Yönlendirme · 0, 90, 180 veya 270</string>
     <string name="details_edit_permission_note">Android, başka bir uygulamaya ait medyayı değiştirmeden önce izin isteyecektir.</string>

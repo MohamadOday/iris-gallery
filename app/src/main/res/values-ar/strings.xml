@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">تعديل البيانات الوصفية (Exif)</string>
     <string name="details_edit_filename">اسم الملف</string>
     <string name="details_edit_title">العنوان</string>
+    <string name="details_title_hint">عنوان اختياري</string>
     <string name="details_edit_captured_hint">تاريخ الالتقاط · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">الاتجاه · 0، 90، 180 أو 270</string>
     <string name="details_edit_permission_note">سيطلب نظام أندرويد الإذن قبل تعديل وسائط تابعة لتطبيق آخر.</string>

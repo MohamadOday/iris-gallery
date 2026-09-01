@@ -230,6 +230,7 @@
     <string name="details_edit_metadata">Editar metadatos</string>
     <string name="details_edit_filename">Nombre de archivo</string>
     <string name="details_edit_title">Título</string>
+    <string name="details_title_hint">Título opcional</string>
     <string name="details_edit_captured_hint">Capturada · yyyy-MM-dd HH:mm</string>
     <string name="details_edit_orientation_hint">Orientación · 0, 90, 180 o 270</string>
     <string name="details_edit_permission_note">Android solicitará permiso antes de modificar archivos que pertenezcan a otra aplicación.</string>
