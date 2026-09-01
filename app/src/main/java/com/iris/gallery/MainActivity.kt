@@ -1919,13 +1919,36 @@ private fun PhotoGrid(
         }
     }
     var scrubberDragging by remember { mutableStateOf(false) }
+    var scrubFraction by remember { mutableFloatStateOf(0f) }
     var scrubTargetIndex by remember(timelineItems) { mutableIntStateOf(0) }
     var suppressReleaseClickId by remember { mutableStateOf<Long?>(null) }
     val scrubberScope = rememberCoroutineScope()
-    val scrollFraction by remember(timelineItems) { derivedStateOf {
-        val index = if (scrubberDragging) scrubTargetIndex else gridState.firstVisibleItemIndex
-        index.toFloat() / timelineItems.lastIndex.coerceAtLeast(1)
-    } }
+    val scrollFraction by remember(timelineItems) {
+        derivedStateOf {
+            if (scrubberDragging) {
+                scrubFraction
+            } else {
+                val layoutInfo = gridState.layoutInfo
+                val totalItems = layoutInfo.totalItemsCount
+                val visibleItems = layoutInfo.visibleItemsInfo
+                if (totalItems == 0 || visibleItems.isEmpty()) {
+                    0f
+                } else if (!gridState.canScrollForward) {
+                    1f
+                } else if (!gridState.canScrollBackward && gridState.firstVisibleItemScrollOffset == 0) {
+                    0f
+                } else {
+                    val firstVisible = gridState.firstVisibleItemIndex
+                    val lastVisible = visibleItems.last().index
+                    val visibleCount = (lastVisible - firstVisible + 1).coerceAtLeast(1)
+                    val maxScrollable = (totalItems - visibleCount).coerceAtLeast(1)
+                    val firstItemHeight = visibleItems.first().size.height.toFloat().coerceAtLeast(1f)
+                    val itemOffsetProgress = (gridState.firstVisibleItemScrollOffset.toFloat() / firstItemHeight).coerceIn(0f, 1f)
+                    ((firstVisible + itemOffsetProgress) / maxScrollable.toFloat()).coerceIn(0f, 1f)
+                }
+            }
+        }
+    }
     val visibleDate by remember(timelineItems) { derivedStateOf {
         if (timelineItems.isEmpty()) return@derivedStateOf null
         val visibleIndex = if (scrubberDragging) scrubTargetIndex else gridState.firstVisibleItemIndex
@@ -2137,51 +2160,108 @@ private fun PhotoGrid(
             }
         }
         if (showTimeline && timelineItems.size > 30) {
-            val trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .22f)
+            val isScrollerActive = gridState.isScrollInProgress || scrubberDragging
+            val scrollerAlpha by animateFloatAsState(
+                targetValue = if (isScrollerActive) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (isScrollerActive) 150 else 500,
+                    delayMillis = if (isScrollerActive) 0 else 1200
+                ),
+                label = "scrubberAlpha"
+            )
+
             val thumbColor = MaterialTheme.colorScheme.primary
-            Canvas(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(28.dp)
-                .pointerInput(timelineItems.size) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        scrubberDragging = true
-                        var finalTarget = gridState.firstVisibleItemIndex
-                        try {
-                            var change = down
-                            do {
-                                val fraction = (change.position.y / size.height).coerceIn(0f, 1f)
-                                finalTarget = (fraction * timelineItems.lastIndex).toInt()
+            val trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f)
+
+            if (scrollerAlpha > 0f) {
+                Canvas(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(36.dp)
+                        .graphicsLayer { alpha = scrollerAlpha }
+                        .pointerInput(timelineItems.size) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                scrubberDragging = true
+                                val inset = 16.dp.toPx()
+                                val thumbHeight = 48.dp.toPx()
+                                val maxTravel = (size.height - inset * 2 - thumbHeight).coerceAtLeast(1f)
+
+                                fun calculateFraction(y: Float): Float {
+                                    val topTarget = y - inset - (thumbHeight / 2f)
+                                    return (topTarget / maxTravel).coerceIn(0f, 1f)
+                                }
+
+                                var fraction = calculateFraction(down.position.y)
+                                scrubFraction = fraction
+                                var finalTarget = (fraction * timelineItems.lastIndex).toInt().coerceIn(0, timelineItems.lastIndex)
                                 scrubTargetIndex = finalTarget
-                                change.consume()
-                                change = awaitPointerEvent().changes.first()
-                            } while (change.pressed)
-                        } finally {
-                            scrubberDragging = false
-                            scrubberScope.launch { gridState.scrollToItem(finalTarget) }
+
+                                try {
+                                    var change = down
+                                    do {
+                                        fraction = calculateFraction(change.position.y)
+                                        scrubFraction = fraction
+                                        finalTarget = (fraction * timelineItems.lastIndex).toInt().coerceIn(0, timelineItems.lastIndex)
+                                        scrubTargetIndex = finalTarget
+                                        change.consume()
+                                        change = awaitPointerEvent().changes.first()
+                                    } while (change.pressed)
+                                } finally {
+                                    scrubberDragging = false
+                                    scrubberScope.launch { gridState.scrollToItem(finalTarget) }
+                                }
+                            }
                         }
+                ) {
+                    val inset = 16.dp.toPx()
+                    val thumbWidth = 5.dp.toPx()
+                    val thumbHeight = 48.dp.toPx()
+                    val maxTravel = (size.height - inset * 2 - thumbHeight).coerceAtLeast(0f)
+                    val thumbTop = inset + scrollFraction.coerceIn(0f, 1f) * maxTravel
+                    val thumbLeft = size.width - thumbWidth - 4.dp.toPx()
+
+                    if (scrubberDragging) {
+                        val trackWidth = 3.dp.toPx()
+                        val trackLeft = size.width - trackWidth - 5.dp.toPx()
+                        drawRoundRect(
+                            color = trackColor,
+                            topLeft = Offset(trackLeft, inset),
+                            size = Size(trackWidth, size.height - inset * 2),
+                            cornerRadius = CornerRadius(trackWidth / 2f, trackWidth / 2f)
+                        )
                     }
-                }) {
-                val inset = 14.dp.toPx()
-                val trackWidth = 4.dp.toPx()
-                val thumbWidth = 8.dp.toPx()
-                val thumbHeight = 48.dp.toPx()
-                val travel = (size.height - inset * 2).coerceAtLeast(1f)
-                val centerY = inset + scrollFraction.coerceIn(0f, 1f) * travel
-                drawRoundRect(trackColor, Offset((size.width - trackWidth) / 2f, inset),
-                    Size(trackWidth, travel), CornerRadius(trackWidth))
-                drawRoundRect(thumbColor, Offset((size.width - thumbWidth) / 2f,
-                    (centerY - thumbHeight / 2f).coerceIn(inset, size.height - inset - thumbHeight)),
-                    Size(thumbWidth, thumbHeight), CornerRadius(thumbWidth))
+
+                    drawRoundRect(
+                        color = thumbColor,
+                        topLeft = Offset(thumbLeft, thumbTop),
+                        size = Size(thumbWidth, thumbHeight),
+                        cornerRadius = CornerRadius(thumbWidth / 2f, thumbWidth / 2f)
+                    )
+                }
             }
-            AnimatedVisibility(visible = scrubberDragging,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 32.dp),
+
+            AnimatedVisibility(
+                visible = scrubberDragging,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 42.dp),
                 enter = fadeIn(tween(120)) + scaleIn(tween(180), initialScale = .88f),
-                exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = .9f)) {
-                Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 8.dp,
-                    color = MaterialTheme.colorScheme.primaryContainer) {
-                    Text(visibleDate?.let { formatTimelineLabel(it.dateTaken) } ?: "",
-                        Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = .9f)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = visibleDate?.let { formatTimelineLabel(it.dateTaken) } ?: "",
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
             }
         }
