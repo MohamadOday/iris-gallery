@@ -52,7 +52,18 @@ class MediaRepository(private val context: Context) {
         )
 
         val result = buildList {
-            val mediaSelection = "(${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?)"
+            val mediaSelection = buildString {
+                append("(${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?)")
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    if (trashed) {
+                        append(" AND ${MediaStore.MediaColumns.IS_TRASHED} = 1")
+                    } else {
+                        append(" AND ${MediaStore.MediaColumns.IS_TRASHED} = 0 AND ${MediaStore.MediaColumns.IS_PENDING} = 0")
+                    }
+                } else if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    append(" AND ${MediaStore.MediaColumns.IS_PENDING} = 0")
+                }
+            }
             val selectionArgs = buildList {
                 add(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString())
                 add(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())

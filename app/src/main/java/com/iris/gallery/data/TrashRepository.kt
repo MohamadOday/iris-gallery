@@ -20,6 +20,12 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.abs
 
+data class TrashMoveResult(
+    val trashedMedia: List<MediaImage>,
+    val originalMedia: List<MediaImage>,
+    val silentSuccess: Boolean = false,
+)
+
 data class TrashItem(
     val id: Long,
     val trashFileName: String,
@@ -174,9 +180,11 @@ class TrashRepository(private val context: Context) {
         return deleted
     }
 
-    suspend fun moveToTrash(mediaList: List<MediaImage>): List<MediaImage> = withContext(Dispatchers.IO) {
+    suspend fun moveToTrash(mediaList: List<MediaImage>): TrashMoveResult = withContext(Dispatchers.IO) {
         val currentItems = readIndex().toMutableList()
         val trashedList = mutableListOf<MediaImage>()
+        val originalList = mutableListOf<MediaImage>()
+        val hasManagerAccess = hasAllFilesAccess()
 
         for (item in mediaList) {
             val uniqueId = generateUniqueId(currentItems)
@@ -205,7 +213,6 @@ class TrashRepository(private val context: Context) {
             }
 
             if (copied && targetFile.exists()) {
-                deleteFromStorage(item)
                 val trashItem = TrashItem(
                     id = uniqueId,
                     trashFileName = trashFileName,
@@ -245,12 +252,40 @@ class TrashRepository(private val context: Context) {
                     description = item.description,
                 )
                 trashedList.add(media)
+                originalList.add(item)
+            }
+        }
+
+        var silentSuccess = false
+        if (hasManagerAccess && trashedList.isNotEmpty()) {
+            val allDeleted = originalList.all { item ->
+                deleteFromStorage(item)
+            }
+            if (allDeleted) {
+                silentSuccess = true
             }
         }
 
         writeIndex(currentItems)
         loadTrashItems()
-        trashedList
+        TrashMoveResult(trashedMedia = trashedList, originalMedia = originalList, silentSuccess = silentSuccess)
+    }
+
+    suspend fun rollbackTrash(trashedItems: List<MediaImage>) = withContext(Dispatchers.IO) {
+        val currentItems = readIndex().toMutableList()
+        val idsToRemove = trashedItems.map { abs(it.id) }.toSet()
+
+        currentItems.removeAll { item ->
+            if (item.id in idsToRemove) {
+                val file = File(trashDir, item.trashFileName)
+                runCatching { file.delete() }
+                true
+            } else {
+                false
+            }
+        }
+        writeIndex(currentItems)
+        loadTrashItems()
     }
 
     suspend fun restoreFromTrash(mediaList: List<MediaImage>): List<MediaImage> = withContext(Dispatchers.IO) {

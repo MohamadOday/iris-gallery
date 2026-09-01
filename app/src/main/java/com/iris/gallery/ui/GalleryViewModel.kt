@@ -92,11 +92,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     suspend fun restoreFromVault(mediaList: List<MediaImage>): List<MediaImage> = vaultRepository.restoreFromVault(mediaList)
     suspend fun deletePermanentlyFromVault(mediaList: List<MediaImage>) = vaultRepository.deletePermanently(mediaList)
 
-    suspend fun moveToTrash(mediaList: List<MediaImage>): List<MediaImage> {
-        val result = trashRepository.moveToTrash(mediaList)
-        refresh()
-        return result
-    }
+    suspend fun moveToTrash(mediaList: List<MediaImage>): com.iris.gallery.data.TrashMoveResult = trashRepository.moveToTrash(mediaList)
+    suspend fun rollbackTrashMove(trashedMedia: List<MediaImage>) = trashRepository.rollbackTrash(trashedMedia)
 
     suspend fun restoreFromTrash(mediaList: List<MediaImage>): List<MediaImage> {
         val result = trashRepository.restoreFromTrash(mediaList)

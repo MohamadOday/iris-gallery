@@ -432,6 +432,23 @@ private fun GalleryApp(
         }
     }
 
+    var pendingTrashMove by remember { mutableStateOf<com.iris.gallery.data.TrashMoveResult?>(null) }
+    val trashDeleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val pending = pendingTrashMove
+        pendingTrashMove = null
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.refresh()
+            val count = pending?.trashedMedia?.size ?: 0
+            Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, count), Toast.LENGTH_SHORT).show()
+        } else {
+            pending?.let { moveResult ->
+                coroutineScope.launch {
+                    viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(permitted) {
         if (permitted) {
             viewModel.refresh()
@@ -630,7 +647,40 @@ private fun GalleryApp(
                         onTrash = { media ->
                             if (media.isNotEmpty()) {
                                 coroutineScope.launch {
-                                    viewModel.moveToTrash(media)
+                                    val moveResult = viewModel.moveToTrash(media)
+                                    if (moveResult.trashedMedia.isNotEmpty()) {
+                                        if (moveResult.silentSuccess) {
+                                            viewModel.refresh()
+                                            Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
+                                        } else if (Build.VERSION.SDK_INT >= 30) {
+                                            runCatching {
+                                                pendingTrashMove = moveResult
+                                                val request = MediaStore.createDeleteRequest(
+                                                    context.contentResolver,
+                                                    moveResult.originalMedia.map { canonicalMediaUri(it) }
+                                                )
+                                                trashDeleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                                            }.onFailure {
+                                                pendingTrashMove = null
+                                                viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                                                Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            val allDeleted = moveResult.originalMedia.all { item ->
+                                                runCatching {
+                                                    context.contentResolver.delete(canonicalMediaUri(item), null, null) > 0 ||
+                                                    java.io.File(item.path).delete()
+                                                }.getOrDefault(false)
+                                            }
+                                            if (allDeleted) {
+                                                viewModel.refresh()
+                                                Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                                                Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -643,8 +693,27 @@ private fun GalleryApp(
                         },
                         onDeletePermanently = { media ->
                             if (media.isNotEmpty()) {
+                                val internalItems = media.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
+                                val externalItems = media.filter { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }
                                 coroutineScope.launch {
-                                    viewModel.deletePermanently(media)
+                                    if (internalItems.isNotEmpty()) {
+                                        viewModel.deletePermanently(internalItems)
+                                    }
+                                    if (externalItems.isNotEmpty()) {
+                                        if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+                                            runCatching {
+                                                val request = MediaStore.createDeleteRequest(
+                                                    context.contentResolver,
+                                                    externalItems.map { canonicalMediaUri(it) }
+                                                )
+                                                deleteLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                                            }.onFailure {
+                                                Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            viewModel.deletePermanently(externalItems)
+                                        }
+                                    }
                                 }
                             }
                         },
