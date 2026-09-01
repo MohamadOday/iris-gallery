@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">過去の同じ日に撮影された写真や動画</string>
     <string name="notification_memory_waiting">%1$d 件の思い出があります</string>
     <string name="notification_memories_waiting">%1$d 件の思い出があります</string>
+    <string name="memories_phrase_1">この日の思い出</string>
+    <string name="memories_phrase_2">過去を振り返る</string>
+    <string name="memories_phrase_3">この日を覚えていますか？</string>
+    <string name="memories_phrase_4">今日までの物語</string>
+    <string name="settings_section_memories">思い出と通知</string>
+    <string name="setting_memories_notifications">毎日の思い出通知</string>
+    <string name="setting_memories_notifications_desc">過去の同じ日の写真や動画があるときに通知を受け取ります</string>
+    <string name="setting_memories_time">通知時間</string>
+    <string name="setting_memories_time_desc">思い出を確認して通知する時間</string>
+    <string name="memories_tip_title">毎日の思い出</string>
+    <string name="memories_tip_desc">設定から通知時間の変更や、毎日の通知をいつでもオフにできます。</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d 件のアイテムを保管庫に移動しました</string>

@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Фото и видео этого дня в прошлые годы</string>
     <string name="notification_memory_waiting">Вас ждет %1$d воспоминание</string>
     <string name="notification_memories_waiting">Вас ждут воспоминания: %1$d</string>
+    <string name="memories_phrase_1">В этот день</string>
+    <string name="memories_phrase_2">Взгляд в прошлое</string>
+    <string name="memories_phrase_3">Помните этот день?</string>
+    <string name="memories_phrase_4">Ваша история от сегодняшнего дня</string>
+    <string name="settings_section_memories">Воспоминания и уведомления</string>
+    <string name="setting_memories_notifications">Уведомления о воспоминаниях</string>
+    <string name="setting_memories_notifications_desc">Получать напоминание при наличии фото или видео этого дня за прошлые годы</string>
+    <string name="setting_memories_time">Время напоминания</string>
+    <string name="setting_memories_time_desc">Время суток для проверки и показа воспоминаний</string>
+    <string name="memories_tip_title">Ежедневные воспоминания</string>
+    <string name="memories_tip_desc">Вы можете настроить время или отключить эти ежедневные уведомления в любой момент в Настройках.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">Перемещено в скрытое хранилище: %1$d шт.</string>

@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">往年今日拍摄的照片和视频</string>
     <string name="notification_memory_waiting">有 %1$d 条回忆等待重温</string>
     <string name="notification_memories_waiting">有 %1$d 条回忆等待重温</string>
+    <string name="memories_phrase_1">往年今日</string>
+    <string name="memories_phrase_2">重温旧日时光</string>
+    <string name="memories_phrase_3">还记得这一天吗？</string>
+    <string name="memories_phrase_4">属于今天的回忆</string>
+    <string name="settings_section_memories">回忆与通知</string>
+    <string name="setting_memories_notifications">每日回忆通知</string>
+    <string name="setting_memories_notifications_desc">当往年今日有照片或视频时接收提醒通知</string>
+    <string name="setting_memories_time">提醒时间</string>
+    <string name="setting_memories_time_desc">每天检查并推送回忆的时间</string>
+    <string name="memories_tip_title">每日回忆</string>
+    <string name="memories_tip_desc">您可以随时在“设置”中自定义提醒时间或关闭每日通知。</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d 个项目已移至私密相册</string>

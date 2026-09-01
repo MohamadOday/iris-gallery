@@ -498,6 +498,17 @@
     <string name="notification_channel_desc">Photos and videos from this day in past years</string>
     <string name="notification_memory_waiting">%1$d memory waiting for you</string>
     <string name="notification_memories_waiting">%1$d memories waiting for you</string>
+    <string name="memories_phrase_1">From this day</string>
+    <string name="memories_phrase_2">A look back</string>
+    <string name="memories_phrase_3">Remember this day?</string>
+    <string name="memories_phrase_4">Your story from today</string>
+    <string name="settings_section_memories">Memories &amp; Notifications</string>
+    <string name="setting_memories_notifications">Daily Memories notifications</string>
+    <string name="setting_memories_notifications_desc">Get a reminder when you have photos or videos from this day in past years</string>
+    <string name="setting_memories_time">Reminder time</string>
+    <string name="setting_memories_time_desc">Time of day to check and deliver memories</string>
+    <string name="memories_tip_title">Daily Memories</string>
+    <string name="memories_tip_desc">You can customize the reminder time or turn off these daily notifications anytime in Settings.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d item(s) moved to hidden vault</string>

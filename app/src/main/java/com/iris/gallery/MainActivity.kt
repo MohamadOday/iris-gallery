@@ -88,6 +88,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -491,8 +492,8 @@ private fun GalleryApp(
         }
     }
     LaunchedEffect(Unit) {
-        MemoriesNotifications.schedule(context)
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+        MemoriesNotifications.scheduleFromSettings(context)
+        if (settings.memoriesNotificationEnabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
                 Manifest.permission.POST_NOTIFICATIONS) != PermissionChecker.PERMISSION_GRANTED) {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -1397,18 +1398,73 @@ private fun GalleryScaffold(
                                 val date = Instant.ofEpochMilli(it.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
                                 date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth
                             } }
-                            if (memories.isEmpty()) EmptyState(stringResource(R.string.empty_memories), padding) else PhotoGrid(
-                                memories, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
-                                timelineDateFormat = settings.timelineDateFormat,
-                                customTimelineDateFormat = settings.customTimelineDateFormat,
-                                useRelativeDates = settings.useRelativeDates,
-                                showDayOfWeek = settings.showDayOfWeek,
-                                cornerStyle = settings.cornerStyle,
-                                gridSpacing = settings.gridSpacing,
-                                showVideoDuration = settings.showVideoDurationBadge,
-                                showFormatBadge = settings.showMediaFormatBadge,
-                            ) {
-                                viewerImages = memories; selectedId = it.id
+                            Column(Modifier.fillMaxSize().padding(padding)) {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = !settings.dismissedMemoriesTip,
+                                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+                                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
+                                ) {
+                                    Card(
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Notifications,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(
+                                                    text = stringResource(R.string.memories_tip_title),
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                )
+                                                Text(
+                                                    text = stringResource(R.string.memories_tip_desc),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { settingsPreferences.setDismissedMemoriesTip(true) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Close,
+                                                    contentDescription = stringResource(R.string.action_close),
+                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (memories.isEmpty()) EmptyState(stringResource(R.string.empty_memories), PaddingValues(0.dp)) else PhotoGrid(
+                                    memories, PaddingValues(0.dp), libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+                                    timelineDateFormat = settings.timelineDateFormat,
+                                    customTimelineDateFormat = settings.customTimelineDateFormat,
+                                    useRelativeDates = settings.useRelativeDates,
+                                    showDayOfWeek = settings.showDayOfWeek,
+                                    cornerStyle = settings.cornerStyle,
+                                    gridSpacing = settings.gridSpacing,
+                                    showVideoDuration = settings.showVideoDurationBadge,
+                                    showFormatBadge = settings.showMediaFormatBadge,
+                                ) {
+                                    viewerImages = memories; selectedId = it.id
+                                }
                             }
                         }
                         "formats" -> {

@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Photos et vidéos de ce jour au fil des années</string>
     <string name="notification_memory_waiting">%1$d souvenir vous attend</string>
     <string name="notification_memories_waiting">%1$d souvenirs vous attendent</string>
+    <string name="memories_phrase_1">En ce jour</string>
+    <string name="memories_phrase_2">Un retour en arrière</string>
+    <string name="memories_phrase_3">Vous souvenez-vous de ce jour ?</string>
+    <string name="memories_phrase_4">Votre histoire d\'aujourd\'hui</string>
+    <string name="settings_section_memories">Souvenirs et notifications</string>
+    <string name="setting_memories_notifications">Notifications de souvenirs quotidiens</string>
+    <string name="setting_memories_notifications_desc">Recevez un rappel lorsqu\'il existe des photos ou vidéos de ce jour des années passées</string>
+    <string name="setting_memories_time">Heure de rappel</string>
+    <string name="setting_memories_time_desc">Heure de la journée pour vérifier et envoyer les souvenirs</string>
+    <string name="memories_tip_title">Souvenirs quotidiens</string>
+    <string name="memories_tip_desc">Vous pouvez personnaliser l\'heure ou désactiver ces notifications quotidiennes à tout moment dans les Paramètres.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d élément(s) déplacé(s) vers le coffre masqué</string>

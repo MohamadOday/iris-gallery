@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">صور ومقاطع فيديو من هذا اليوم في الأعوام الماضية</string>
     <string name="notification_memory_waiting">لديك %1$d ذكرى في انتظارك</string>
     <string name="notification_memories_waiting">لديك %1$d ذكريات في انتظارك</string>
+    <string name="memories_phrase_1">من هذا اليوم</string>
+    <string name="memories_phrase_2">نظرة إلى الماضي</string>
+    <string name="memories_phrase_3">هل تتذكر هذا اليوم؟</string>
+    <string name="memories_phrase_4">قصتك من اليوم</string>
+    <string name="settings_section_memories">الذكريات والإشعارات</string>
+    <string name="setting_memories_notifications">إشعارات الذكريات اليومية</string>
+    <string name="setting_memories_notifications_desc">تلقي تذكير عندما تكون هناك صور أو فيديوهات من هذا اليوم في الأعوام الماضية</string>
+    <string name="setting_memories_time">وقت التذكير</string>
+    <string name="setting_memories_time_desc">الوقت المفضل للتحقق من الذكريات وإرسال الإشعار</string>
+    <string name="memories_tip_title">الذكريات اليومية</string>
+    <string name="memories_tip_desc">يمكنك تخصيص وقت التذكير أو تعطيل هذه الإشعارات اليومية في أي وقت من الإعدادات.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">تم نقل %1$d عنصر إلى الخزنة المخفية</string>

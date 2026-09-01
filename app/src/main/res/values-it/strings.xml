@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Foto e video di questo giorno negli anni passati</string>
     <string name="notification_memory_waiting">%1$d ricordo ti aspetta</string>
     <string name="notification_memories_waiting">%1$d ricordi ti aspettano</string>
+    <string name="memories_phrase_1">In questo giorno</string>
+    <string name="memories_phrase_2">Uno sguardo al passato</string>
+    <string name="memories_phrase_3">Ti ricordi questo giorno?</string>
+    <string name="memories_phrase_4">La tua storia di oggi</string>
+    <string name="settings_section_memories">Ricordi e notifiche</string>
+    <string name="setting_memories_notifications">Notifiche ricordi giornalieri</string>
+    <string name="setting_memories_notifications_desc">Ricevi un promemoria quando ci sono foto o video di questo giorno negli anni passati</string>
+    <string name="setting_memories_time">Orario del promemoria</string>
+    <string name="setting_memories_time_desc">Orario della giornata per controllare e inviare i ricordi</string>
+    <string name="memories_tip_title">Ricordi giornalieri</string>
+    <string name="memories_tip_desc">Puoi personalizzare l\'orario o disattivare queste notifiche giornaliere in qualsiasi momento nelle Impostazioni.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d elemento/i spostato/i nella cassaforte</string>

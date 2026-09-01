@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Fotos e vídeos deste dia em anos anteriores</string>
     <string name="notification_memory_waiting">%1$d recordação esperando por você</string>
     <string name="notification_memories_waiting">%1$d recordações esperando por você</string>
+    <string name="memories_phrase_1">Deste dia</string>
+    <string name="memories_phrase_2">Uma retrospectiva</string>
+    <string name="memories_phrase_3">Lembra deste dia?</string>
+    <string name="memories_phrase_4">Sua história de hoje</string>
+    <string name="settings_section_memories">Recordações e notificações</string>
+    <string name="setting_memories_notifications">Notificações de recordações diárias</string>
+    <string name="setting_memories_notifications_desc">Receba um lembrete quando houver fotos ou vídeos deste dia em anos anteriores</string>
+    <string name="setting_memories_time">Horário do lembrete</string>
+    <string name="setting_memories_time_desc">Horário do dia para verificar e enviar as recordações</string>
+    <string name="memories_tip_title">Recordações diárias</string>
+    <string name="memories_tip_desc">Você pode personalizar o horário ou desativar essas notificações diárias a qualquer momento nas Configurações.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d item(ns) movido(s) para o cofre oculto</string>

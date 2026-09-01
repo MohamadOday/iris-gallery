@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Fotos und Videos dieses Tages aus vergangenen Jahren</string>
     <string name="notification_memory_waiting">%1$d Erinnerung wartet auf dich</string>
     <string name="notification_memories_waiting">%1$d Erinnerungen warten auf dich</string>
+    <string name="memories_phrase_1">Von diesem Tag</string>
+    <string name="memories_phrase_2">Ein Rückblick</string>
+    <string name="memories_phrase_3">Erinnerst du dich an diesen Tag?</string>
+    <string name="memories_phrase_4">Deine Geschichte von heute</string>
+    <string name="settings_section_memories">Erinnerungen &amp; Benachrichtigungen</string>
+    <string name="setting_memories_notifications">Tägliche Erinnerungs-Benachrichtigungen</string>
+    <string name="setting_memories_notifications_desc">Erhalte eine Benachrichtigung bei Fotos oder Videos von diesem Tag aus vergangenen Jahren</string>
+    <string name="setting_memories_time">Erinnerungszeit</string>
+    <string name="setting_memories_time_desc">Uhrzeit zur Überprüfung und Benachrichtigung</string>
+    <string name="memories_tip_title">Tägliche Erinnerungen</string>
+    <string name="memories_tip_desc">Du kannst die Uhrzeit anpassen oder diese täglichen Benachrichtigungen jederzeit in den Einstellungen deaktivieren.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d Element(e) in den Tresor verschoben</string>

@@ -27,12 +27,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.RestartAlt
@@ -54,6 +60,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -118,6 +126,7 @@ fun SettingsScreen(
     var showDisablePinDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showDateFormatDialog by remember { mutableStateOf(false) }
+    var showTimePickerDialog by remember { mutableStateOf(false) }
 
     fun clearCache() {
         runCatching {
@@ -871,6 +880,88 @@ fun SettingsScreen(
             }
         }
 
+        // Section: Memories & Notifications
+        item {
+            SettingsSectionHeader(Icons.Outlined.Notifications, stringResource(R.string.settings_section_memories))
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.setting_memories_notifications),
+                        subtitle = stringResource(R.string.setting_memories_notifications_desc),
+                        checked = settings.memoriesNotificationEnabled,
+                        onCheckedChange = { enabled ->
+                            preferences.setMemoriesNotificationEnabled(enabled)
+                            com.iris.gallery.MemoriesNotifications.schedule(
+                                context = context,
+                                enabled = enabled,
+                                hour = settings.memoriesNotificationHour,
+                                minute = settings.memoriesNotificationMinute
+                            )
+                        }
+                    )
+
+                    AnimatedVisibility(
+                        visible = settings.memoriesNotificationEnabled,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(vertical = 6.dp))
+
+                            val formattedTime = remember(settings.memoriesNotificationHour, settings.memoriesNotificationMinute) {
+                                val cal = java.util.Calendar.getInstance().apply {
+                                    set(java.util.Calendar.HOUR_OF_DAY, settings.memoriesNotificationHour)
+                                    set(java.util.Calendar.MINUTE, settings.memoriesNotificationMinute)
+                                }
+                                java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(cal.time)
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showTimePickerDialog = true }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        text = stringResource(R.string.setting_memories_time),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.setting_memories_time_desc),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier.clickable { showTimePickerDialog = true }
+                                ) {
+                                    Text(
+                                        text = formattedTime,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Section 5: Startup & Security
         item {
             SettingsSectionHeader(Icons.Outlined.Dashboard, stringResource(R.string.settings_section_behavior))
@@ -1243,6 +1334,46 @@ fun SettingsScreen(
             },
             onCustomPatternChange = { pattern ->
                 preferences.setCustomTimelineDateFormat(pattern)
+            }
+        )
+    }
+
+    if (showTimePickerDialog) {
+        val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
+        val timePickerState = rememberTimePickerState(
+            initialHour = settings.memoriesNotificationHour,
+            initialMinute = settings.memoriesNotificationMinute,
+            is24Hour = is24Hour
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePickerDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    preferences.setMemoriesNotificationTime(timePickerState.hour, timePickerState.minute)
+                    com.iris.gallery.MemoriesNotifications.schedule(
+                        context = context,
+                        enabled = settings.memoriesNotificationEnabled,
+                        hour = timePickerState.hour,
+                        minute = timePickerState.minute
+                    )
+                    showTimePickerDialog = false
+                }) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePickerDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.setting_memories_time)) },
+            text = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TimePicker(state = timePickerState)
+                }
             }
         )
     }

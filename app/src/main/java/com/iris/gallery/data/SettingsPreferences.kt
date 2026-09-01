@@ -96,6 +96,10 @@ data class SettingsState(
     val preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
     val language: String = "",
     val firstLaunchLanguageSetupDone: Boolean = false,
+    val memoriesNotificationEnabled: Boolean = true,
+    val memoriesNotificationHour: Int = 10,
+    val memoriesNotificationMinute: Int = 0,
+    val dismissedMemoriesTip: Boolean = false,
 ) {
     val hasPin: Boolean get() = appLockPinHash.isNotEmpty()
 }
@@ -133,6 +137,9 @@ class SettingsPreferences(context: Context) {
     fun setAppLockBiometricsEnabled(enabled: Boolean) = update { copy(appLockBiometricsEnabled = enabled) }
     fun setConfirmDelete(enabled: Boolean) = update { copy(confirmDelete = enabled) }
     fun setPreferredEditor(editor: PreferredEditor) = update { copy(preferredEditor = editor) }
+    fun setMemoriesNotificationEnabled(enabled: Boolean) = update { copy(memoriesNotificationEnabled = enabled) }
+    fun setMemoriesNotificationTime(hour: Int, minute: Int) = update { copy(memoriesNotificationHour = hour, memoriesNotificationMinute = minute) }
+    fun setDismissedMemoriesTip(dismissed: Boolean) = update { copy(dismissedMemoriesTip = dismissed) }
 
     fun setPin(pin: String) {
         val salt = java.util.UUID.randomUUID().toString()
@@ -206,6 +213,10 @@ class SettingsPreferences(context: Context) {
             preferredEditor = runCatching { PreferredEditor.valueOf(prefs.getString("preferred_editor", null).orEmpty()) }.getOrDefault(PreferredEditor.ALWAYS_ASK),
             language = prefs.getString("app_language", "").orEmpty(),
             firstLaunchLanguageSetupDone = prefs.getBoolean("first_launch_lang_done", false),
+            memoriesNotificationEnabled = prefs.getBoolean("memories_notification_enabled", true),
+            memoriesNotificationHour = prefs.getInt("memories_notification_hour", 10),
+            memoriesNotificationMinute = prefs.getInt("memories_notification_minute", 0),
+            dismissedMemoriesTip = prefs.getBoolean("dismissed_memories_tip", false),
         )
     }
 
@@ -241,6 +252,10 @@ class SettingsPreferences(context: Context) {
             .putString("preferred_editor", state.preferredEditor.name)
             .putString("app_language", state.language)
             .putBoolean("first_launch_lang_done", state.firstLaunchLanguageSetupDone)
+            .putBoolean("memories_notification_enabled", state.memoriesNotificationEnabled)
+            .putInt("memories_notification_hour", state.memoriesNotificationHour)
+            .putInt("memories_notification_minute", state.memoriesNotificationMinute)
+            .putBoolean("dismissed_memories_tip", state.dismissedMemoriesTip)
             .apply()
     }
 }

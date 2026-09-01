@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Zdjęcia i filmy z tego dnia w minionych latach</string>
     <string name="notification_memory_waiting">%1$d wspomnienie czeka na Ciebie</string>
     <string name="notification_memories_waiting">Wspomnienia (%1$d) czekają na Ciebie</string>
+    <string name="memories_phrase_1">Z tego dnia</string>
+    <string name="memories_phrase_2">Spojrzenie wstecz</string>
+    <string name="memories_phrase_3">Pamiętasz ten dzień?</string>
+    <string name="memories_phrase_4">Twoja historia z dzisiaj</string>
+    <string name="settings_section_memories">Wspomnienia i powiadomienia</string>
+    <string name="setting_memories_notifications">Powiadomienia o codziennych wspomnieniach</string>
+    <string name="setting_memories_notifications_desc">Otrzymuj przypomnienie, gdy masz zdjęcia lub filmy z tego dnia w poprzednich latach</string>
+    <string name="setting_memories_time">Czas przypomnienia</string>
+    <string name="setting_memories_time_desc">Pora dnia na sprawdzanie i dostarczanie wspomnień</string>
+    <string name="memories_tip_title">Codzienne wspomnienia</string>
+    <string name="memories_tip_desc">Możesz dostosować godzinę lub wyłączyć te codzienne powiadomienia w dowolnym momencie w Ustawieniach.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">Przeniesiono %1$d elem. do ukrytego sejfu</string>

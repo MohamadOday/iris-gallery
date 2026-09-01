@@ -440,6 +440,17 @@
     <string name="notification_channel_desc">Geçmiş yıllarda bugün çekilen fotoğraf ve videolar</string>
     <string name="notification_memory_waiting">Sizi bekleyen %1$d anı var</string>
     <string name="notification_memories_waiting">Sizi bekleyen %1$d anı var</string>
+    <string name="memories_phrase_1">Bu günden</string>
+    <string name="memories_phrase_2">Geçmişe bir bakış</string>
+    <string name="memories_phrase_3">Bu günü hatırlıyor musun?</string>
+    <string name="memories_phrase_4">Bugünkü hikayen</string>
+    <string name="settings_section_memories">Anılar ve Bildirimler</string>
+    <string name="setting_memories_notifications">Günlük Anı bildirimleri</string>
+    <string name="setting_memories_notifications_desc">Geçmiş yıllarda bugüne ait fotoğraf veya video olduğunda hatırlatıcı al</string>
+    <string name="setting_memories_time">Hatırlatıcı saati</string>
+    <string name="setting_memories_time_desc">Anıların kontrol edilip iletileceği günün saati</string>
+    <string name="memories_tip_title">Günlük Anılar</string>
+    <string name="memories_tip_desc">Hatırlatma saatini özelleştirebilir veya bu günlük bildirimleri dilediğiniz zaman Ayarlar\'dan kapatabilirsiniz.</string>
 
     <!-- Toasts -->
     <string name="toast_items_vaulted">%1$d öge gizli kasaya taşındı</string>

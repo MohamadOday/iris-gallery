@@ -14,6 +14,7 @@ import android.util.Size
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.iris.gallery.data.MediaRepository
+import com.iris.gallery.data.SettingsPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,21 +25,62 @@ import java.util.Calendar
 
 object MemoriesNotifications {
     const val CHANNEL = "daily_memories"
+    private const val ALARM_REQUEST_CODE = 4102
 
-    fun schedule(context: Context) {
+    fun cancel(context: Context) {
         val alarm = context.getSystemService(AlarmManager::class.java)
-        val intent = PendingIntent.getBroadcast(context, 4102, Intent(context, MemoriesReceiver::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val intent = PendingIntent.getBroadcast(
+            context,
+            ALARM_REQUEST_CODE,
+            Intent(context, MemoriesReceiver::class.java),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (intent != null) {
+            alarm.cancel(intent)
+            intent.cancel()
+        }
+    }
+
+    fun schedule(context: Context, enabled: Boolean = true, hour: Int = 10, minute: Int = 0) {
+        if (!enabled) {
+            cancel(context)
+            return
+        }
+        val alarm = context.getSystemService(AlarmManager::class.java)
+        val intent = PendingIntent.getBroadcast(
+            context,
+            ALARM_REQUEST_CODE,
+            Intent(context, MemoriesReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val next = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 10); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
         }
         alarm.setInexactRepeating(AlarmManager.RTC_WAKEUP, next.timeInMillis, AlarmManager.INTERVAL_DAY, intent)
+    }
+
+    fun scheduleFromSettings(context: Context) {
+        val settings = SettingsPreferences(context).state.value
+        schedule(
+            context = context,
+            enabled = settings.memoriesNotificationEnabled,
+            hour = settings.memoriesNotificationHour,
+            minute = settings.memoriesNotificationMinute
+        )
     }
 }
 
 class MemoriesReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val settings = SettingsPreferences(context).state.value
+        if (!settings.memoriesNotificationEnabled) return
+
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
                 Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val pending = goAsync()
@@ -52,8 +94,8 @@ class MemoriesReceiver : BroadcastReceiver() {
                 if (memories.isEmpty()) return@launch
                 val manager = context.getSystemService(NotificationManager::class.java)
                 manager.createNotificationChannel(NotificationChannel(MemoriesNotifications.CHANNEL,
-                    "Daily memories", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Photos and videos from this day in past years"
+                    context.getString(R.string.notification_channel_memories), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = context.getString(R.string.notification_channel_desc)
                 })
                 val phrases = listOf("From this day", "A look back", "Remember this day?", "Your story from today")
                 val title = phrases[today.dayOfYear % phrases.size]
@@ -62,9 +104,14 @@ class MemoriesReceiver : BroadcastReceiver() {
                     .putExtra("open_memories", true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val text = if (memories.size == 1) {
+                    context.getString(R.string.notification_memory_waiting, memories.size)
+                } else {
+                    context.getString(R.string.notification_memories_waiting, memories.size)
+                }
                 val notification = NotificationCompat.Builder(context, MemoriesNotifications.CHANNEL)
                     .setSmallIcon(R.drawable.ic_notification).setContentTitle(title)
-                    .setContentText("${memories.size} ${if (memories.size == 1) "memory" else "memories"} waiting for you")
+                    .setContentText(text)
                     .setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true)
                     .apply { if (preview != null) setStyle(NotificationCompat.BigPictureStyle().bigPicture(preview).bigLargeIcon(null as android.graphics.Bitmap?)) }
                     .build()
@@ -75,5 +122,5 @@ class MemoriesReceiver : BroadcastReceiver() {
 }
 
 class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) = MemoriesNotifications.schedule(context)
+    override fun onReceive(context: Context, intent: Intent) = MemoriesNotifications.scheduleFromSettings(context)
 }
