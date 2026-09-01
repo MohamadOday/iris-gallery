@@ -20,7 +20,8 @@
 
 ---
 
-> ## Dev Notice
+> [!CAUTION]
+> **Dev Notice**
 > 
 > We do not welcome contributions, collaboration, or support from individuals, companies, or organizations that justify, stand , defend or participate with/in Israeli war crimes, illegal settlement expansion, interventions , actions , or apartheid . 
 > 
