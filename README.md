@@ -20,6 +20,14 @@
 
 ---
 
+> ## Dev Notice
+> 
+> We do not welcome contributions, collaboration, or support from individuals, companies, or organizations that justify, stand , defend or participate with/in Israeli war crimes, illegal settlement expansion, interventions , actions , or apartheid . 
+> 
+> Stand for justice, or do not stand with this project.
+
+---
+
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_photos_timeline.png" width="18%" />
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_albums_grid.png" width="18%" />
