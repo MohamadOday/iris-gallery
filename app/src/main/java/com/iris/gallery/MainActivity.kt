@@ -974,7 +974,7 @@ private fun GalleryScaffold(
         pageCount = { 4 }
     )
     val tabScope = rememberCoroutineScope()
-    val destination = tabPagerState.currentPage
+    val destination = tabPagerState.targetPage
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var externalMedia by remember { mutableStateOf<MediaImage?>(null) }
     var viewerImages by remember { mutableStateOf<List<MediaImage>?>(null) }
@@ -1349,7 +1349,12 @@ private fun GalleryScaffold(
                     NavigationBarItem(
                         selected = destination == index,
                         onClick = { tabScope.launch {
-                            tabPagerState.animateScrollToPage(index, animationSpec = tween(240, easing = FastOutSlowInEasing))
+                            val current = tabPagerState.currentPage
+                            if (kotlin.math.abs(current - index) > 1) {
+                                tabPagerState.scrollToPage(index)
+                            } else {
+                                tabPagerState.animateScrollToPage(index, animationSpec = tween(220, easing = FastOutSlowInEasing))
+                            }
                         } },
                         icon = { AnimatedNavigationIcon(icons[index], destination == index, label) },
                         label = { Text(label) },
