@@ -2515,7 +2515,7 @@ private fun PhotoGrid(
               }
             }
         }
-        if (showTimeline && timelineItems.size > 30) {
+        if (timelineItems.size > 15) {
             val isScrollerActive = gridState.isScrollInProgress || scrubberDragging
             val scrollerAlpha by animateFloatAsState(
                 targetValue = if (isScrollerActive) 1f else 0f,
@@ -2534,7 +2534,7 @@ private fun PhotoGrid(
                     Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .width(36.dp)
+                        .width(40.dp)
                         .graphicsLayer { alpha = scrollerAlpha }
                         .pointerInput(timelineItems.size) {
                             awaitEachGesture {
@@ -2553,6 +2553,7 @@ private fun PhotoGrid(
                                 scrubFraction = fraction
                                 var finalTarget = (fraction * timelineItems.lastIndex).toInt().coerceIn(0, timelineItems.lastIndex)
                                 scrubTargetIndex = finalTarget
+                                scrubberScope.launch { gridState.scrollToItem(finalTarget) }
 
                                 try {
                                     var change = down
@@ -2561,6 +2562,7 @@ private fun PhotoGrid(
                                         scrubFraction = fraction
                                         finalTarget = (fraction * timelineItems.lastIndex).toInt().coerceIn(0, timelineItems.lastIndex)
                                         scrubTargetIndex = finalTarget
+                                        scrubberScope.launch { gridState.scrollToItem(finalTarget) }
                                         change.consume()
                                         change = awaitPointerEvent().changes.first()
                                     } while (change.pressed)
