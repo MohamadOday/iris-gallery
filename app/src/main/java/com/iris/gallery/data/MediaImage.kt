@@ -74,6 +74,7 @@ val MediaImage.isPanorama: Boolean
     }
 
 data class ExifMetadata(
+    val title: String? = null,
     val cameraModel: String? = null,
     val cameraMake: String? = null,
     val lensModel: String? = null,
@@ -200,6 +201,8 @@ fun loadExifMetadata(context: android.content.Context, uri: Uri): ExifMetadata {
             }
             val lensModel = cleanExifString(exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_LENS_MODEL))
                 ?: cleanExifString(exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_LENS_MAKE))
+            val documentName = cleanExifString(exif.getAttribute("DocumentName"))
+                ?: cleanExifString(exif.getAttribute("XPTitle"))
             val userComment = cleanUserComment(exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT))
             val imageDesc = cleanImageDescription(exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION))
             val artist = cleanExifString(exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_ARTIST))
@@ -243,6 +246,7 @@ fun loadExifMetadata(context: android.content.Context, uri: Uri): ExifMetadata {
             val altitude = exif.getAltitude(Double.NaN).takeUnless { it.isNaN() }
 
             ExifMetadata(
+                title = documentName,
                 cameraModel = camera,
                 cameraMake = make,
                 lensModel = lensModel,
@@ -276,6 +280,8 @@ fun loadExifMetadata(context: android.content.Context, uri: Uri): ExifMetadata {
 
 fun applyExifToExifInterface(exif: androidx.exifinterface.media.ExifInterface, request: ExifEditRequest) {
     if (request.stripAllExif) {
+        exif.setAttribute("DocumentName", null)
+        exif.setAttribute("XPTitle", null)
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT, null)
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION, null)
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_ARTIST, null)
@@ -295,10 +301,10 @@ fun applyExifToExifInterface(exif: androidx.exifinterface.media.ExifInterface, r
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP, null)
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD, null)
     } else {
+        exif.setAttribute("DocumentName", request.title.trim().ifBlank { null })
+        exif.setAttribute("XPTitle", request.title.trim().ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT, request.userComment?.trim()?.ifBlank { null })
-        val effectiveExifDesc = request.imageDescription?.trim()?.ifBlank { null }
-            ?: request.title.trim().takeIf { it.isNotBlank() && it != request.displayName && it != request.displayName.substringBeforeLast('.') }
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION, effectiveExifDesc)
+        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_IMAGE_DESCRIPTION, request.imageDescription?.trim()?.ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_ARTIST, request.artist?.trim()?.ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT, request.copyright?.trim()?.ifBlank { null })
         exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE, request.software?.trim()?.ifBlank { null })

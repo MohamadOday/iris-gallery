@@ -44,7 +44,7 @@ data class AppLanguage(
 )
 
 val SUPPORTED_LANGUAGES = listOf(
-    AppLanguage("", "System Default", "Default / النظام", "🌐"),
+    AppLanguage("", "System Default", "System Default", "🌐"),
     AppLanguage("en", "English", "English", "🇺🇸"),
     AppLanguage("ar", "Arabic", "العربية", "🇮🇶"),
     AppLanguage("es", "Spanish", "Español", "🇪🇸"),
@@ -78,12 +78,18 @@ data class SettingsState(
     val customTimelineDateFormat: String = "d. MMMM yyyy",
     val useRelativeDates: Boolean = true,
     val showDayOfWeek: Boolean = false,
+    val abbreviateDayOfWeek: Boolean = false,
+    val smartYearHiding: Boolean = true,
     val showVideoDurationBadge: Boolean = true,
     val showMediaFormatBadge: Boolean = true,
     val showAlbumCount: Boolean = true,
     val autoPlayVideo: Boolean = true,
     val loopVideo: Boolean = true,
     val showViewerUserComments: Boolean = true,
+    val showFilmstrip: Boolean = true,
+    val dismissedFilmstripTip: Boolean = false,
+    val pinchToRotate: Boolean = true,
+    val dismissedRotateTip: Boolean = false,
     val doubleTapZoomLevel: Float = 2.5f,
     val startupTab: StartupTab = StartupTab.PHOTOS,
     val biometricLockEnabled: Boolean = true,
@@ -120,15 +126,29 @@ class SettingsPreferences(context: Context) {
     fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
     fun setTimelineDateFormat(format: TimelineDateFormat) = update { copy(timelineDateFormat = format) }
-    fun setCustomTimelineDateFormat(pattern: String) = update { copy(customTimelineDateFormat = pattern) }
+    fun setCustomTimelineDateFormat(pattern: String) = update {
+        val trimmed = pattern.trim().ifBlank { "d. MMMM yyyy" }
+        val safe = runCatching {
+            val f = java.time.format.DateTimeFormatter.ofPattern(trimmed, java.util.Locale.getDefault())
+            java.time.LocalDate.now().format(f)
+            trimmed
+        }.getOrDefault("d. MMMM yyyy")
+        copy(customTimelineDateFormat = safe)
+    }
     fun setUseRelativeDates(use: Boolean) = update { copy(useRelativeDates = use) }
     fun setShowDayOfWeek(show: Boolean) = update { copy(showDayOfWeek = show) }
+    fun setAbbreviateDayOfWeek(abbreviate: Boolean) = update { copy(abbreviateDayOfWeek = abbreviate) }
+    fun setSmartYearHiding(smart: Boolean) = update { copy(smartYearHiding = smart) }
     fun setShowVideoDurationBadge(show: Boolean) = update { copy(showVideoDurationBadge = show) }
     fun setShowMediaFormatBadge(show: Boolean) = update { copy(showMediaFormatBadge = show) }
     fun setShowAlbumCount(show: Boolean) = update { copy(showAlbumCount = show) }
     fun setAutoPlayVideo(autoPlay: Boolean) = update { copy(autoPlayVideo = autoPlay) }
     fun setLoopVideo(loop: Boolean) = update { copy(loopVideo = loop) }
     fun setShowViewerUserComments(show: Boolean) = update { copy(showViewerUserComments = show) }
+    fun setShowFilmstrip(show: Boolean) = update { copy(showFilmstrip = show) }
+    fun setDismissedFilmstripTip(dismissed: Boolean) = update { copy(dismissedFilmstripTip = dismissed) }
+    fun setPinchToRotate(enabled: Boolean) = update { copy(pinchToRotate = enabled) }
+    fun setDismissedRotateTip(dismissed: Boolean) = update { copy(dismissedRotateTip = dismissed) }
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
@@ -192,15 +212,26 @@ class SettingsPreferences(context: Context) {
             albumGridSize = prefs.getFloat("album_grid_size", 156f),
             showTimelineHeaders = prefs.getBoolean("show_timeline_headers", true),
             timelineDateFormat = runCatching { TimelineDateFormat.valueOf(dateFormatStr.orEmpty()) }.getOrDefault(TimelineDateFormat.SYSTEM_DEFAULT),
-            customTimelineDateFormat = prefs.getString("custom_timeline_date_format", "d. MMMM yyyy").orEmpty().ifBlank { "d. MMMM yyyy" },
+            customTimelineDateFormat = runCatching {
+                val raw = prefs.getString("custom_timeline_date_format", "d. MMMM yyyy").orEmpty().ifBlank { "d. MMMM yyyy" }
+                val f = java.time.format.DateTimeFormatter.ofPattern(raw, java.util.Locale.getDefault())
+                java.time.LocalDate.now().format(f)
+                raw
+            }.getOrDefault("d. MMMM yyyy"),
             useRelativeDates = prefs.getBoolean("use_relative_dates", true),
             showDayOfWeek = prefs.getBoolean("show_day_of_week", false),
+            abbreviateDayOfWeek = prefs.getBoolean("abbreviate_day_of_week", false),
+            smartYearHiding = prefs.getBoolean("smart_year_hiding", true),
             showVideoDurationBadge = prefs.getBoolean("show_video_duration_badge", true),
             showMediaFormatBadge = prefs.getBoolean("show_media_format_badge", true),
             showAlbumCount = prefs.getBoolean("show_album_count", true),
             autoPlayVideo = prefs.getBoolean("auto_play_video", true),
             loopVideo = prefs.getBoolean("loop_video", true),
             showViewerUserComments = prefs.getBoolean("show_viewer_user_comments", true),
+            showFilmstrip = prefs.getBoolean("show_filmstrip", true),
+            dismissedFilmstripTip = prefs.getBoolean("dismissed_filmstrip_tip", false),
+            pinchToRotate = prefs.getBoolean("pinch_to_rotate", true),
+            dismissedRotateTip = prefs.getBoolean("dismissed_rotate_tip", false),
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.PHOTOS),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
@@ -234,12 +265,18 @@ class SettingsPreferences(context: Context) {
             .putString("custom_timeline_date_format", state.customTimelineDateFormat)
             .putBoolean("use_relative_dates", state.useRelativeDates)
             .putBoolean("show_day_of_week", state.showDayOfWeek)
+            .putBoolean("abbreviate_day_of_week", state.abbreviateDayOfWeek)
+            .putBoolean("smart_year_hiding", state.smartYearHiding)
             .putBoolean("show_video_duration_badge", state.showVideoDurationBadge)
             .putBoolean("show_media_format_badge", state.showMediaFormatBadge)
             .putBoolean("show_album_count", state.showAlbumCount)
             .putBoolean("auto_play_video", state.autoPlayVideo)
             .putBoolean("loop_video", state.loopVideo)
             .putBoolean("show_viewer_user_comments", state.showViewerUserComments)
+            .putBoolean("show_filmstrip", state.showFilmstrip)
+            .putBoolean("dismissed_filmstrip_tip", state.dismissedFilmstripTip)
+            .putBoolean("pinch_to_rotate", state.pinchToRotate)
+            .putBoolean("dismissed_rotate_tip", state.dismissedRotateTip)
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putString("startup_tab", state.startupTab.name)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)

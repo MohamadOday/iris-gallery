@@ -107,6 +107,7 @@ fun VideoPage(
     autoPlay: Boolean = true,
     loop: Boolean = true,
     onTap: () -> Unit,
+    onSwipeUp: () -> Unit = {},
     onZoomChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -299,7 +300,10 @@ fun VideoPage(
                 )
             }
             .pointerInput(media.id) { awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = true)
+                awaitFirstDown(requireUnconsumed = false)
+                var totalDragY = 0f
+                var totalDragX = 0f
+                var isSwipeUpDetected = false
                 do {
                     val event = awaitPointerEvent()
                     val pointers = event.changes.count { it.pressed }
@@ -329,6 +333,15 @@ fun VideoPage(
                         scale = next
                         onZoomChanged(next > 1f)
                         event.changes.forEach { it.consume() }
+                    } else if (pointers == 1 && scale <= 1.02f) {
+                        val panChange = event.calculatePan()
+                        totalDragY += panChange.y
+                        totalDragX += panChange.x
+                        if (!isSwipeUpDetected && totalDragY < -75f && kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f) {
+                            isSwipeUpDetected = true
+                            event.changes.forEach { it.consume() }
+                            onSwipeUp()
+                        }
                     }
                 } while (event.changes.any { it.pressed })
             } }

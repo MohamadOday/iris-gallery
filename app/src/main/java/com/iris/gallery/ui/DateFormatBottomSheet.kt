@@ -150,6 +150,15 @@ fun DateFormatBottomSheet(
 
                     Card(
                         shape = RoundedCornerShape(16.dp),
+                        onClick = {
+                            if (isCustom) {
+                                onFormatSelected(TimelineDateFormat.CUSTOM)
+                                showCustomPatternDialog = true
+                            } else {
+                                onFormatSelected(format)
+                                onDismiss()
+                            }
+                        },
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) {
                                 MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
@@ -157,17 +166,7 @@ fun DateFormatBottomSheet(
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                             }
                         ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (isCustom) {
-                                    onFormatSelected(TimelineDateFormat.CUSTOM)
-                                    showCustomPatternDialog = true
-                                } else {
-                                    onFormatSelected(format)
-                                    onDismiss()
-                                }
-                            }
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier
@@ -284,11 +283,21 @@ fun CustomDateFormatDialog(
     val today = remember { LocalDate.now() }
     val sampleDate = remember { LocalDate.of(2024, 8, 31) }
 
-    val isValid = remember(patternText, locale) {
+    val isValid = remember(patternText, locale, sampleDate) {
         if (patternText.isBlank()) false
         else {
             runCatching {
-                DateTimeFormatter.ofPattern(patternText, locale)
+                val trimmed = patternText.trim()
+                val formatter = DateTimeFormatter.ofPattern(trimmed, locale)
+                sampleDate.format(formatter)
+                val sameYearFormatter = getTimelineFormatter(
+                    format = TimelineDateFormat.CUSTOM,
+                    isSameYear = true,
+                    showDayOfWeek = false,
+                    locale = locale,
+                    customPattern = trimmed
+                )
+                sampleDate.format(sameYearFormatter)
                 true
             }.getOrDefault(false)
         }
@@ -297,14 +306,14 @@ fun CustomDateFormatDialog(
     val previewToday = remember(patternText, locale, isValid, today) {
         if (!isValid) ""
         else runCatching {
-            today.format(DateTimeFormatter.ofPattern(patternText, locale))
+            today.format(DateTimeFormatter.ofPattern(patternText.trim(), locale))
         }.getOrDefault("")
     }
 
     val previewSample = remember(patternText, locale, isValid, sampleDate) {
         if (!isValid) ""
         else runCatching {
-            sampleDate.format(DateTimeFormatter.ofPattern(patternText, locale))
+            sampleDate.format(DateTimeFormatter.ofPattern(patternText.trim(), locale))
         }.getOrDefault("")
     }
 

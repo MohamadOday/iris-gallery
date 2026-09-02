@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Language &amp; Region</string>
-    <string name="settings_language_title">App Language</string>
+        <string name="settings_language_system_default">System Default</string>
+<string name="settings_language_title">App Language</string>
     <string name="settings_language_desc">Select your preferred display language</string>
     <string name="first_launch_lang_title">App Language</string>
     <string name="first_launch_lang_subtitle">Select your language to continue</string>
@@ -204,6 +205,8 @@
     <!-- Details Sheet -->
     <string name="details_title">Details</string>
     <string name="details_photo_details">Photo details</string>
+    <string name="details_file_info">File Information</string>
+    <string name="details_camera_exif">Camera &amp; EXIF</string>
     <string name="details_file_name">File name</string>
     <string name="details_title_label">Title</string>
     <string name="details_title_field">Title</string>
@@ -340,6 +343,20 @@
     <string name="settings_relative_dates_desc">Show \"Today\" and \"Yesterday\" for recent media</string>
     <string name="settings_show_day_of_week_title">Show Day of the Week</string>
     <string name="settings_show_day_of_week_desc">Include weekday name in headers (e.g. Tuesday)</string>
+    <string name="settings_abbreviate_day_title">Abbreviate day of week</string>
+    <string name="settings_abbreviate_day_desc">Use short weekday names (e.g. Tue instead of Tuesday)</string>
+    <string name="settings_smart_year_title">Smart year display</string>
+    <string name="settings_smart_year_desc">Hide year for current year photos and show for previous years</string>
+    <string name="storage_internal">Internal Storage</string>
+    <string name="storage_sd_card">SD Card</string>
+    <string name="storage_external">External Storage</string>
+    <string name="action_sort">Sort</string>
+    <string name="sort_date_desc">Newest first</string>
+    <string name="sort_date_asc">Oldest first</string>
+    <string name="sort_name_asc">Name (A to Z)</string>
+    <string name="sort_name_desc">Name (Z to A)</string>
+    <string name="sort_size_desc">Largest first</string>
+    <string name="sort_size_asc">Smallest first</string>
     <string name="action_select_date">Select date</string>
     <string name="action_deselect_date">Deselect date</string>
 
@@ -358,6 +375,12 @@
     <string name="settings_loop_video_desc">Repeat video playback continuously</string>
     <string name="settings_show_user_comments_title">Show comments overlay</string>
     <string name="settings_show_user_comments_desc">Display embedded user comments and notes directly on photos in the viewer</string>
+    <string name="settings_show_filmstrip_title">Thumbnail filmstrip</string>
+    <string name="settings_show_filmstrip_desc">Display interactive thumbnail carousel above viewer controls for rapid scrubbing</string>
+    <string name="viewer_filmstrip_tip">Tip: You can hide or toggle the filmstrip anytime in Settings</string>
+    <string name="settings_pinch_to_rotate_title">Pinch to rotate</string>
+    <string name="settings_pinch_to_rotate_desc">Rotate photos with a two-finger twist gesture</string>
+    <string name="viewer_rotate_tip">Tip: You can rotate photos with two fingers. Disable this anytime in Settings.</string>
     <string name="settings_zoom_scale_title">Double-tap zoom scale</string>
 
     <string name="settings_section_behavior">Behavior &amp; Security</string>

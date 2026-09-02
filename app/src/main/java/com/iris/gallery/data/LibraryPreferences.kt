@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AlbumSort { NEWEST, OLDEST, NAME, ITEM_COUNT, CUSTOM }
+enum class MediaSort { DATE_DESC, DATE_ASC, NAME_ASC, NAME_DESC, SIZE_DESC, SIZE_ASC }
 
 data class LibraryPreferencesState(
     val lockedMedia: Set<Long> = emptySet(),
@@ -13,6 +14,7 @@ data class LibraryPreferencesState(
     val albumCovers: Map<Long, Long> = emptyMap(),
     val albumOrder: List<Long> = emptyList(),
     val albumSort: AlbumSort = AlbumSort.NEWEST,
+    val albumMediaSort: MediaSort = MediaSort.DATE_DESC,
 )
 
 /** Small, synchronous preference state. Media bytes and private metadata never live here. */
@@ -39,6 +41,8 @@ class LibraryPreferences(context: Context) {
 
     fun setAlbumOrder(order: List<Long>) = update { copy(albumOrder = order.distinct()) }
 
+    fun setAlbumMediaSort(sort: MediaSort) = update { copy(albumMediaSort = sort) }
+
     private fun update(transform: LibraryPreferencesState.() -> LibraryPreferencesState) {
         _state.value = _state.value.transform()
         write(_state.value)
@@ -56,6 +60,8 @@ class LibraryPreferences(context: Context) {
         albumOrder = prefs.getString("album_order", "").orEmpty().split(',').mapNotNull(String::toLongOrNull),
         albumSort = runCatching { AlbumSort.valueOf(prefs.getString("album_sort", null).orEmpty()) }
             .getOrDefault(AlbumSort.NEWEST),
+        albumMediaSort = runCatching { MediaSort.valueOf(prefs.getString("album_media_sort", null).orEmpty()) }
+            .getOrDefault(MediaSort.DATE_DESC),
     )
 
     private fun write(state: LibraryPreferencesState) {
@@ -65,6 +71,7 @@ class LibraryPreferences(context: Context) {
             .putStringSet("album_covers", state.albumCovers.mapTo(mutableSetOf()) { "${it.key}:${it.value}" })
             .putString("album_order", state.albumOrder.joinToString(","))
             .putString("album_sort", state.albumSort.name)
+            .putString("album_media_sort", state.albumMediaSort.name)
             .apply()
     }
 }

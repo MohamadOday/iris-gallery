@@ -269,22 +269,32 @@ private fun MaterialLanguageRow(
                     text = language.flag,
                     fontSize = 22.sp
                 )
+                val isSystem = language.code.isEmpty()
+                val systemLocale = remember { java.util.Locale.getDefault() }
+                val titleText = if (isSystem) {
+                    stringResource(R.string.settings_language_system_default)
+                } else {
+                    language.nativeName
+                }
+                val subtitleText = if (isSystem) {
+                    systemLocale.displayName.replaceFirstChar { it.uppercase() }
+                } else {
+                    language.displayName
+                }
                 Column {
                     Text(
-                        text = language.nativeName,
+                        text = titleText,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
                         else MaterialTheme.colorScheme.onSurface
                     )
-                    if (language.code.isNotEmpty()) {
-                        Text(
-                            text = language.displayName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = subtitleText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

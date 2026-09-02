@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">语言与地区</string>
-    <string name="settings_language_title">应用语言</string>
+        <string name="settings_language_system_default">系统默认</string>
+<string name="settings_language_title">应用语言</string>
     <string name="settings_language_desc">选择你偏好的显示语言</string>
     <string name="first_launch_lang_title">应用语言</string>
     <string name="first_launch_lang_subtitle">请选择你的语言以继续</string>

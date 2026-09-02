@@ -56,12 +56,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.iris.gallery.data.AlbumSort
 import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.GridSpacing
 import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.NaturalOrderComparator
 
-data class MediaAlbum(val id: Long, val name: String, val cover: MediaImage, val images: List<MediaImage>)
+data class MediaAlbum(
+    val id: Long,
+    val name: String,
+    val cover: MediaImage,
+    val images: List<MediaImage>,
+    val isSdCard: Boolean = false,
+    val storageLabel: String = "",
+)
 
 @Composable
 fun AlbumsGrid(
@@ -88,11 +97,15 @@ fun AlbumsGrid(
 
     val albums = remember(images, pinned, covers, sort, customOrder) {
         val base = images.groupBy { it.bucketId }.map { (id, media) ->
+            val samplePath = media.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
+            val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
             MediaAlbum(
-                id,
-                media.first().bucketName,
-                media.firstOrNull { it.id == covers[id] } ?: media.first(),
-                media
+                id = id,
+                name = media.first().bucketName,
+                cover = media.firstOrNull { it.id == covers[id] } ?: media.first(),
+                images = media,
+                isSdCard = isSd,
+                storageLabel = if (isSd) "SD Card" else ""
             )
         }
         val orderIndex = customOrder.withIndex().associate { it.value to it.index }
@@ -100,7 +113,7 @@ fun AlbumsGrid(
             when (sort) {
                 AlbumSort.NEWEST -> b.cover.dateTaken.compareTo(a.cover.dateTaken)
                 AlbumSort.OLDEST -> a.cover.dateTaken.compareTo(b.cover.dateTaken)
-                AlbumSort.NAME -> a.name.compareTo(b.name, ignoreCase = true)
+                AlbumSort.NAME -> NaturalOrderComparator.compare(a.name, b.name)
                 AlbumSort.ITEM_COUNT -> b.images.size.compareTo(a.images.size)
                 AlbumSort.CUSTOM -> (orderIndex[a.id] ?: Int.MAX_VALUE).compareTo(orderIndex[b.id] ?: Int.MAX_VALUE)
             }
@@ -319,7 +332,7 @@ fun AlbumsGrid(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 6.dp, start = 2.dp, end = 2.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             album.name,
@@ -328,13 +341,35 @@ fun AlbumsGrid(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (showCount) {
-                            Text(
-                                androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_items_count, album.images.size),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (album.isSdCard) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = RoundedCornerShape(4.dp),
+                                ) {
+                                    Text(
+                                        text = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.storage_sd_card),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            if (showCount) {
+                                Text(
+                                    androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_items_count, album.images.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

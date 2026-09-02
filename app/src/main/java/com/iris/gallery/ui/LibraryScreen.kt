@@ -63,7 +63,7 @@ fun LibraryScreen(
 
 @Composable
 private fun LibraryCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,

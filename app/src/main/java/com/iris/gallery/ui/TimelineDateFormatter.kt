@@ -22,78 +22,94 @@ fun rememberAppLocale(): Locale {
     }
 }
 
+fun stripYearFromPattern(pattern: String): String {
+    return runCatching {
+        pattern
+            .replace(Regex("[,/.\\-]?\\s*y+\\s*[,/.\\-]?"), "")
+            .replace(Regex("^[,/.\\-]\\s*|\\s*[,/.\\-]\$"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }.getOrDefault(pattern)
+}
+
 fun getTimelinePattern(
     format: TimelineDateFormat,
     isSameYear: Boolean,
     showDayOfWeek: Boolean,
     locale: Locale,
     customPattern: String = "d. MMMM yyyy",
+    abbreviateDayOfWeek: Boolean = false,
+    smartYearHiding: Boolean = true,
 ): String {
+    val dayToken = if (abbreviateDayOfWeek) "EEE" else "EEEE"
+    val shouldHideYear = isSameYear && smartYearHiding
+
     return when (format) {
         TimelineDateFormat.CUSTOM -> {
             val base = customPattern.ifBlank { "d. MMMM yyyy" }
-            if (showDayOfWeek && !base.contains("E")) {
-                "EEEE, $base"
+            val withDay = if (showDayOfWeek && !base.contains("E")) {
+                "$dayToken, $base"
             } else {
                 base
             }
+            if (shouldHideYear) stripYearFromPattern(withDay).ifBlank { withDay } else withDay
         }
         TimelineDateFormat.SYSTEM_DEFAULT -> {
-            val skeleton = if (isSameYear) {
-                if (showDayOfWeek) "EEEEMMMMd" else "MMMMd"
+            val skeleton = if (shouldHideYear) {
+                if (showDayOfWeek) "${dayToken}MMMMd" else "MMMMd"
             } else {
-                if (showDayOfWeek) "EEEEyMMMMd" else "yMMMMd"
+                if (showDayOfWeek) "${dayToken}yMMMMd" else "yMMMMd"
             }
             runCatching {
                 android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton)
             }.getOrElse {
-                if (isSameYear) {
-                    if (showDayOfWeek) "EEEE, MMMM d" else "MMMM d"
+                if (shouldHideYear) {
+                    if (showDayOfWeek) "$dayToken, MMMM d" else "MMMM d"
                 } else {
-                    if (showDayOfWeek) "EEEE, MMMM d, yyyy" else "MMMM d, yyyy"
+                    if (showDayOfWeek) "$dayToken, MMMM d, yyyy" else "MMMM d, yyyy"
                 }
             }
         }
         TimelineDateFormat.DAY_MONTH_YEAR -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEEE, d MMMM" else "d MMMM"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, d MMMM" else "d MMMM"
             } else {
-                if (showDayOfWeek) "EEEE, d MMMM yyyy" else "d MMMM yyyy"
+                if (showDayOfWeek) "$dayToken, d MMMM yyyy" else "d MMMM yyyy"
             }
         }
         TimelineDateFormat.MONTH_DAY_YEAR -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEEE, MMMM d" else "MMMM d"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, MMMM d" else "MMMM d"
             } else {
-                if (showDayOfWeek) "EEEE, MMMM d, yyyy" else "MMMM d, yyyy"
+                if (showDayOfWeek) "$dayToken, MMMM d, yyyy" else "MMMM d, yyyy"
             }
         }
         TimelineDateFormat.YEAR_MONTH_DAY -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEEE, MMMM d" else "MMMM d"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, MMMM d" else "MMMM d"
             } else {
-                if (showDayOfWeek) "EEEE, yyyy MMMM d" else "yyyy MMMM d"
+                if (showDayOfWeek) "$dayToken, yyyy MMMM d" else "yyyy MMMM d"
             }
         }
         TimelineDateFormat.NUMERIC_DMY -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEE, dd/MM" else "dd/MM"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, dd/MM" else "dd/MM"
             } else {
-                if (showDayOfWeek) "EEE, dd/MM/yyyy" else "dd/MM/yyyy"
+                if (showDayOfWeek) "$dayToken, dd/MM/yyyy" else "dd/MM/yyyy"
             }
         }
         TimelineDateFormat.NUMERIC_MDY -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEE, MM/dd" else "MM/dd"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, MM/dd" else "MM/dd"
             } else {
-                if (showDayOfWeek) "EEE, MM/dd/yyyy" else "MM/dd/yyyy"
+                if (showDayOfWeek) "$dayToken, MM/dd/yyyy" else "MM/dd/yyyy"
             }
         }
         TimelineDateFormat.NUMERIC_YMD -> {
-            if (isSameYear) {
-                if (showDayOfWeek) "EEE, MM-dd" else "MM-dd"
+            if (shouldHideYear) {
+                if (showDayOfWeek) "$dayToken, MM-dd" else "MM-dd"
             } else {
-                if (showDayOfWeek) "EEE, yyyy-MM-dd" else "yyyy-MM-dd"
+                if (showDayOfWeek) "$dayToken, yyyy-MM-dd" else "yyyy-MM-dd"
             }
         }
     }
@@ -105,12 +121,17 @@ fun getTimelineFormatter(
     showDayOfWeek: Boolean,
     locale: Locale,
     customPattern: String = "d. MMMM yyyy",
+    abbreviateDayOfWeek: Boolean = false,
+    smartYearHiding: Boolean = true,
 ): DateTimeFormatter {
-    val pattern = getTimelinePattern(format, isSameYear, showDayOfWeek, locale, customPattern)
+    val pattern = getTimelinePattern(format, isSameYear, showDayOfWeek, locale, customPattern, abbreviateDayOfWeek, smartYearHiding)
     return runCatching {
-        DateTimeFormatter.ofPattern(pattern, locale)
+        val formatter = DateTimeFormatter.ofPattern(pattern, locale)
+        // Verify that formatter can format a LocalDate without throwing UnsupportedTemporalTypeException
+        LocalDate.now().format(formatter)
+        formatter
     }.getOrElse {
-        DateTimeFormatter.ofPattern(if (isSameYear) "MMMM d" else "MMMM d, yyyy", locale)
+        DateTimeFormatter.ofPattern(if (isSameYear && smartYearHiding) "MMMM d" else "MMMM d, yyyy", locale)
     }
 }
 
@@ -122,10 +143,15 @@ fun formatTimelineDate(
     useRelativeDates: Boolean,
     todayString: String,
     yesterdayString: String,
+    smartYearHiding: Boolean = true,
 ): String {
     if (useRelativeDates) {
         if (date == today) return todayString
         if (date == today.minusDays(1)) return yesterdayString
     }
-    return date.format(if (date.year == today.year) sameYearFormatter else otherYearFormatter)
+    return runCatching {
+        date.format(if (smartYearHiding && date.year == today.year) sameYearFormatter else otherYearFormatter)
+    }.getOrElse {
+        date.format(DateTimeFormatter.ofPattern(if (smartYearHiding && date.year == today.year) "MMMM d" else "MMMM d, yyyy", Locale.getDefault()))
+    }
 }

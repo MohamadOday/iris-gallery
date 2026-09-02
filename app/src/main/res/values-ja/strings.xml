@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">言語と地域</string>
-    <string name="settings_language_title">アプリの言語</string>
+        <string name="settings_language_system_default">システムデフォルト</string>
+<string name="settings_language_title">アプリの言語</string>
     <string name="settings_language_desc">表示言語を選択してください</string>
     <string name="first_launch_lang_title">アプリの言語</string>
     <string name="first_launch_lang_subtitle">言語を選択して続行してください</string>

@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Dil ve Bölge</string>
-    <string name="settings_language_title">Uygulama Dili</string>
+        <string name="settings_language_system_default">Sistem Varsayılanı</string>
+<string name="settings_language_title">Uygulama Dili</string>
     <string name="settings_language_desc">Tercih ettiğiniz görüntüleme dilini seçin</string>
     <string name="first_launch_lang_title">Uygulama Dili</string>
     <string name="first_launch_lang_subtitle">Devam etmek için dilinizi seçin</string>

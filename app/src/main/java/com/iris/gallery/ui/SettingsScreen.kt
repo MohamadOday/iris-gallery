@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -169,10 +171,9 @@ fun SettingsScreen(
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
+                onClick = { showLanguageDialog = true },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showLanguageDialog = true }
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier
@@ -190,8 +191,14 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                        val langLabel = if (currentLang.code.isEmpty()) {
+                            val sysLocale = java.util.Locale.getDefault()
+                            "${currentLang.flag} ${stringResource(R.string.settings_language_system_default)} (${sysLocale.displayLanguage.replaceFirstChar { it.uppercase() }})"
+                        } else {
+                            "${currentLang.flag} ${currentLang.nativeName}"
+                        }
                         Text(
-                            text = "${currentLang.flag} ${currentLang.nativeName}",
+                            text = langLabel,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
@@ -453,44 +460,33 @@ fun SettingsScreen(
 
                     // Photos Grid Tile Size & Live Preview
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(stringResource(R.string.settings_photos_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = CircleShape,
-                            ) {
-                                Text(
-                                    "${currentPhotoSize.roundToInt()} dp · $photoColumns ${if (photoColumns == 1) "col" else "cols"}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
+                        Text(stringResource(R.string.settings_photos_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
-                        // Compact Scaled Live Photos Grid Mockup
+                        // Scaled Live Photos Grid Mockup (Dynamic Height, Capped Max Height, Full Width Fill)
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 160.dp)
+                                .animateContentSize(),
                             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                             shape = RoundedCornerShape(14.dp),
                         ) {
+                            val spacing = settings.gridSpacing.dp.dp
+                            val numRows = if (photoColumns <= 3) 1 else 2
+
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
+                                verticalArrangement = Arrangement.spacedBy(spacing),
+                                horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                val previewRows = if (photoColumns >= 4) 2 else 1
-                                for (row in 0 until previewRows) {
+                                for (row in 0 until numRows) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(spacing),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         for (col in 0 until photoColumns) {
                                             val index = (row * photoColumns + col) % materialYouTiles.size
@@ -507,13 +503,21 @@ fun SettingsScreen(
                                                     icon,
                                                     contentDescription = null,
                                                     tint = tint.copy(alpha = 0.45f),
-                                                    modifier = Modifier.size(if (photoColumns >= 5) 12.dp else 16.dp),
+                                                    modifier = Modifier.size(
+                                                        when {
+                                                            photoColumns >= 6 -> 11.dp
+                                                            photoColumns >= 5 -> 13.dp
+                                                            photoColumns >= 4 -> 15.dp
+                                                            photoColumns >= 3 -> 18.dp
+                                                            else -> 26.dp
+                                                        }
+                                                    ),
                                                 )
                                                 if (index == 0 && settings.showVideoDurationBadge) {
                                                     Surface(
                                                         color = Color.Black.copy(alpha = 0.65f),
                                                         shape = RoundedCornerShape(3.dp),
-                                                        modifier = Modifier.align(Alignment.BottomStart).padding(2.dp),
+                                                        modifier = Modifier.align(Alignment.BottomStart).padding(if (photoColumns <= 2) 4.dp else 2.dp),
                                                     ) {
                                                         Row(
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -523,18 +527,18 @@ fun SettingsScreen(
                                                                 Icons.Outlined.PlayArrow,
                                                                 contentDescription = null,
                                                                 tint = Color.White,
-                                                                modifier = Modifier.size(7.dp),
+                                                                modifier = Modifier.size(if (photoColumns <= 2) 10.dp else 6.5.dp),
                                                             )
-                                                            Text("0:24", color = Color.White, fontSize = 6.5.sp, fontWeight = FontWeight.Bold)
+                                                            Text("0:24", color = Color.White, fontSize = if (photoColumns <= 2) 9.sp else 6.5.sp, fontWeight = FontWeight.Bold)
                                                         }
                                                     }
                                                 } else if (index == 1 && settings.showMediaFormatBadge) {
                                                     Surface(
                                                         color = Color.Black.copy(alpha = 0.65f),
                                                         shape = RoundedCornerShape(3.dp),
-                                                        modifier = Modifier.align(Alignment.BottomStart).padding(2.dp),
+                                                        modifier = Modifier.align(Alignment.BottomStart).padding(if (photoColumns <= 2) 4.dp else 2.dp),
                                                     ) {
-                                                        Text("RAW", color = Color.White, fontSize = 6.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp))
+                                                        Text("RAW", color = Color.White, fontSize = if (photoColumns <= 2) 9.sp else 6.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp))
                                                     }
                                                 } else if (index == 2) {
                                                     Icon(
@@ -543,8 +547,8 @@ fun SettingsScreen(
                                                         tint = tint.copy(alpha = 0.9f),
                                                         modifier = Modifier
                                                             .align(Alignment.TopEnd)
-                                                            .padding(3.dp)
-                                                            .size(8.dp),
+                                                            .padding(if (photoColumns <= 2) 5.dp else 2.5.dp)
+                                                            .size(if (photoColumns <= 2) 14.dp else 8.dp),
                                                     )
                                                 }
                                             }
@@ -582,6 +586,25 @@ fun SettingsScreen(
                             }
                         }
 
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            ) {
+                                Text(
+                                    "${currentPhotoSize.roundToInt()} dp · $photoColumns ${if (photoColumns == 1) "col" else "cols"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                )
+                            }
+                        }
+
                         Slider(
                             value = currentPhotoSize,
                             onValueChange = { preferences.setPhotoGridSize(it) },
@@ -593,25 +616,7 @@ fun SettingsScreen(
 
                     // Albums Grid Tile Size & Live Preview
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(stringResource(R.string.settings_albums_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = CircleShape,
-                            ) {
-                                Text(
-                                    "${currentAlbumSize.roundToInt()} dp · $albumColumns ${if (albumColumns == 1) "col" else "cols"}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
+                        Text(stringResource(R.string.settings_albums_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                         // Compact Scaled Live Albums Grid Mockup
                         Surface(
@@ -653,28 +658,21 @@ fun SettingsScreen(
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Icon(
-                                                Icons.Outlined.PhotoAlbum,
+                                                Icons.Outlined.Folder,
                                                 contentDescription = null,
                                                 tint = albumTint.copy(alpha = 0.5f),
-                                                modifier = Modifier.size(16.dp),
+                                                modifier = Modifier.size(if (albumColumns >= 3) 14.dp else 20.dp),
                                             )
                                         }
                                         Text(
                                             albumName,
                                             style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = if (albumColumns >= 3) 8.sp else 9.5.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center,
                                         )
-                                        if (settings.showAlbumCount) {
-                                            Text(
-                                                "1,248",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontSize = 8.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
                                     }
                                 }
                             }
@@ -704,6 +702,25 @@ fun SettingsScreen(
                                         )
                                     },
                                     shape = CircleShape,
+                                )
+                            }
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            ) {
+                                Text(
+                                    "${currentAlbumSize.roundToInt()} dp · $albumColumns ${if (albumColumns == 1) "col" else "cols"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                 )
                             }
                         }
@@ -743,8 +760,9 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable { showDateFormatDialog = true }
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -791,6 +809,26 @@ fun SettingsScreen(
                             subtitle = stringResource(R.string.settings_show_day_of_week_desc),
                             checked = settings.showDayOfWeek,
                             onCheckedChange = { preferences.setShowDayOfWeek(it) }
+                        )
+
+                        if (settings.showDayOfWeek) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                            SettingsSwitchRow(
+                                title = stringResource(R.string.settings_abbreviate_day_title),
+                                subtitle = stringResource(R.string.settings_abbreviate_day_desc),
+                                checked = settings.abbreviateDayOfWeek,
+                                onCheckedChange = { preferences.setAbbreviateDayOfWeek(it) }
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.settings_smart_year_title),
+                            subtitle = stringResource(R.string.settings_smart_year_desc),
+                            checked = settings.smartYearHiding,
+                            onCheckedChange = { preferences.setSmartYearHiding(it) }
                         )
                     }
 
@@ -859,6 +897,24 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_show_user_comments_desc),
                         checked = settings.showViewerUserComments,
                         onCheckedChange = { preferences.setShowViewerUserComments(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_show_filmstrip_title),
+                        subtitle = stringResource(R.string.settings_show_filmstrip_desc),
+                        checked = settings.showFilmstrip,
+                        onCheckedChange = { preferences.setShowFilmstrip(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_pinch_to_rotate_title),
+                        subtitle = stringResource(R.string.settings_pinch_to_rotate_desc),
+                        checked = settings.pinchToRotate,
+                        onCheckedChange = { preferences.setPinchToRotate(it) }
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -1220,10 +1276,9 @@ fun SettingsScreen(
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
+                onClick = onOpenAbout,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpenAbout() }
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier

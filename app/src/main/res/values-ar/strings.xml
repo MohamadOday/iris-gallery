@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">اللغة والمنطقة</string>
-    <string name="settings_language_title">لغة التطبيق</string>
+        <string name="settings_language_system_default">افتراضي النظام</string>
+<string name="settings_language_title">لغة التطبيق</string>
     <string name="settings_language_desc">اختر لغة العرض المفضلة لديك</string>
     <string name="first_launch_lang_title">لغة التطبيق</string>
     <string name="first_launch_lang_subtitle">اختر لغتك المفضلة للمتابعة</string>

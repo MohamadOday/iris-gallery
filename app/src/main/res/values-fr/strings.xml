@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Langue et région</string>
-    <string name="settings_language_title">Langue de l\'application</string>
+        <string name="settings_language_system_default">Par défaut du système</string>
+<string name="settings_language_title">Langue de l\'application</string>
     <string name="settings_language_desc">Choisissez votre langue d\'affichage préférée</string>
     <string name="first_launch_lang_title">Langue de l\'application</string>
     <string name="first_launch_lang_subtitle">Sélectionnez votre langue pour continuer</string>

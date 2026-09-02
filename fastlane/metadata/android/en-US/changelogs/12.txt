@@ -1,0 +1,7 @@
+• Pinch-to-Rotate: Rotate mis-oriented photos with a two-finger twist gesture, 90° spring snapping, and configurable Settings toggle
+• Viewer Filmstrip: Rapidly scrub through photos in viewer mode with hold-to-preview full-resolution popups
+• Natural Order Sorting: Added intuitive alphanumeric sorting (1, 2, 10) and Album sorting options
+• Timeline Formatting: Fixed regex crash on custom date formats and added smart year hiding
+• Categorized Details: Reorganized photo details sheet into structured Material 3 cards
+• SD Card Badging: Fixed canonical multi-volume file path resolution and added SD card album badges
+• Gestures & UI Polish: Added swipe-up details gesture, primary Date+Time viewer header, and monochrome theme

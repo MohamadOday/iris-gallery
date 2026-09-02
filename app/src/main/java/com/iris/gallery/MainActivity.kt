@@ -32,6 +32,13 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.outlined.Comment
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -42,12 +49,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.calculateCentroid
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +72,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -78,6 +88,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.Dashboard
@@ -85,6 +96,8 @@ import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Wallpaper
+import com.iris.gallery.data.MediaSort
+import com.iris.gallery.data.NaturalOrderComparator
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -107,6 +120,7 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Comment
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.OutlinedTextField
@@ -208,6 +222,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.rememberAsyncImagePainter
 import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import coil3.size.Precision
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -250,6 +265,7 @@ import com.iris.gallery.ui.SettingsScreen
 import com.iris.gallery.ui.AboutScreen
 import androidx.compose.material.icons.outlined.Settings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.iris.gallery.ui.theme.IrisTheme
@@ -414,8 +430,8 @@ private fun GalleryApp(
         pendingMetadata = null
         if (it.resultCode == Activity.RESULT_OK && pending != null) {
             val (media, values, request) = pending
-            context.contentResolver.update(canonicalMediaUri(media), values, null, null)
             saveExifToMedia(context, canonicalMediaUri(media), media.path, request)
+            context.contentResolver.update(canonicalMediaUri(media), values, null, null)
             viewModel.refresh()
             Toast.makeText(context, R.string.toast_metadata_updated, Toast.LENGTH_SHORT).show()
         }
@@ -525,6 +541,12 @@ private fun GalleryApp(
                 autoPlay = settings.autoPlayVideo,
                 loop = settings.loopVideo,
                 showViewerUserComments = settings.showViewerUserComments,
+                showFilmstrip = settings.showFilmstrip,
+                dismissedFilmstripTip = settings.dismissedFilmstripTip,
+                onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
+                pinchToRotate = settings.pinchToRotate,
+                dismissedRotateTip = settings.dismissedRotateTip,
+                onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
                 doubleTapZoomLevel = settings.doubleTapZoomLevel,
                 isLocked = false,
                 isInTrash = false,
@@ -706,6 +728,7 @@ private fun GalleryApp(
                         albumCovers = libraryState.albumCovers,
                         albumSort = libraryState.albumSort,
                         albumOrder = libraryState.albumOrder,
+                        albumMediaSort = libraryState.albumMediaSort,
                         lockedAuthorized = lockedAuthorized,
                         loading = state.loading,
                         error = state.error,
@@ -718,6 +741,7 @@ private fun GalleryApp(
                         onSetAlbumCover = viewModel::setAlbumCover,
                         onSetAlbumSort = viewModel::setAlbumSort,
                         onSetAlbumOrder = viewModel::setAlbumOrder,
+                        onSetAlbumMediaSort = viewModel::setAlbumMediaSort,
                         onRequestUnlock = {
                             if (!settings.biometricLockEnabled) {
                                 lockedAuthorized = true
@@ -807,6 +831,9 @@ private fun GalleryApp(
                                 put(MediaStore.MediaColumns.TITLE, request.title)
                                 put(MediaStore.Images.Media.DATE_TAKEN, request.dateTakenMillis)
                                 put(MediaStore.Images.Media.ORIENTATION, request.orientation)
+                                if (request.imageDescription != null) {
+                                    put(MediaStore.Images.Media.DESCRIPTION, request.imageDescription)
+                                }
                             }
                             if (Build.VERSION.SDK_INT >= 30) runCatching {
                                 pendingMetadata = Triple(media, values, request)
@@ -816,8 +843,8 @@ private fun GalleryApp(
                                 pendingMetadata = null
                                 Toast.makeText(context, context.getString(R.string.toast_could_not_request_metadata), Toast.LENGTH_LONG).show()
                             } else runCatching {
-                                context.contentResolver.update(canonicalMediaUri(media), values, null, null)
                                 saveExifToMedia(context, canonicalMediaUri(media), media.path, request)
+                                context.contentResolver.update(canonicalMediaUri(media), values, null, null)
                                 viewModel.refresh()
                                 Toast.makeText(context, R.string.toast_metadata_updated, Toast.LENGTH_SHORT).show()
                             }
@@ -938,6 +965,7 @@ private fun GalleryScaffold(
     albumCovers: Map<Long, Long>,
     albumSort: com.iris.gallery.data.AlbumSort,
     albumOrder: List<Long>,
+    albumMediaSort: com.iris.gallery.data.MediaSort = com.iris.gallery.data.MediaSort.DATE_DESC,
     lockedAuthorized: Boolean,
     loading: Boolean,
     error: String?,
@@ -950,6 +978,7 @@ private fun GalleryScaffold(
     onSetAlbumCover: (Long, Long) -> Unit,
     onSetAlbumSort: (com.iris.gallery.data.AlbumSort) -> Unit,
     onSetAlbumOrder: (List<Long>) -> Unit,
+    onSetAlbumMediaSort: (com.iris.gallery.data.MediaSort) -> Unit = {},
     onRequestUnlock: () -> Unit,
     onPick: ((MediaImage) -> Unit)?,
     onTrash: (List<MediaImage>) -> Unit,
@@ -1055,11 +1084,15 @@ private fun GalleryScaffold(
         selectedAlbumId?.let { albumId ->
             val albumImages = images.filter { it.bucketId == albumId }
             albumImages.firstOrNull()?.let { first ->
+                val samplePath = albumImages.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
+                val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
                 MediaAlbum(
                     id = albumId,
                     name = first.bucketName,
                     cover = albumImages.firstOrNull { it.id == albumCovers[albumId] } ?: first,
                     images = albumImages,
+                    isSdCard = isSd,
+                    storageLabel = if (isSd) "SD Card" else ""
                 )
             }
         }
@@ -1088,8 +1121,18 @@ private fun GalleryScaffold(
 
     val displayedPhotos = remember(images, fileSearchQuery) { filterMediaList(images, fileSearchQuery) }
     val displayedFavoritePhotos = remember(favoriteImages, fileSearchQuery) { filterMediaList(favoriteImages, fileSearchQuery) }
-    val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery) {
-        selectedAlbum?.let { filterMediaList(it.images, fileSearchQuery) } ?: emptyList()
+    val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery, albumMediaSort) {
+        selectedAlbum?.let { album ->
+            val filtered = filterMediaList(album.images, fileSearchQuery)
+            when (albumMediaSort) {
+                MediaSort.DATE_DESC -> filtered.sortedWith(compareByDescending<MediaImage> { it.dateTaken }.thenByDescending { it.id })
+                MediaSort.DATE_ASC -> filtered.sortedWith(compareBy<MediaImage> { it.dateTaken }.thenBy { it.id })
+                MediaSort.NAME_ASC -> filtered.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
+                MediaSort.NAME_DESC -> filtered.sortedWith { a, b -> NaturalOrderComparator.compare(b.name, a.name) }
+                MediaSort.SIZE_DESC -> filtered.sortedWith(compareByDescending<MediaImage> { it.sizeBytes }.thenByDescending { it.id })
+                MediaSort.SIZE_ASC -> filtered.sortedWith(compareBy<MediaImage> { it.sizeBytes }.thenBy { it.id })
+            }
+        } ?: emptyList()
     }
     val activeMedia = when {
         destination == 3 && librarySection == "trash" -> trashed
@@ -1122,13 +1165,17 @@ private fun GalleryScaffold(
     }
     val availableAlbums = remember(images, albumCovers) {
         images.groupBy { it.bucketId }.map { (id, media) ->
+            val samplePath = media.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
+            val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
             MediaAlbum(
                 id = id,
                 name = media.first().bucketName,
                 cover = media.firstOrNull { it.id == albumCovers[id] } ?: media.first(),
                 images = media,
+                isSdCard = isSd,
+                storageLabel = if (isSd) "SD Card" else ""
             )
-        }.sortedBy { it.name.lowercase() }
+        }.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
     }
     var albumPickerAction by remember { mutableStateOf<AlbumAction?>(null) }
     var pendingAlbumMedia by remember { mutableStateOf<List<MediaImage>?>(null) }
@@ -1313,6 +1360,38 @@ private fun GalleryScaffold(
                                 Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
                             }
                         }
+                        if (destination == 1 && selectedAlbum != null) {
+                            var albumSortMenuExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { albumSortMenuExpanded = true }) {
+                                    Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.action_sort))
+                                }
+                                DropdownMenu(
+                                    expanded = albumSortMenuExpanded,
+                                    onDismissRequest = { albumSortMenuExpanded = false }
+                                ) {
+                                    listOf(
+                                        MediaSort.DATE_DESC to R.string.sort_date_desc,
+                                        MediaSort.DATE_ASC to R.string.sort_date_asc,
+                                        MediaSort.NAME_ASC to R.string.sort_name_asc,
+                                        MediaSort.NAME_DESC to R.string.sort_name_desc,
+                                        MediaSort.SIZE_DESC to R.string.sort_size_desc,
+                                        MediaSort.SIZE_ASC to R.string.sort_size_asc,
+                                    ).forEach { (sortOption, labelRes) ->
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(labelRes)) },
+                                            trailingIcon = if (albumMediaSort == sortOption) {
+                                                { Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
+                                            } else null,
+                                            onClick = {
+                                                albumSortMenuExpanded = false
+                                                onSetAlbumMediaSort(sortOption)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (destination == 3 && librarySection == "trash" && trashed.isNotEmpty()) {
                             TextButton(onClick = { confirmEmptyTrash = true }) {
                                 Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
@@ -1327,7 +1406,10 @@ private fun GalleryScaffold(
                                 customCellSize = if (compactGrid) 80.dp else 112.dp
                                 settingsPreferences.setPhotoGridSize(customCellSize.value)
                             }) {
-                                Icon(Icons.Outlined.GridView, if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid))
+                                Icon(
+                                    if (compactGrid) Icons.Outlined.GridView else Icons.Outlined.Dashboard,
+                                    if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid)
+                                )
                             }
                         }
                         if (librarySection == null && selectedAlbum == null) {
@@ -1386,6 +1468,8 @@ private fun GalleryScaffold(
                 customTimelineDateFormat = settings.customTimelineDateFormat,
                 useRelativeDates = settings.useRelativeDates,
                 showDayOfWeek = settings.showDayOfWeek,
+                abbreviateDayOfWeek = settings.abbreviateDayOfWeek,
+                smartYearHiding = settings.smartYearHiding,
                 cornerStyle = settings.cornerStyle,
                 gridSpacing = settings.gridSpacing,
                 showVideoDuration = settings.showVideoDurationBadge,
@@ -1411,6 +1495,8 @@ private fun GalleryScaffold(
                   customTimelineDateFormat = settings.customTimelineDateFormat,
                   useRelativeDates = settings.useRelativeDates,
                   showDayOfWeek = settings.showDayOfWeek,
+                  abbreviateDayOfWeek = settings.abbreviateDayOfWeek,
+                  smartYearHiding = settings.smartYearHiding,
                   cornerStyle = settings.cornerStyle,
                   gridSpacing = settings.gridSpacing,
                   showVideoDuration = settings.showVideoDurationBadge,
@@ -1860,6 +1946,12 @@ private fun GalleryScaffold(
             autoPlay = settings.autoPlayVideo,
             loop = settings.loopVideo,
             showViewerUserComments = settings.showViewerUserComments,
+            showFilmstrip = settings.showFilmstrip,
+            dismissedFilmstripTip = settings.dismissedFilmstripTip,
+            onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
+            pinchToRotate = settings.pinchToRotate,
+            dismissedRotateTip = settings.dismissedRotateTip,
+            onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
             isLocked = false,
             isInTrash = false,
@@ -1897,6 +1989,12 @@ private fun GalleryScaffold(
             autoPlay = settings.autoPlayVideo,
             loop = settings.loopVideo,
             showViewerUserComments = settings.showViewerUserComments,
+            showFilmstrip = settings.showFilmstrip,
+            dismissedFilmstripTip = settings.dismissedFilmstripTip,
+            onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
+            pinchToRotate = settings.pinchToRotate,
+            dismissedRotateTip = settings.dismissedRotateTip,
+            onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
             isLocked = isViewingLocked,
             isInTrash = isViewingTrash,
@@ -2221,6 +2319,8 @@ private fun PhotoGrid(
     customTimelineDateFormat: String = "d. MMMM yyyy",
     useRelativeDates: Boolean = true,
     showDayOfWeek: Boolean = false,
+    abbreviateDayOfWeek: Boolean = false,
+    smartYearHiding: Boolean = true,
     cornerStyle: CornerStyle = CornerStyle.ROUNDED,
     gridSpacing: GridSpacing = GridSpacing.STANDARD,
     showVideoDuration: Boolean = true,
@@ -2235,14 +2335,14 @@ private fun PhotoGrid(
     val todayString = stringResource(R.string.timeline_today)
     val yesterdayString = stringResource(R.string.timeline_yesterday)
 
-    val sameYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, customTimelineDateFormat) {
-        getTimelineFormatter(timelineDateFormat, isSameYear = true, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat)
+    val sameYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, customTimelineDateFormat) {
+        getTimelineFormatter(timelineDateFormat, isSameYear = true, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat, abbreviateDayOfWeek = abbreviateDayOfWeek, smartYearHiding = smartYearHiding)
     }
-    val otherYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, customTimelineDateFormat) {
-        getTimelineFormatter(timelineDateFormat, isSameYear = false, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat)
+    val otherYearFormatter = remember(currentLocale, timelineDateFormat, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, customTimelineDateFormat) {
+        getTimelineFormatter(timelineDateFormat, isSameYear = false, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat, abbreviateDayOfWeek = abbreviateDayOfWeek, smartYearHiding = smartYearHiding)
     }
 
-    val groups = remember(images, showTimeline, timelineDateFormat, customTimelineDateFormat, useRelativeDates, showDayOfWeek, currentLocale, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
+    val groups = remember(images, showTimeline, timelineDateFormat, customTimelineDateFormat, useRelativeDates, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, currentLocale, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
         if (showTimeline) {
             val zone = ZoneId.systemDefault()
             val today = LocalDate.now()
@@ -2258,6 +2358,7 @@ private fun PhotoGrid(
                         useRelativeDates = useRelativeDates,
                         todayString = todayString,
                         yesterdayString = yesterdayString,
+                        smartYearHiding = smartYearHiding,
                     )
                 }
             }.entries.toList()
@@ -2333,7 +2434,7 @@ private fun PhotoGrid(
     val currentSetSelection by rememberUpdatedState(onSetSelection)
     val currentCellSize by rememberUpdatedState(cellSize)
     val currentOnCellSizeChange by rememberUpdatedState(onCellSizeChange)
-    val formatTimelineLabel: (Long) -> String = remember(currentLocale, timelineDateFormat, customTimelineDateFormat, showDayOfWeek, useRelativeDates, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
+    val formatTimelineLabel: (Long) -> String = remember(currentLocale, timelineDateFormat, customTimelineDateFormat, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, useRelativeDates, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()
         val labelFn: (Long) -> String = { timestamp ->
@@ -2346,6 +2447,7 @@ private fun PhotoGrid(
                 useRelativeDates = useRelativeDates,
                 todayString = todayString,
                 yesterdayString = yesterdayString,
+                smartYearHiding = smartYearHiding,
             )
         }
         labelFn
@@ -2469,13 +2571,24 @@ private fun PhotoGrid(
                 item(key = "header:${group.key}", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
                     val ids = remember(group.value) { group.value.map { it.id } }
                     val wholeDateSelected = ids.isNotEmpty() && ids.all { it in selectedIds }
-                    Row((if (scrubberDragging) Modifier else Modifier.animateItem()).fillMaxWidth().combinedClickable(
-                        onClick = {
-                            if (selectedIds.isNotEmpty()) onSetDateSelection?.invoke(ids, !wholeDateSelected)
-                        },
-                        onLongClick = { onSetDateSelection?.invoke(ids, !wholeDateSelected) },
-                    ).padding(start = 12.dp, end = 12.dp, top = 18.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
+                    val headerClickModifier = if (onSetDateSelection != null) {
+                        Modifier.combinedClickable(
+                            enabled = true,
+                            indication = if (selectedIds.isNotEmpty()) androidx.compose.foundation.LocalIndication.current else null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            onClick = {
+                                if (selectedIds.isNotEmpty()) onSetDateSelection.invoke(ids, !wholeDateSelected)
+                            },
+                            onLongClick = { onSetDateSelection.invoke(ids, !wholeDateSelected) },
+                        )
+                    } else Modifier
+                    Row(
+                        (if (scrubberDragging) Modifier else Modifier.animateItem())
+                            .fillMaxWidth()
+                            .then(headerClickModifier)
+                            .padding(start = 12.dp, end = 12.dp, top = 18.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(group.key, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         AnimatedVisibility(selectedIds.isNotEmpty()) {
@@ -2635,6 +2748,12 @@ private fun PhotoViewer(
     autoPlay: Boolean = true,
     loop: Boolean = true,
     showViewerUserComments: Boolean = true,
+    showFilmstrip: Boolean = true,
+    dismissedFilmstripTip: Boolean = false,
+    onDismissFilmstripTip: () -> Unit = {},
+    pinchToRotate: Boolean = true,
+    dismissedRotateTip: Boolean = false,
+    onDismissRotateTip: () -> Unit = {},
     doubleTapZoomLevel: Float = 2.5f,
     isLocked: Boolean = false,
     isInTrash: Boolean = false,
@@ -2692,6 +2811,8 @@ private fun PhotoViewer(
     var confirmDelete by remember { mutableStateOf(false) }
     var showEditChoiceSheet by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
+    var previewPopupImage by remember { mutableStateOf<MediaImage?>(null) }
+    var showRotateTipBanner by remember { mutableStateOf(false) }
 
     LaunchedEffect(controlsVisible, insetsController) {
         insetsController?.let { controller ->
@@ -2704,6 +2825,7 @@ private fun PhotoViewer(
             }
         }
     }
+    val coroutineScope = rememberCoroutineScope()
     var zoomedImageId by remember { mutableStateOf<Long?>(null) }
     var viewerMenuExpanded by remember { mutableStateOf(false) }
     var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
@@ -2766,13 +2888,19 @@ private fun PhotoViewer(
                     autoPlay = autoPlay,
                     loop = loop,
                     onTap = { controlsVisible = !controlsVisible },
+                    onSwipeUp = { showInfo = true },
                     onZoomChanged = { zoomed -> zoomedImageId = if (zoomed) media.id else null },
                 )
             } else {
                 ZoomablePhoto(
                     image = media,
                     doubleTapZoomLevel = doubleTapZoomLevel,
+                    pinchToRotate = pinchToRotate,
                     onTap = { controlsVisible = !controlsVisible },
+                    onSwipeUp = { showInfo = true },
+                    onRotateGestureTriggered = {
+                        if (!dismissedRotateTip) showRotateTipBanner = true
+                    },
                     onZoomChanged = { zoomed ->
                         zoomedImageId = if (zoomed) media.id else null
                     },
@@ -2795,11 +2923,24 @@ private fun PhotoViewer(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             IconButton(onClick = handleClose) { Icon(Icons.Outlined.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
+            val currentLocale = rememberAppLocale()
+            val headerDate = remember(current.dateTaken, currentLocale) {
+                val df = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, currentLocale)
+                val tf = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT, currentLocale)
+                "${df.format(java.util.Date(current.dateTaken))} · ${tf.format(java.util.Date(current.dateTaken))}"
+            }
+            val customTitle = current.title.takeIf { it.isNotBlank() && it != current.name && it != current.name.substringBeforeLast('.') }
+            val primaryHeaderText = customTitle ?: headerDate
+            val secondaryHeaderText = if (customTitle != null) {
+                "$headerDate · ${stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size)}"
+            } else {
+                "${current.name} · ${stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size)}"
+            }
             Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(current.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                Text(primaryHeaderText, color = Color.White, style = MaterialTheme.typography.titleMedium,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size), color = Color.White.copy(alpha = .7f),
-                    style = MaterialTheme.typography.labelMedium)
+                Text(secondaryHeaderText, color = Color.White.copy(alpha = .75f),
+                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.details_title), tint = Color.White) }
             if (!isLocked && !isInTrash && current.id > 0) {
@@ -2860,65 +3001,12 @@ private fun PhotoViewer(
           }
           }
         }
-        // Floating User Comment Overlay in Viewer
-        if (showViewerUserComments && !viewerComment.isNullOrBlank()) {
-            AnimatedVisibility(
-                visible = controlsVisible,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 20.dp, end = 20.dp, bottom = 84.dp),
-                enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-                        slideInVertically(
-                            animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
-                            initialOffsetY = { it / 2 }
-                        ),
-                exit = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
-                       slideOutVertically(
-                           animationSpec = tween(180, easing = FastOutSlowInEasing),
-                           targetOffsetY = { it / 2 }
-                       ),
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .widthIn(max = 480.dp)
-                        .fillMaxWidth()
-                        .clickable { showInfo = true },
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(20.dp),
-                    tonalElevation = 6.dp,
-                    shadowElevation = 4.dp,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Comment,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = viewerComment,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        }
-
         AnimatedVisibility(
           visible = controlsVisible,
           modifier = Modifier
               .align(Alignment.BottomCenter)
               .navigationBarsPadding()
-              .padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+              .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
           enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                   slideInVertically(
                       animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
@@ -2938,105 +3026,434 @@ private fun PhotoViewer(
                      targetScale = 0.92f
                   ),
         ) {
-        Surface(
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
-                .widthIn(max = 520.dp)
+                .widthIn(max = 540.dp)
                 .fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-            shape = RoundedCornerShape(32.dp),
-            tonalElevation = 8.dp,
         ) {
-          val isFav = current.id in favorites
-          val favScale by animateFloatAsState(
-              targetValue = if (isFav) 1.25f else 1.0f,
-              animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-              label = "fav_scale"
-          )
-          Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            if (isInTrash) {
-                ViewerIconButton(
-                    icon = Icons.Outlined.RestoreFromTrash,
-                    label = stringResource(R.string.action_restore),
-                    modifier = Modifier.weight(1f),
+            // Floating User Comment Overlay positioned directly above filmstrip/bar
+            if (showViewerUserComments && !viewerComment.isNullOrBlank()) {
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth()
+                        .clickable { showInfo = true },
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 4.dp,
                 ) {
-                    onRestore(current)
-                    handleClose()
-                }
-                ViewerIconButton(
-                    icon = Icons.Outlined.DeleteForever,
-                    label = stringResource(R.string.action_delete_permanently),
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    confirmDelete = true
-                }
-            } else {
-                ViewerIconButton(
-                    icon = Icons.Outlined.Share,
-                    label = stringResource(R.string.action_share),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = if (current.isVideo) "video/*" else "image/*"
-                        val shareUri = getShareUri(context, current)
-                        putExtra(Intent.EXTRA_STREAM, shareUri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
-                }
-                if (current.id > 0) {
-                    ViewerIconButton(
-                        icon = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        label = if (isFav) stringResource(R.string.action_favorited) else stringResource(R.string.action_favorite),
-                        tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        scaleEffect = favScale,
-                        modifier = Modifier.weight(1f),
-                    ) { onToggleFavorite(current.id) }
-                }
-                ViewerIconButton(
-                    icon = Icons.Outlined.Edit,
-                    label = stringResource(R.string.action_edit),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (current.isVideo) {
-                        launchExternalEditor(context, current)
-                    } else {
-                        handleEditClick(current)
-                    }
-                }
-                if (current.id > 0) {
-                    if (isLocked) {
-                        ViewerIconButton(
-                            icon = Icons.Outlined.LockOpen,
-                            label = stringResource(R.string.action_unlock),
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Comment,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = viewerComment,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
-                        ) { onUnlock(current) }
-                    } else {
-                        ViewerIconButton(
-                            icon = Icons.Outlined.Lock,
-                            label = stringResource(R.string.action_lock),
-                            modifier = Modifier.weight(1f),
-                        ) { onLock(current) }
-                    }
-                }
-                ViewerIconButton(
-                    icon = Icons.Outlined.DeleteOutline,
-                    label = stringResource(R.string.action_delete),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (isLocked || confirmDeleteSetting) {
-                        confirmDelete = true
-                    } else {
-                        onDelete(current, false)
+                        )
                     }
                 }
             }
-          }
+
+            // Dismissible Pinch-to-Rotate Tip Banner
+            if (showRotateTipBanner && !dismissedRotateTip) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 4.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.viewer_rotate_tip),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                showRotateTipBanner = false
+                                onDismissRotateTip()
+                            },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.action_close),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Mini Filmstrip Thumbnail Carousel for Fast Visual Scrubbing (#40)
+            if (showFilmstrip && images.size > 1) {
+                if (!dismissedFilmstripTip) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        tonalElevation = 4.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Text(
+                                    text = stringResource(R.string.viewer_filmstrip_tip),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                )
+                            }
+                            IconButton(
+                                onClick = onDismissFilmstripTip,
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.action_close),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                val filmstripListState = rememberLazyListState()
+                LaunchedEffect(pagerState.currentPage) {
+                    filmstripListState.animateScrollToItem(
+                        (pagerState.currentPage - 2).coerceAtLeast(0)
+                    )
+                }
+                Surface(
+                    color = Color.Black.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    LazyRow(
+                        state = filmstripListState,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        itemsIndexed(images, key = { _, it -> it.id }) { index, item ->
+                            val isSelected = index == pagerState.currentPage
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .then(
+                                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                        else Modifier.border(0.5.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                    )
+                                    .pointerInput(item.id) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+                                            var popupShown = false
+                                            val holdJob = coroutineScope.launch {
+                                                delay(160)
+                                                popupShown = true
+                                                previewPopupImage = item
+                                            }
+                                            val up = waitForUpOrCancellation()
+                                            holdJob.cancel()
+                                            if (popupShown) {
+                                                previewPopupImage = null
+                                                up?.consume()
+                                            } else if (up != null) {
+                                                coroutineScope.launch {
+                                                    pagerState.scrollToPage(index)
+                                                }
+                                            }
+                                        }
+                                    },
+                            ) {
+                                MediaThumbnail(
+                                    image = item,
+                                    targetSizePx = 180,
+                                    showVideoDuration = false,
+                                    showFormatBadge = false,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                if (item.isVideo) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.28f)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(32.dp),
+                tonalElevation = 8.dp,
+            ) {
+              val isFav = current.id in favorites
+              val favScale by animateFloatAsState(
+                  targetValue = if (isFav) 1.25f else 1.0f,
+                  animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                  label = "fav_scale"
+              )
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                if (isInTrash) {
+                    ViewerIconButton(
+                        icon = Icons.Outlined.RestoreFromTrash,
+                        label = stringResource(R.string.action_restore),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        onRestore(current)
+                        handleClose()
+                    }
+                    ViewerIconButton(
+                        icon = Icons.Outlined.DeleteForever,
+                        label = stringResource(R.string.action_delete_permanently),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        confirmDelete = true
+                    }
+                } else {
+                    ViewerIconButton(
+                        icon = Icons.Outlined.Share,
+                        label = stringResource(R.string.action_share),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = if (current.isVideo) "video/*" else "image/*"
+                            val shareUri = getShareUri(context, current)
+                            putExtra(Intent.EXTRA_STREAM, shareUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
+                    }
+                    if (current.id > 0) {
+                        ViewerIconButton(
+                            icon = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            label = if (isFav) stringResource(R.string.action_favorited) else stringResource(R.string.action_favorite),
+                            tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            scaleEffect = favScale,
+                            modifier = Modifier.weight(1f),
+                        ) { onToggleFavorite(current.id) }
+                    }
+                    ViewerIconButton(
+                        icon = Icons.Outlined.Edit,
+                        label = stringResource(R.string.action_edit),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (current.isVideo) {
+                            launchExternalEditor(context, current)
+                        } else {
+                            handleEditClick(current)
+                        }
+                    }
+                    if (current.id > 0) {
+                        if (isLocked) {
+                            ViewerIconButton(
+                                icon = Icons.Outlined.LockOpen,
+                                label = stringResource(R.string.action_unlock),
+                                modifier = Modifier.weight(1f),
+                            ) { onUnlock(current) }
+                        } else {
+                            ViewerIconButton(
+                                icon = Icons.Outlined.Lock,
+                                label = stringResource(R.string.action_lock),
+                                modifier = Modifier.weight(1f),
+                            ) { onLock(current) }
+                        }
+                    }
+                    ViewerIconButton(
+                        icon = Icons.Outlined.DeleteOutline,
+                        label = stringResource(R.string.action_delete),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (isLocked || confirmDeleteSetting) {
+                            confirmDelete = true
+                        } else {
+                            onDelete(current, false)
+                        }
+                    }
+                }
+              }
+            }
         }
+        }
+
+        // Floating popup preview card when holding an item in the filmstrip
+        AnimatedVisibility(
+            visible = previewPopupImage != null,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(24.dp),
+            enter = fadeIn(tween(140)) + scaleIn(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.85f),
+            exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.88f),
+        ) {
+            previewPopupImage?.let { popupItem ->
+                Surface(
+                    modifier = Modifier
+                        .sizeIn(minWidth = 220.dp, maxWidth = 320.dp, minHeight = 220.dp, maxHeight = 340.dp)
+                        .clip(RoundedCornerShape(24.dp)),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
+                    shadowElevation = 24.dp,
+                    tonalElevation = 8.dp,
+                ) {
+                    Box(Modifier.fillMaxSize()) {
+                        if (!popupItem.isVideo) {
+                            val popupImageReq = remember(popupItem.id, popupItem.uri) {
+                                coil3.request.ImageRequest.Builder(context)
+                                    .data(popupItem.uri)
+                                    .size(coil3.size.Size.ORIGINAL)
+                                    .crossfade(120)
+                                    .build()
+                            }
+                            val popupPainter = rememberAsyncImagePainter(model = popupImageReq)
+                            val popupPainterState by popupPainter.state.collectAsState()
+
+                            Image(
+                                painter = popupPainter,
+                                contentDescription = popupItem.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            if (popupPainterState !is AsyncImagePainter.State.Success) {
+                                MediaThumbnail(
+                                    image = popupItem,
+                                    targetSizePx = 512,
+                                    showVideoDuration = false,
+                                    showFormatBadge = false,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        } else {
+                            MediaThumbnail(
+                                image = popupItem,
+                                targetSizePx = 1080,
+                                showVideoDuration = false,
+                                showFormatBadge = false,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = popupItem.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                val currentLocale = rememberAppLocale()
+                                val popupDate = remember(popupItem.dateTaken, currentLocale) {
+                                    DateFormat.getDateInstance(DateFormat.MEDIUM, currentLocale).format(Date(popupItem.dateTaken))
+                                }
+                                val subtitle = if (popupItem.isVideo && popupItem.durationMs > 0) {
+                                    val totalSecs = popupItem.durationMs / 1000
+                                    val durStr = if (totalSecs >= 3600) {
+                                        "%d:%02d:%02d".format(totalSecs / 3600, (totalSecs % 3600) / 60, totalSecs % 60)
+                                    } else {
+                                        "%d:%02d".format(totalSecs / 60, totalSecs % 60)
+                                    }
+                                    "$durStr · $popupDate"
+                                } else {
+                                    popupDate
+                                }
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.75f),
+                                )
+                            }
+                        }
+                        if (popupItem.isVideo) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                                    .padding(12.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
       }
     }
@@ -3161,12 +3578,16 @@ private fun PhotoViewer(
 private fun ZoomablePhoto(
     image: MediaImage,
     doubleTapZoomLevel: Float = 2.5f,
+    pinchToRotate: Boolean = true,
     onTap: () -> Unit,
+    onSwipeUp: () -> Unit = {},
+    onRotateGestureTriggered: () -> Unit = {},
     onZoomChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val scaleAnim = remember(image.id) { Animatable(1f) }
     val offsetAnim = remember(image.id) { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val rotationAnim = remember(image.id) { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
     var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
 
@@ -3242,9 +3663,10 @@ private fun ZoomablePhoto(
                             coroutineScope.launch {
                                 val currentScale = scaleAnim.value
                                 val currentOffset = offsetAnim.value
-                                if (currentScale > 1.05f) {
+                                if (currentScale > 1.05f || kotlin.math.abs(rotationAnim.value) > 1f) {
                                     launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
                                     launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
                                     onZoomChanged(false)
                                 } else {
                                     val targetScale = doubleTapZoomLevel
@@ -3259,9 +3681,15 @@ private fun ZoomablePhoto(
                         },
                     )
                 }
-                .pointerInput(image.id) {
+                .pointerInput(image.id, pinchToRotate) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
+                        var totalDragY = 0f
+                        var totalDragX = 0f
+                        var totalRotation = rotationAnim.value
+                        var accumulatedAngleDelta = 0f
+                        var isRotating = false
+                        var isSwipeUpDetected = false
                         do {
                             val event = awaitPointerEvent()
                             val pointersDown = event.changes.count { it.pressed }
@@ -3270,6 +3698,7 @@ private fun ZoomablePhoto(
                             if (pointersDown >= 2 || (pointersDown == 1 && scale > 1f)) {
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
+                                val rotationChange = if (pointersDown >= 2 && pinchToRotate) event.calculateRotation() else 0f
                                 val isTransforming = pointersDown >= 2 || panChange.getDistance() > 0.5f
 
                                 val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
@@ -3291,14 +3720,57 @@ private fun ZoomablePhoto(
                                     clampOffset(offset + validPan, nextScale)
                                 }
 
+                                if (pinchToRotate && pointersDown >= 2 && !rotationChange.isNaN()) {
+                                    accumulatedAngleDelta += rotationChange
+                                    if (!isRotating && kotlin.math.abs(accumulatedAngleDelta) >= 15f) {
+                                        isRotating = true
+                                        onRotateGestureTriggered()
+                                    }
+                                    if (isRotating) {
+                                        totalRotation += rotationChange
+                                        coroutineScope.launch {
+                                            rotationAnim.snapTo(totalRotation)
+                                        }
+                                    }
+                                }
+
                                 coroutineScope.launch {
                                     scaleAnim.snapTo(nextScale)
                                     offsetAnim.snapTo(nextOffset)
                                 }
-                                onZoomChanged(nextScale > 1.01f)
+                                onZoomChanged(nextScale > 1.01f || (isRotating && kotlin.math.abs(rotationAnim.value % 360f) > 5f))
                                 if (isTransforming) event.changes.forEach { it.consume() }
+                            } else if (pointersDown == 1 && scale <= 1.02f && !isRotating) {
+                                val panChange = event.calculatePan()
+                                totalDragY += panChange.y
+                                totalDragX += panChange.x
+                                if (!isSwipeUpDetected && totalDragY < -75f && kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f) {
+                                    isSwipeUpDetected = true
+                                    event.changes.forEach { it.consume() }
+                                    onSwipeUp()
+                                }
                             }
                         } while (event.changes.any { it.pressed })
+
+                        // When gesture ends, snap rotation to nearest 90° angle if rotated
+                        if (isRotating) {
+                            val normalized = (totalRotation % 360f + 360f) % 360f
+                            val targetAngle = when {
+                                normalized in 45f..135f -> 90f
+                                normalized in 135f..225f -> 180f
+                                normalized in 225f..315f -> 270f
+                                else -> 0f
+                            }
+                            val diff = (targetAngle - normalized)
+                            val snapTarget = totalRotation + diff
+                            coroutineScope.launch {
+                                rotationAnim.animateTo(
+                                    targetValue = snapTarget,
+                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
+                                )
+                                onZoomChanged(scaleAnim.value > 1.01f || kotlin.math.abs(snapTarget % 360f) > 2f)
+                            }
+                        }
                     }
                 },
         ) {
@@ -3339,6 +3811,7 @@ private fun ZoomablePhoto(
                 withTransform({
                     translate(offset.x, offset.y)
                     scale(scale, scale, pivot = center)
+                    rotate(rotationAnim.value, pivot = center)
                     translate(left, top)
                 }) {
                     val drawSize = androidx.compose.ui.geometry.Size(fitWidth, fitHeight)
@@ -3407,49 +3880,67 @@ private fun PhotoDetailsSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            val sheetTitle = image.title.takeIf { it.isNotBlank() && it != image.name && it != image.name.substringBeforeLast('.') }
+                ?: image.name.ifBlank { stringResource(R.string.details_photo_details) }
             Text(
-                image.name.ifBlank { stringResource(R.string.details_photo_details) },
+                sheetTitle,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
 
-            // User Comment / Notes Card
-            exif?.let { data ->
-                val commentText = data.userComment?.ifBlank { null } ?: image.description.ifBlank { null }
-                if (commentText != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Outlined.Comment, stringResource(R.string.details_user_comment), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Text(stringResource(R.string.details_user_comment), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            }
+            val currentLocale = rememberAppLocale()
+            val resolvedTitle = (exif?.title?.takeIf { it.isNotBlank() } ?: image.title).takeIf {
+                it.isNotBlank() && it != image.name && it != image.name.substringBeforeLast('.')
+            }
+            val resolvedDesc = (exif?.imageDescription?.takeIf { it.isNotBlank() } ?: image.description.takeIf { it.isNotBlank() })?.takeIf {
+                it != resolvedTitle && it != image.name && it != image.name.substringBeforeLast('.')
+            }
+            val commentText = exif?.userComment?.ifBlank { null }
+
+            // 1. User Notes / Comments Card
+            if (commentText != null || resolvedDesc != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.AutoMirrored.Outlined.Comment, stringResource(R.string.details_user_comment), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text(stringResource(R.string.details_user_comment), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        if (commentText != null) {
                             SelectionContainer {
                                 Text(commentText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
+                        if (resolvedDesc != null) {
+                            SelectionContainer {
+                                Text(resolvedDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
+            }
 
+            // 2. Camera & EXIF Metadata Card
+            exif?.let { data ->
                 val hasCamera = data.cameraModel != null || data.aperture != null || data.shutterSpeed != null || data.iso != null || data.focalLength != null
                 if (hasCamera) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Outlined.CameraAlt, stringResource(R.string.details_camera), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Text(data.cameraModel ?: stringResource(R.string.details_camera_capture), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Icon(Icons.Outlined.CameraAlt, stringResource(R.string.details_camera_exif), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Text(data.cameraModel ?: stringResource(R.string.details_camera_exif), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
                             if (!data.lensModel.isNullOrBlank()) {
                                 Text(data.lensModel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
@@ -3465,14 +3956,21 @@ private fun PhotoDetailsSheet(
                             if (!data.software.isNullOrBlank()) {
                                 Text("${stringResource(R.string.details_software)}: ${data.software}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            if (!data.artist.isNullOrBlank()) {
+                                Text("${stringResource(R.string.details_artist)}: ${data.artist}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (!data.copyright.isNullOrBlank()) {
+                                Text("${stringResource(R.string.details_copyright)}: ${data.copyright}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
 
+                // 3. Location & Map Card
                 if (data.latitude != null && data.longitude != null) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Row(
@@ -3503,31 +4001,37 @@ private fun PhotoDetailsSheet(
                 }
             }
 
-            val currentLocale = rememberAppLocale()
-            val isAutoTitle = image.title.isBlank() ||
-                image.title == image.name ||
-                image.title == image.name.substringBeforeLast('.')
-            DetailBlock(stringResource(R.string.details_file_name), image.name)
-            if (!isAutoTitle) {
-                DetailBlock(stringResource(R.string.details_title_field), image.title)
+            // 4. File Information Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Outlined.Description, stringResource(R.string.details_file_info), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text(stringResource(R.string.details_file_info), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    DetailBlock(stringResource(R.string.details_file_name), image.name)
+                    if (resolvedTitle != null) {
+                        DetailBlock(stringResource(R.string.details_title_field), resolvedTitle)
+                    }
+                    val formattedDate = remember(image.dateTaken, currentLocale) {
+                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, currentLocale).format(Date(image.dateTaken))
+                    }
+                    DetailItem(stringResource(R.string.details_captured), formattedDate)
+                    val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
+                    val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
+                    DetailItem(stringResource(R.string.details_resolution), resText)
+                    DetailItem(stringResource(R.string.details_type), image.mimeType.ifBlank { if (image.isVideo) stringResource(R.string.format_video) else stringResource(R.string.format_image) })
+                    DetailItem(stringResource(R.string.details_size), formatFileSize(image.sizeBytes))
+                    if (image.orientation != 0) DetailItem(stringResource(R.string.details_orientation), "${image.orientation}°")
+                    if (image.isVideo) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
+                    DetailBlock(stringResource(R.string.details_path), image.path)
+                }
             }
-            exif?.imageDescription?.takeIf { it.isNotBlank() && it != image.title }?.let {
-                DetailBlock(stringResource(R.string.details_desc_field), it)
-            }
-            exif?.artist?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_artist), it) }
-            exif?.copyright?.takeIf { it.isNotBlank() }?.let { DetailBlock(stringResource(R.string.details_copyright), it) }
-            val formattedDate = remember(image.dateTaken, currentLocale) {
-                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, currentLocale).format(Date(image.dateTaken))
-            }
-            DetailItem(stringResource(R.string.details_captured), formattedDate)
-            val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
-            val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
-            DetailItem(stringResource(R.string.details_resolution), resText)
-            DetailItem(stringResource(R.string.details_type), image.mimeType.ifBlank { if (image.isVideo) stringResource(R.string.format_video) else stringResource(R.string.format_image) })
-            DetailItem(stringResource(R.string.details_size), formatFileSize(image.sizeBytes))
-            if (image.orientation != 0) DetailItem(stringResource(R.string.details_orientation), "${image.orientation}°")
-            if (image.isVideo) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
-            DetailBlock(stringResource(R.string.details_path), image.path)
+
+            // 5. Edit Metadata Action Button
             if (!image.isVideo) {
                 Button(
                     onClick = { editing = true },

@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Comment
@@ -90,10 +91,11 @@ fun ExifEditorSheet(
 
     // File & MediaStore State
     var fileName by remember(image.id) { mutableStateOf(image.name) }
-    val isInitialAutoTitle = remember(image.id, image.title, image.name) {
-        image.title.isBlank() || image.title == image.name || image.title == image.name.substringBeforeLast('.')
+    val initialTitle = remember(image.id, image.title, image.name, exif) {
+        val t = exif?.title?.takeIf { it.isNotBlank() } ?: image.title
+        if (t.isBlank() || t == image.name || t == image.name.substringBeforeLast('.')) "" else t
     }
-    var mediaTitle by remember(image.id) { mutableStateOf(if (isInitialAutoTitle) "" else image.title) }
+    var mediaTitle by remember(image.id, exif) { mutableStateOf(initialTitle) }
     var dateTakenStr by remember(image.id) { mutableStateOf(dateFormat.format(Date(image.dateTaken))) }
     var orientation by remember(image.id) { mutableIntStateOf((image.orientation % 360 + 360) % 360) }
 
@@ -122,8 +124,8 @@ fun ExifEditorSheet(
 
     fun revertAll() {
         fileName = image.name
-        val isAuto = image.title.isBlank() || image.title == image.name || image.title == image.name.substringBeforeLast('.')
-        mediaTitle = if (isAuto) "" else image.title
+        val t = exif?.title?.takeIf { it.isNotBlank() } ?: image.title
+        mediaTitle = if (t.isBlank() || t == image.name || t == image.name.substringBeforeLast('.')) "" else t
         dateTakenStr = dateFormat.format(Date(image.dateTaken))
         orientation = (image.orientation % 360 + 360) % 360
 
@@ -312,13 +314,27 @@ fun ExifEditorSheet(
                     // Notes & Information
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
+                            value = mediaTitle,
+                            onValueChange = {
+                                mediaTitle = it
+                                val ext = image.name.substringAfterLast('.', "jpg")
+                                fileName = if (it.isNotBlank()) "$it.$ext" else image.name
+                            },
+                            label = { Text(stringResource(R.string.details_edit_title)) },
+                            placeholder = { Text(stringResource(R.string.details_title_hint)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+
+                        OutlinedTextField(
                             value = userComment,
                             onValueChange = { userComment = it },
                             label = { Text(stringResource(R.string.exif_user_comment_label)) },
                             placeholder = { Text(stringResource(R.string.exif_user_comment_hint)) },
-                            leadingIcon = { Icon(Icons.Outlined.Comment, null) },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Comment, null) },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
+                            minLines = 1,
                             maxLines = 6,
                             shape = RoundedCornerShape(12.dp),
                         )
@@ -533,7 +549,10 @@ fun ExifEditorSheet(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             value = fileName,
-                            onValueChange = { fileName = it },
+                            onValueChange = {
+                                fileName = it
+                                mediaTitle = it.substringBeforeLast('.')
+                            },
                             label = { Text(stringResource(R.string.details_edit_filename)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
@@ -542,7 +561,11 @@ fun ExifEditorSheet(
 
                         OutlinedTextField(
                             value = mediaTitle,
-                            onValueChange = { mediaTitle = it },
+                            onValueChange = {
+                                mediaTitle = it
+                                val ext = image.name.substringAfterLast('.', "jpg")
+                                fileName = if (it.isNotBlank()) "$it.$ext" else image.name
+                            },
                             label = { Text(stringResource(R.string.details_edit_title)) },
                             placeholder = { Text(stringResource(R.string.details_title_hint)) },
                             modifier = Modifier.fillMaxWidth(),
@@ -622,13 +645,23 @@ fun ExifEditorSheet(
                         }
 
                         val customTitle = mediaTitle.trim()
-                        val effectiveTitle = customTitle.ifBlank {
-                            fileName.trim().substringBeforeLast('.').ifBlank { image.name.substringBeforeLast('.') }
+                        val ext = (fileName.substringAfterLast('.', "").takeIf { it.isNotBlank() } ?: image.name.substringAfterLast('.', "jpg")).trim()
+                        val effectiveDisplayName = if (fileName.trim().isNotBlank() && fileName.trim() != image.name) {
+                            fileName.trim()
+                        } else if (customTitle.isNotBlank()) {
+                            if (customTitle.contains('.')) customTitle else "$customTitle.$ext"
+                        } else {
+                            image.name
                         }
-                        val effectiveDesc = imageDescription.trim().ifBlank { if (customTitle.isNotBlank()) customTitle else null }
+                        val effectiveTitle = if (customTitle.isNotBlank()) {
+                            customTitle.substringBeforeLast('.')
+                        } else {
+                            effectiveDisplayName.substringBeforeLast('.')
+                        }
+                        val effectiveDesc = imageDescription.trim().ifBlank { null }
 
                         val request = ExifEditRequest(
-                            displayName = fileName.trim().ifBlank { image.name },
+                            displayName = effectiveDisplayName,
                             title = effectiveTitle,
                             dateTakenMillis = parsedTime,
                             orientation = orientation,

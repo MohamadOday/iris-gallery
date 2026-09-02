@@ -130,6 +130,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun setAlbumCover(albumId: Long, mediaId: Long) = libraryPreferences.setAlbumCover(albumId, mediaId)
     fun setAlbumSort(sort: AlbumSort) = libraryPreferences.setAlbumSort(sort)
     fun setAlbumOrder(order: List<Long>) = libraryPreferences.setAlbumOrder(order)
+    fun setAlbumMediaSort(sort: com.iris.gallery.data.MediaSort) = libraryPreferences.setAlbumMediaSort(sort)
 
     fun toggleFavorite(id: Long) {
         val updated = _favorites.value.toMutableSet().apply {

@@ -70,7 +70,8 @@
 
     <!-- Language & First Launch -->
     <string name="settings_section_language">Sprache &amp; Region</string>
-    <string name="settings_language_title">App-Sprache</string>
+        <string name="settings_language_system_default">Systemstandard</string>
+<string name="settings_language_title">App-Sprache</string>
     <string name="settings_language_desc">Wähle deine bevorzugte Anzeigesprache</string>
     <string name="first_launch_lang_title">App-Sprache</string>
     <string name="first_launch_lang_subtitle">Wähle deine Sprache, um fortzufahren</string>

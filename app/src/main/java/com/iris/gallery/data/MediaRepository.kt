@@ -44,8 +44,14 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.SIZE,
             MediaStore.Images.Media.ORIENTATION,
             MediaStore.MediaColumns.TITLE,
+            MediaStore.MediaColumns.DATA,
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 MediaStore.Images.Media.RELATIVE_PATH
+            } else {
+                MediaStore.Images.Media.DATA
+            },
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                MediaStore.MediaColumns.VOLUME_NAME
             } else {
                 MediaStore.Images.Media.DATA
             },
@@ -95,18 +101,25 @@ class MediaRepository(private val context: Context) {
                 val size = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
                 val orientation = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.ORIENTATION)
                 val title = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.TITLE)
-                val path = cursor.getColumnIndexOrThrow(
-                    if (android.os.Build.VERSION.SDK_INT >= 29) MediaStore.Images.Media.RELATIVE_PATH
-                    else MediaStore.Images.Media.DATA,
-                )
+                val dataCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                val relPathCol = if (android.os.Build.VERSION.SDK_INT >= 29) cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH) else -1
+                val volCol = if (android.os.Build.VERSION.SDK_INT >= 29) cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME) else -1
+
                 while (cursor.moveToNext()) {
                     val mediaId = cursor.getLong(id)
                     val isVid = cursor.getInt(mediaType) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                    val filePath = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                        "/storage/emulated/0/${cursor.getString(path).orEmpty()}${cursor.getString(name).orEmpty()}"
-                    } else {
-                        cursor.getString(path).orEmpty()
+                    val displayName = cursor.getString(name).orEmpty()
+                    val rawData = if (dataCol >= 0) cursor.getString(dataCol).orEmpty() else ""
+                    val relPath = if (relPathCol >= 0) cursor.getString(relPathCol).orEmpty() else ""
+                    val volName = if (volCol >= 0) cursor.getString(volCol).orEmpty() else ""
+
+                    val filePath = when {
+                        rawData.isNotBlank() -> rawData
+                        relPath.isNotBlank() && volName.isNotBlank() && volName != "external_primary" -> "/storage/$volName/$relPath$displayName"
+                        relPath.isNotBlank() -> "/storage/emulated/0/$relPath$displayName"
+                        else -> ""
                     }
+
                     val mediaUri = if (isVid) {
                         ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
                     } else {
@@ -126,7 +139,7 @@ class MediaRepository(private val context: Context) {
                         MediaImage(
                             id = mediaId,
                             uri = mediaUri,
-                            name = cursor.getString(name).orEmpty(),
+                            name = displayName,
                             dateTaken = cursor.getLong(taken).takeIf { it > 0 }
                                 ?: cursor.getLong(added) * 1_000,
                             width = cursor.getInt(width),
