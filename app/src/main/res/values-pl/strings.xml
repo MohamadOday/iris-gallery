@@ -234,6 +234,59 @@
     <string name="details_edit_orientation_hint">Orientacja · 0, 90, 180 lub 270</string>
     <string name="details_edit_permission_note">System Android poprosi o potwierdzenie przed zmianą multimediów należących do innej aplikacji.</string>
 
+    <!-- EXIF Metadata & Details -->
+    <string name="details_user_comment">Komentarz użytkownika</string>
+    <string name="details_user_comment_hint">Nie dodano komentarza</string>
+    <string name="details_lens">Obiektyw</string>
+    <string name="details_artist">Autor / Twórca</string>
+    <string name="details_copyright">Prawa autorskie</string>
+    <string name="details_software">Oprogramowanie</string>
+    <string name="details_altitude">Wysokość n.p.m.</string>
+    <string name="details_white_balance">Balans bieli</string>
+    <string name="details_white_balance_auto">Automatyczny</string>
+    <string name="details_white_balance_manual">Ręczny</string>
+    <string name="details_megapixels">%1$s MP</string>
+
+    <!-- EXIF Editor -->
+    <string name="exif_editor_title">Edytor EXIF i metadanych</string>
+    <string name="exif_editor_subtitle">Przeglądaj, edytuj lub usuwaj tagi metadanych</string>
+    <string name="exif_tab_notes">Uwagi i informacje</string>
+    <string name="exif_tab_camera">Aparat i obiektyw</string>
+    <string name="exif_tab_location">Lokalizacja</string>
+    <string name="exif_tab_file">Plik i data</string>
+    <string name="exif_user_comment_label">Komentarz / Uwaga użytkownika</string>
+    <string name="exif_user_comment_hint">Wpisz osobiste komentarze, wspomnienia lub notatki archiwalne…</string>
+    <string name="exif_image_desc_label">Opis obrazu</string>
+    <string name="exif_image_desc_hint">Podpis lub opis zdjęcia</string>
+    <string name="exif_artist_label">Autor / Fotograf</string>
+    <string name="exif_artist_hint">np. Jan Kowalski</string>
+    <string name="exif_copyright_label">Informacja o prawach autorskich</string>
+    <string name="exif_copyright_hint">np. © 2026 Mohamad Oday</string>
+    <string name="exif_software_label">Oprogramowanie / Narzędzie</string>
+    <string name="exif_camera_make_label">Producent aparatu</string>
+    <string name="exif_camera_make_hint">np. Sony, Canon, Google, Nikon</string>
+    <string name="exif_camera_model_label">Model aparatu</string>
+    <string name="exif_camera_model_hint">np. Pixel 9 Pro, ILCE-7M4</string>
+    <string name="exif_lens_model_label">Model obiektywu</string>
+    <string name="exif_lens_model_hint">np. FE 24-70mm F2.8 GM II</string>
+    <string name="exif_iso_label">Czułość ISO</string>
+    <string name="exif_aperture_label">Przysłona (liczba f)</string>
+    <string name="exif_shutter_label">Czas naświetlania (np. 1/250 lub 0.004)</string>
+    <string name="exif_focal_length_label">Ogniskowa (mm)</string>
+    <string name="exif_latitude_label">Szerokość geograficzna (°)</string>
+    <string name="exif_longitude_label">Długość geograficzna (°)</string>
+    <string name="exif_altitude_label">Wysokość n.p.m. (metry)</string>
+    <string name="exif_remove_gps">Usuń dane lokalizacji</string>
+    <string name="exif_remove_gps_desc">Usuń współrzędne GPS z tego zdjęcia w celu ochrony prywatności</string>
+    <string name="exif_strip_all">Usuń wszystkie dane EXIF</string>
+    <string name="exif_strip_all_desc">Usuwa specyfikację aparatu, autora, komentarze i lokalizację w celu ochrony prywatności</string>
+    <string name="exif_strip_all_dialog_title">Usunąć wszystkie metadane EXIF?</string>
+    <string name="exif_strip_all_dialog_desc">Spowoduje to wymazanie ze zdjęcia wszystkich osadzonych ustawień aparatu, komentarzy, informacji o autorze oraz tagów lokalizacji GPS.</string>
+    <string name="exif_set_current_time">Ustaw aktualny czas</string>
+    <string name="exif_revert_changes">Przywróć</string>
+    <string name="toast_metadata_updated">Zaktualizowano metadane i tagi EXIF</string>
+    <string name="toast_metadata_failed">Nie udało się zaktualizować metadanych</string>
+
     <!-- Settings Screen -->
     <string name="settings_title">Ustawienia</string>
     <string name="settings_section_appearance">Wygląd i motyw</string>
@@ -257,6 +310,8 @@
     <string name="settings_spacing_compact">Kompaktowe (2dp)</string>
     <string name="settings_spacing_standard">Standardowe (4dp)</string>
     <string name="settings_spacing_relaxed">Luźne (8dp)</string>
+    <string name="settings_photos_tile_size">Rozmiar miniatur w siatce zdjęć</string>
+    <string name="settings_albums_tile_size">Rozmiar okładek w siatce albumów</string>
     <string name="settings_show_timeline_title">Nagłówki grup osi czasu</string>
     <string name="settings_show_timeline_desc">Grupuj zdjęcia według daty wykonania z ruchomymi nagłówkami dni</string>
 
@@ -273,6 +328,8 @@
     <string name="settings_autoplay_video_desc">Rozpoczynaj odtwarzanie natychmiast po otwarciu filmu w przeglądarce</string>
     <string name="settings_loop_video_title">Odtwarzanie w pętli</string>
     <string name="settings_loop_video_desc">Powtarzaj odtwarzanie wideo w nieskończoność</string>
+    <string name="settings_show_user_comments_title">Wyświetlaj komentarze na zdjęciach</string>
+    <string name="settings_show_user_comments_desc">Wyświetla osadzone komentarze i notatki użytkownika bezpośrednio na zdjęciach w widoku przeglądarki</string>
     <string name="settings_zoom_scale_title">Skala powiększenia po dwukrotnym dotknięciu</string>
 
     <string name="settings_section_behavior">Zachowanie i bezpieczeństwo</string>
@@ -303,7 +360,8 @@
     <string name="editor_external_title">Edytor zewnętrzny</string>
     <string name="editor_external_desc">Otwórz w ImageToolbox, Lightroom, Snapseed itp.</string>
     <string name="editor_remember_choice">Zawsze używaj tej opcji</string>
-    <string name="edit_with_external_title">Edytuj zdjęcie za pomocą…</string>
+    <string name="edit_with_external_title">Edytuj zdjęcie w…</string>
+    <string name="edit_video_with_external_title">Edytuj wideo w…</string>
     <string name="action_edit_builtin">Edytuj w Edytorze Iris</string>
     <string name="action_edit_external">Edytuj w aplikacji zewnętrznej</string>
 
