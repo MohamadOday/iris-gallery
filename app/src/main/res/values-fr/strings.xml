@@ -260,7 +260,7 @@
     <string name="settings_spacing_compact">Compact (2 dp)</string>
     <string name="settings_spacing_standard">Standard (4 dp)</string>
     <string name="settings_spacing_relaxed">Aéré (8 dp)</string>
-    <string name="settings_albums_tile_size">Taille des vignettes d\'albums</string>
+    <string name="settings_albums_tile_size">Taille de la tuile \'album\'</string>
     <string name="settings_show_timeline_title">En-têtes de groupes chronologiques</string>
     <string name="settings_show_timeline_desc">Regrouper les photos par date de prise de vue avec des en-têtes flottants par jour</string>
     <string name="settings_date_format_title">Format de date de la chronologie</string>
@@ -268,8 +268,8 @@
     <string name="settings_date_format_dialog_title">Choisir le format de date</string>
     <string name="settings_date_format_system">Automatique (Système / Localisé)</string>
     <string name="settings_date_format_dmy">Jour Mois Année (31 août 2026)</string>
-    <string name="settings_date_format_mdy">Mois Jour, Année (août 31, 2026)</string>
-    <string name="settings_date_format_ymd">Année Mois Jour (2026 août 31)</string>
+    <string name="settings_date_format_mdy">Mois Jour, Année (Août 31, 2026)</string>
+    <string name="settings_date_format_ymd">Année Mois Jour (2026 Août 31)</string>
     <string name="settings_date_format_num_dmy">Numérique (31/08/2026)</string>
     <string name="settings_date_format_num_mdy">Numérique (08/31/2026)</string>
     <string name="settings_date_format_num_ymd">Numérique (2026-08-31)</string>
@@ -542,7 +542,7 @@
 
     <!-- EXIF Editor -->
     <string name="exif_editor_title">Éditeur EXIF et métadonnées</string>
-    <string name="exif_editor_subtitle">Afficher, modifier ou supprimer les balises de métadonnées</string>
+    <string name="exif_editor_subtitle">Afficher, modifier ou supprimer des métadonnées</string>
     <string name="exif_tab_notes">Notes et infos</string>
     <string name="exif_tab_camera">Appareil photo et objectif</string>
     <string name="exif_tab_location">Localisation</string>
