@@ -79,7 +79,7 @@
 
     <!-- Permission Screen -->
     <string name="permission_title">Votre galerie, magnifiquement vôtre</string>
-    <string name="permission_desc">Autorisez l\'accès aux photos pour parcourir votre bibliothèque. Iris ne téléverse ni n\'analyse jamais vos photos.</string>
+    <string name="permission_desc">Autorisez l\'accès aux photos pour parcourir votre bibliothèque. Jamais Iris ne téléverse ni n\'analyse vos photos.</string>
     <string name="permission_button">Choisir les photos</string>
 
     <!-- Empty States -->
@@ -268,8 +268,8 @@
     <string name="settings_date_format_dialog_title">Choisir le format de date</string>
     <string name="settings_date_format_system">Automatique (Système / Localisé)</string>
     <string name="settings_date_format_dmy">Jour Mois Année (31 août 2026)</string>
-    <string name="settings_date_format_mdy">Mois Jour, Année (Août 31, 2026)</string>
-    <string name="settings_date_format_ymd">Année Mois Jour (2026 Août 31)</string>
+    <string name="settings_date_format_mdy">Mois Jour, Année (août 31, 2026)</string>
+    <string name="settings_date_format_ymd">Année Mois Jour (2026 août 31)</string>
     <string name="settings_date_format_num_dmy">Numérique (31/08/2026)</string>
     <string name="settings_date_format_num_mdy">Numérique (08/31/2026)</string>
     <string name="settings_date_format_num_ymd">Numérique (2026-08-31)</string>
