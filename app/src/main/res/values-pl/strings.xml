@@ -390,7 +390,7 @@
     <string name="settings_pinch_to_rotate_title">Rozsuń palce, aby obrócić</string>
     <string name="settings_pinch_to_rotate_desc">Obracaj zdjęcia gestem obrotu dwoma palcami</string>
     <string name="viewer_rotate_tip">Wskazówka: Możesz obracać zdjęcia dwoma palcami. Wyłącz tę opcję w dowolnym momencie w Ustawieniach.</string>
-    <string name="settings_zoom_scale_title">Skala powiększenia dwukrotnym dotknięciem</string>
+    <string name="settings_zoom_scale_title">Skala powiększenia po dwukrotnym dotknięciu</string>
     
     <string name="settings_section_behavior">Zachowanie i bezpieczeństwo</string>
     <string name="settings_startup_tab">Domyślna karta startowa</string>
