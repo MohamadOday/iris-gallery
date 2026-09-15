@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- App & General -->
     <string name="app_name">Iris Gallery</string>
     <string name="app_description">Galerie multimédia Android 100 % hors-ligne, d\'inspiration botanique</string>
@@ -79,7 +79,7 @@
 
     <!-- Permission Screen -->
     <string name="permission_title">Votre galerie, magnifiquement vôtre</string>
-    <string name="permission_desc">Autorisez l\'accès aux photos pour parcourir votre bibliothèque. Iris ne téléverse ni n\'analyse jamais vos photos.</string>
+    <string name="permission_desc">Autorisez l\'accès aux photos pour parcourir votre bibliothèque. Jamais Iris ne téléverse ni n\'analyse vos photos.</string>
     <string name="permission_button">Choisir les photos</string>
 
     <!-- Empty States -->
@@ -237,6 +237,7 @@
     <string name="details_edit_permission_note">Android demandera votre accord avant de modifier un média appartenant à une autre application.</string>
 
     <!-- Settings Screen -->
+    <string name="toast_metadata_failed">Impossible de mettre à jour les métadonnées</string>
     <string name="settings_title">Paramètres</string>
     <string name="settings_section_appearance">Apparence et thème</string>
     <string name="settings_theme_mode">Mode du thème</string>
@@ -259,6 +260,7 @@
     <string name="settings_spacing_compact">Compact (2 dp)</string>
     <string name="settings_spacing_standard">Standard (4 dp)</string>
     <string name="settings_spacing_relaxed">Aéré (8 dp)</string>
+    <string name="settings_albums_tile_size">Taille de la tuile \'album\'</string>
     <string name="settings_show_timeline_title">En-têtes de groupes chronologiques</string>
     <string name="settings_show_timeline_desc">Regrouper les photos par date de prise de vue avec des en-têtes flottants par jour</string>
     <string name="settings_date_format_title">Format de date de la chronologie</string>
@@ -299,7 +301,7 @@
     <string name="settings_autoplay_video_desc">Lancer la lecture immédiatement à l\'ouverture d\'une vidéo</string>
     <string name="settings_loop_video_title">Lecture en boucle des vidéos</string>
     <string name="settings_loop_video_desc">Répéter la lecture de la vidéo en continu</string>
-    <string name="settings_zoom_scale_title">Niveau de zoom au double-toucher</string>
+    <string name="viewer_rotate_tip">Astuce : vous pouvez faire pivoter les photos à deux doigts. Désactivable à tout moment dans les Paramètres.</string>
 
     <string name="settings_section_behavior">Comportement et sécurité</string>
     <string name="settings_startup_tab">Onglet d\'ouverture par défaut</string>
@@ -330,6 +332,7 @@
     <string name="editor_external_desc">Ouvrir dans ImageToolbox, Lightroom, Snapseed, etc.</string>
     <string name="editor_remember_choice">Toujours utiliser cette option</string>
     <string name="edit_with_external_title">Modifier la photo avec…</string>
+    <string name="edit_video_with_external_title">Éditer la vidéo avec…</string>
     <string name="action_edit_builtin">Modifier avec Iris Editor</string>
     <string name="action_edit_external">Modifier avec une application externe</string>
 
@@ -518,7 +521,7 @@
     <!-- Details & EXIF -->
     <string name="details_file_info">Informations sur le fichier</string>
     <string name="details_camera_exif">Appareil photo &amp; EXIF</string>
-    <string name="details_user_comment">Commentaire utilisateur</string>
+    <string name="details_user_comment">Commentaire utilisateur·rice</string>
     <string name="details_user_comment_hint">Aucun commentaire ajouté</string>
     <string name="details_lens">Objectif</string>
     <string name="details_artist">Auteur·rice / Artiste</string>
@@ -539,12 +542,12 @@
 
     <!-- EXIF Editor -->
     <string name="exif_editor_title">Éditeur EXIF et métadonnées</string>
-    <string name="exif_editor_subtitle">Afficher, modifier ou supprimer les balises de métadonnées</string>
+    <string name="exif_editor_subtitle">Afficher, modifier ou supprimer des métadonnées</string>
     <string name="exif_tab_notes">Notes et infos</string>
-    <string name="exif_tab_camera">Appareil et objectif</string>
+    <string name="exif_tab_camera">Appareil photo et objectif</string>
     <string name="exif_tab_location">Localisation</string>
     <string name="exif_tab_file">Fichier et date</string>
-    <string name="exif_user_comment_label">Commentaire / Note utilisateur</string>
+    <string name="exif_user_comment_label">Commentaire / Note utilisateur·rice</string>
     <string name="exif_user_comment_hint">Écrire des commentaires personnels, souvenirs ou notes d\'archivage…</string>
     <string name="exif_image_desc_label">Description de l\'image</string>
     <string name="exif_image_desc_hint">Légende ou description de l\'image</string>
@@ -575,11 +578,9 @@
     <string name="exif_set_current_time">Définir à l\'heure actuelle</string>
     <string name="exif_revert_changes">Rétablir</string>
     <string name="toast_metadata_updated">Métadonnées et balises EXIF mises à jour</string>
-    <string name="toast_metadata_failed">Impossible de mettre à jour les métadonnées</string>
 
     <!-- Settings Additions -->
     <string name="settings_photos_tile_size">Taille des vignettes de photos</string>
-    <string name="settings_albums_tile_size">Taille des vignettes d\'albums</string>
     <string name="settings_abbreviate_day_title">Abréger le jour de la semaine</string>
     <string name="settings_abbreviate_day_desc">Utiliser des noms de jour abrégés (ex. mar. au lieu de mardi)</string>
     <string name="settings_smart_year_title">Affichage intelligent de l\'année</string>
@@ -591,7 +592,6 @@
     <string name="viewer_filmstrip_tip">Astuce : vous pouvez masquer ou réactiver la bande de vignettes à tout moment dans les Paramètres</string>
     <string name="settings_pinch_to_rotate_title">Pincer pour faire pivoter</string>
     <string name="settings_pinch_to_rotate_desc">Faire pivoter les photos d\'un geste de rotation à deux doigts</string>
-    <string name="viewer_rotate_tip">Astuce : vous pouvez faire pivoter les photos à deux doigts. Désactivable à tout moment dans les Paramètres.</string>
     <string name="settings_video_double_tap_zoom_title">Double-toucher pour zoomer la vidéo</string>
     <string name="settings_video_double_tap_zoom_desc">Double-toucher au centre pour zoomer la vidéo au lieu de lire/mettre en pause</string>
 
@@ -605,7 +605,7 @@
     <string name="sort_name_asc">Nom (A à Z)</string>
     <string name="sort_name_desc">Nom (Z à A)</string>
     <string name="sort_size_desc">Plus volumineux en premier</string>
-    <string name="sort_size_asc">Plus petits en premier</string>
+    <string name="sort_size_asc">Plus légers en premier</string>
 
     <!-- Rename, External Video, Rescan -->
     <string name="action_rename">Renommer</string>
