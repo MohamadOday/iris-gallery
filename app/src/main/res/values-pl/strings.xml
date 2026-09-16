@@ -42,6 +42,8 @@
     <string name="action_comfortable_grid">Wygodna siatka</string>
     <string name="action_compact_grid">Kompaktowa siatka</string>
     <string name="action_back">Wstecz</string>
+    <string name="action_previous">Poprzedni</string>
+    <string name="action_next">Dalej</string>
     <string name="action_cancel">Anuluj</string>
     <string name="action_save">Zapisz</string>
     <string name="action_save_copy">Zapisz kopię</string>
@@ -242,6 +244,8 @@
     <string name="details_edit_permission_note">System Android poprosi o potwierdzenie przed zmianą multimediów należących do innej aplikacji.</string>
     
      <!-- EXIF Metadata & Details -->
+    <string name="details_section_description">Opis</string>
+    <string name="details_section_origin">Pochodzenie</string>
     <string name="details_user_comment">Komentarz użytkownika</string>
     <string name="details_user_comment_hint">Brak dodanego komentarza</string>
     <string name="details_lens">Obiektyw</string>
@@ -264,6 +268,8 @@
     <!-- EXIF Editor -->
     <string name="exif_editor_title">Edytor EXIF i metadanych</string>
     <string name="exif_editor_subtitle">Przeglądaj, edytuj lub usuwaj znaczniki metadanych</string>
+    <string name="exif_tab_description">Opis</string>
+    <string name="exif_tab_origin">Pochodzenie</string>
     <string name="exif_tab_notes">Notatki i informacje</string>
     <string name="exif_tab_camera">Aparat i obiektyw</string>
     <string name="exif_tab_location">Lokalizacja</string>
