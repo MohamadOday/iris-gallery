@@ -3241,6 +3241,7 @@ private fun PhotoGrid(
 
     val spacingPx = remember(gridSpacing, density) { with(density) { (gridSpacing.dp).dp.roundToPx() } }
     val topPaddingPx = remember(gridSpacing, density) { with(density) { (gridSpacing.dp + 3).dp.roundToPx() } }
+    val bottomPaddingPx = remember(gridSpacing, bottomPadding, density) { with(density) { ((gridSpacing.dp + 3).dp + bottomPadding).roundToPx() } }
 
     val estimatedPhotoHeight = remember(actualColumns, screenWidthDp, cellSize, gridSpacing, density, startPadding, endPadding) {
         with(density) {
@@ -3310,9 +3311,9 @@ private fun PhotoGrid(
     val rowToItem = rowLayout.third.first
     val isRowHeader = rowLayout.third.second
 
-    val rowOffsets = remember(rowLayout, photoHeight, headerHeight, spacingPx) {
+    val rowOffsets = remember(rowLayout, photoHeight, headerHeight, spacingPx, topPaddingPx) {
         val offsets = IntArray(totalRows)
-        var acc = 0
+        var acc = topPaddingPx
         for (r in 0 until totalRows) {
             offsets[r] = acc
             val h = if (isRowHeader[r]) headerHeight else photoHeight
@@ -3321,12 +3322,13 @@ private fun PhotoGrid(
         offsets
     }
 
-    val totalContentHeight = remember(rowLayout, photoHeight, headerHeight, spacingPx) {
-        var acc = 0
+    val totalContentHeight = remember(rowLayout, photoHeight, headerHeight, spacingPx, topPaddingPx, bottomPaddingPx) {
+        var acc = topPaddingPx
         for (r in 0 until totalRows) {
             val h = if (isRowHeader[r]) headerHeight else photoHeight
             acc += h + spacingPx
         }
+        acc += bottomPaddingPx
         maxOf(acc, 1)
     }
 
@@ -3336,7 +3338,7 @@ private fun PhotoGrid(
     var suppressReleaseClickId by remember { mutableStateOf<Long?>(null) }
     val scrubberScope = rememberCoroutineScope()
 
-    val scrollFraction by remember(totalRows, rowOffsets, totalContentHeight, topPaddingPx) {
+    val scrollFraction by remember(totalRows, rowOffsets, totalContentHeight) {
         derivedStateOf {
             if (scrubberDragging) {
                 scrubFraction
@@ -3355,7 +3357,7 @@ private fun PhotoGrid(
                     val firstItem = visibleItems.first()
                     val row = itemToRow.getOrElse(firstItem.index) { 0 }
                     val rowStartPx = rowOffsets.getOrElse(row) { 0 }
-                    val currentScrollPx = rowStartPx - firstItem.offset.y + topPaddingPx
+                    val currentScrollPx = rowStartPx - firstItem.offset.y
                     (currentScrollPx / maxScrollPx).coerceIn(0f, 1f)
                 }
             }
