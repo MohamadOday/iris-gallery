@@ -7,6 +7,13 @@ cd "$SCRIPT_DIR"
 PACKAGE="com.iris.gallery"
 APK="$SCRIPT_DIR/app/build/outputs/apk/optimized/app-optimized.apk"
 
+NO_DEPLOY=false
+
+if [[ "${1:-}" == "--no-deploy" ]]; then
+    NO_DEPLOY=true
+    shift
+fi
+
 echo "Building Iris Gallery (desktop / non-Termux host)..."
 
 # On desktop Linux/macOS/Windows, override the Termux-specific AAPT2 path so AGP uses standard binaries
@@ -24,6 +31,11 @@ if [ ! -f "$APK" ]; then
 fi
 
 echo "Build successful: $APK"
+
+if $NO_DEPLOY; then
+    echo "Deployment skipped (--no-deploy). APK is ready at: $APK"
+    exit 0
+fi
 
 if command -v adb >/dev/null 2>&1; then
     echo "Deploying to device via ADB..."
