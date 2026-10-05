@@ -20,6 +20,7 @@ import android.provider.MediaStore
 import android.app.KeyguardManager
 import android.view.WindowManager
 import android.widget.Toast
+import kotlin.math.roundToInt
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -79,7 +80,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -220,6 +220,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -233,7 +234,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material3.Checkbox
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -4169,7 +4169,7 @@ private fun PhotoGrid(
             }
         }
     }
-    val visibleDate by remember(timelineItems, rowOffsets, totalContentHeight) { derivedStateOf {
+val visibleDate by remember(timelineItems, rowOffsets, totalContentHeight) { derivedStateOf {
         if (timelineItems.isEmpty()) return@derivedStateOf null
 
         val viewportHeight = gridState.layoutInfo.viewportSize.height.toFloat()
@@ -4211,7 +4211,6 @@ private fun PhotoGrid(
     } }
     val visibleDateBubble = visibleDate?.first
     val visibleDateSticky = visibleDate?.second
-
     val currentImages by rememberUpdatedState(images)
     val currentSelection by rememberUpdatedState(selectedIds)
     val currentSetSelection by rememberUpdatedState(onSetSelection)
@@ -4573,30 +4572,40 @@ private fun PhotoGrid(
             }
 
             AnimatedVisibility(
-                visible = scrubberDragging && showTimeline,
+                visible = scrubberDragging && showTimeline && visibleDateBubble != null,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .onSizeChanged {
                         scrubberBubbleHeightPx = it.height.toFloat()
                     }
-                    .offset {
-                        if (scrubberTrackHeightPx > 0f && scrubberBubbleHeightPx > 0f) {
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        /* scrubberTrackWidthPx ~ 40.dp, placeable.height = scrubberBubbleHeightPx, "constraints.maxHeight" should be "scrubberTrackHeightPx", but keep "scrubberTrackHeightPx"
+                        if (scrubberTrackHeightPx > 0f && scrubberBubbleHeightPx > 0f {
+                        */
+                        if (scrubberTrackHeightPx > 0f && placeable.height > 0) {
                             val inset = 16.dp.toPx()
                             val thumbWidth = 5.dp.toPx()
                             val thumbHeight = 48.dp.toPx()
                             val bubbleSpacing = 24.dp.toPx()
+
                             val maxTravel = (scrubberTrackHeightPx - inset * 2f - thumbHeight).coerceAtLeast(0f)
                             val thumbTop = inset + scrollFraction.coerceIn(0f, 1f) * maxTravel
                             val thumbLeft = scrubberTrackWidthPx - thumbWidth - 4.dp.toPx()
-                            // val thumbLeft = scrubberTrackWidthPx - thumbWidthP
+                            // val thumbLeft = scrubberTrackWidthPx - thumbWidth
                             val thumbCenterY = thumbTop + thumbHeight / 2f
-                            val bubbleX = kotlin.math.round(-4.dp.toPx() - thumbLeft - bubbleSpacing).toInt()
-                            // val bubbleX = kotlin.math.round(-thumbLeft - bubbleSpacing).toInt()
-                            val bubbleY = kotlin.math.round(thumbCenterY - scrubberBubbleHeightPx / 2f).toInt()
+                            val bubbleX = (kotlin.math.round(-4.dp.toPx() - thumbLeft - bubbleSpacing)).toInt()
+                            // val bubbleX = (kotlin.math.round(-thumbLeft - bubbleSpacing)).toInt()
+                            val bubbleY = ((kotlin.math.round(thumbCenterY - placeable.height / 2f)).coerceIn(inset, scrubberTrackHeightPx - inset - placeable.height)).toInt()
 
-                            IntOffset(x = bubbleX, y = bubbleY)
-                        } else {
-                            IntOffset.Zero
+                            layout(placeable.width, placeable.height) {
+                                placeable.placeRelative(bubbleX, bubbleY)
+                            }
+                        }
+                        else {
+                            layout(placeable.width, placeable.height) {
+                                placeable.placeRelative(0, 0)
+                            }
                         }
                     },
                 enter = fadeIn(tween(120)) + scaleIn(tween(180), initialScale = .88f),
