@@ -159,8 +159,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.produceState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -220,7 +220,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -2020,66 +2019,38 @@ private fun GalleryScaffold(
                     when {
                         mimeTypes.size == 1 -> mimeTypes.first()
                         mimeTypes.all { it.startsWith("image/") } -> "image/*"
-    var showRotateTipBanner by remember { mutableStateOf(false) }
-
-    LaunchedEffect(controlsVisible, insetsController) {
-        insetsController?.let { controller ->
-            if (controlsVisible) {
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            } else {
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-    val coroutineScope = rememberCoroutineScope()
-    var zoomedImageId by remember { mutableStateOf<Long?>(null) }
-    var viewerMenuExpanded by remember { mutableStateOf(false) }
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var showWallpaperSheet by remember { mutableStateOf(false) }
-    var viewerAlbumAction by remember { mutableStateOf<AlbumAction?>(null) }
-    var showSecureSharingHintDialog by remember { mutableStateOf(false) }
-    var showSecureSharingModePicker by remember { mutableStateOf(false) }
-    val current = images[pagerState.currentPage]
-    val doShare: (MediaImage) -> Unit = { media ->
-        coroutineScope.launch {
-            val uris = prepareShareUris(context, listOf(media), secureSharingMode)
-            val shareUri = uris.firstOrNull() ?: getShareUri(context, media)
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = media.mimeType.ifBlank { if (media.isVideo) "video/*" else "image/*" }
-                putExtra(Intent.EXTRA_STREAM, shareUri)
-                putExtra(Intent.EXTRA_TITLE, media.name)
-                clipData = ClipData.newUri(context.contentResolver, "media", shareUri)
+                        mimeTypes.all { it.startsWith("video/") } -> "video/*"
+                        else -> "*/*"
+                    }
+                }
+            val intent = Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
+                type = mimeType
+                if (uris.size == 1) {
+                    putExtra(Intent.EXTRA_STREAM, uris.first())
+                    putExtra(Intent.EXTRA_TITLE, selected.first().name)
+                } else {
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                }
+                clipData = ClipData.newUri(context.contentResolver, "media", uris.first()).apply {
+                    uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+                }
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
         }
     }
-    val currentExif by produceState<ExifMetadata?>(initialValue = null, current.id, current.uri, current.dateTaken, current.description, current.title) {
-        value = withContext(Dispatchers.IO) {
-            loadExifMetadata(context, current.uri, current.path)
-        }
-    }
-    val viewerComment = remember(current.id, currentExif) {
-        currentExif?.userComment?.ifBlank { null }
-            ?: currentExif?.xpComment?.ifBlank { null }
-            ?: currentExif?.jpegComments?.firstOrNull()?.ifBlank { null }
-    }
-
-    fun handleEditClick(image: MediaImage) {
-        when (preferredEditor) {
-            PreferredEditor.BUILT_IN -> onEdit(image)
-            PreferredEditor.EXTERNAL -> launchExternalEditor(context, image)
-            PreferredEditor.ALWAYS_ASK -> showEditChoiceSheet = true
-        }
-    }
-    val videoEngine = remember {
-        Media3VideoEngine(context).apply {
-            setMuted(videoMuted)
-        }
-    }
-    DisposableEffect(videoEngine) { onDispose { videoEngine.release() } }
+    val availableAlbums = remember(images, albumCovers) {
+        images.groupBy { it.bucketId }.map { (id, media) ->
+            val samplePath = media.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
+            val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
+            MediaAlbum(
+                id = id,
+                name = media.first().bucketName,
+                cover = media.firstOrNull { it.id == albumCovers[id] } ?: media.first(),
+                images = media,
+                isSdCard = isSd,
+                storageLabel = if (isSd) "SD Card" else ""
+            )
         }.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
     }
     var albumPickerAction by remember { mutableStateOf<AlbumAction?>(null) }
@@ -4602,7 +4573,7 @@ private fun PhotoGrid(
             }
 
             AnimatedVisibility(
-                visible = scrubberDragging && showTimeline && visibleDate != null,
+                visible = scrubberDragging && showTimeline,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .onSizeChanged {
