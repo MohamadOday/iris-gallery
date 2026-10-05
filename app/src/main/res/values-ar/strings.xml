@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">نقل إلى العناصر المقفلة</string>
     <string name="action_favorite">تفضيل</string>
     <string name="action_favorited">في المفضلة</string>
+    <string name="action_unfavorite">إزالة من المفضلة</string>
     <string name="action_empty_trash">إفراغ</string>
     <string name="action_comfortable_grid">شبكة مريحة</string>
     <string name="action_compact_grid">شبكة مدمجة</string>
@@ -323,6 +324,8 @@
     <string name="settings_loop_video_desc">إعادة تشغيل مقاطع الفيديو بشكل مستمر</string>
     <string name="settings_video_double_tap_zoom_title">النقر المزدوج لتكبير الفيديو</string>
     <string name="settings_video_double_tap_zoom_desc">النقر المزدوج في المنتصف لتكبير الفيديو بدلاً من التشغيل أو الإيقاف المؤقت</string>
+    <string name="settings_video_gesture_controls_title">التحكم بالإيماءات</string>
+    <string name="settings_video_gesture_controls_desc">اسحب لأعلى أو لأسفل على جانبي الشاشة لضبط السطوع والصوت</string>
     <string name="settings_zoom_scale_title">مستوى التكبير بالنقر المزدوج</string>
 
     <string name="settings_section_behavior">السلوك والأمان</string>
@@ -418,6 +421,8 @@
     <string name="editor_flip_h">قلب أفقي ⇄</string>
     <string name="editor_flip_v">قلب رأسي ⇅</string>
     <string name="editor_reset_orientation">إعادة ضبط الاتجاه</string>
+    <string name="editor_straighten">ضبط الاستقامة</string>
+    <string name="editor_reset_zoom">إعادة ضبط التكبير</string>
     <string name="editor_crop_manual_hint">اسحب أي زاوية للقص يدوياً</string>
     <string name="editor_crop_help">اسحب داخل الإطار لتغيير موضعه، واستخدم المقابض البيضاء لتغيير حجمه.</string>
     <string name="editor_crop_manual">يدوي</string>
@@ -535,7 +540,8 @@
     <string name="toast_copied_to_album_single">تم نسخ العنصر إلى %1$s</string>
     <string name="toast_copied_to_album_multiple">تم نسخ %1$d عنصر إلى %2$s</string>
     <string name="no_external_editor_found">لم يتم العثور على تطبيق تعديل خارجي</string>
-    <string name="search_files_placeholder">البحث في الصور، الفيديوهات، الصيغ…</string>
+    <string name="search_files_placeholder">البحث في الصور…</string>
+    <string name="search_videos_placeholder">البحث في الفيديوهات…</string>
     <string name="empty_search_files">لا توجد ملفات تطابق "%1$s"</string>
     <string name="action_search">بحث</string>
     <string name="rescan_media_title">إعادة فحص الوسائط</string>
@@ -709,4 +715,37 @@
     <string name="editor_resize_mb">م.ب</string>
     <string name="editor_resize_scale">النسبة: %1$d%%</string>
     <string name="editor_resize_result">النتيجة: %1$d × %2$d بكسل</string>
+
+    <!-- Phase 3: Secure Sharing, Recursive Exclusions & Videos Smart View -->
+    <string name="settings_secure_sharing_title">المشاركة الآمنة</string>
+    <string name="settings_secure_sharing_desc">إزالة البيانات الوصفية الحساسة قبل مشاركة الوسائط مع التطبيقات الأخرى</string>
+    <string name="settings_secure_sharing_off">إيقاف</string>
+    <string name="settings_secure_sharing_off_desc">مشاركة الملفات الأصلية مع كافة بياناتها الوصفية</string>
+    <string name="settings_secure_sharing_strip_location">إزالة بيانات الموقع</string>
+    <string name="settings_secure_sharing_strip_location_desc">إزالة إحداثيات GPS وبيانات الموقع من الصور المشاركة</string>
+    <string name="settings_secure_sharing_strip_all">إزالة كافة البيانات الوصفية</string>
+    <string name="settings_secure_sharing_strip_all_desc">إزالة الموقع وتفاصيل الكاميرا والطوابع الزمنية ومعلومات الجهاز</string>
+    <string name="secure_sharing_preparing">جارٍ تجهيز الوسائط للمشاركة…</string>
+
+    <string name="action_add_excluded_folder">إضافة مجلد</string>
+    <string name="dialog_add_excluded_folder_title">استبعاد مجلد</string>
+    <string name="dialog_add_excluded_folder_message">أدخل اسم المجلد أو مساره. سيتم إخفاء جميع الوسائط داخل هذا المجلد ومجلداته الفرعية من المعرض.</string>
+    <string name="dialog_add_excluded_folder_hint">مثال: Music أو /Music</string>
+    <string name="dialog_excluded_folder_suggestions">اقتراحات:</string>
+    <string name="dialog_folder_already_excluded">المجلد مستبعد بالفعل</string>
+
+    <string name="section_videos">الفيديوهات</string>
+    <string name="section_videos_desc">%1$d فيديو في مكتبتك</string>
+    <string name="filter_videos">الفيديوهات</string>
+    <string name="empty_videos">لم يتم العثور على أي فيديوهات</string>
+    <string name="filter_videos_count">%1$d فيديو</string>
+
+    <string name="viewer_secure_sharing_tip">المشاركة الآمنة: إزالة بيانات الموقع أو البيانات الوصفية قبل المشاركة. اضغط للضبط.</string>
+    <string name="viewer_secure_sharing_tip_location">المشاركة الآمنة: يتم إزالة موقع GPS قبل المشاركة. اضغط للضبط.</string>
+    <string name="viewer_secure_sharing_tip_all">المشاركة الآمنة: يتم إزالة كافة البيانات الوصفية قبل المشاركة. اضغط للضبط.</string>
+    <string name="viewer_secure_sharing_tip_off">المشاركة الآمنة: تتم المشاركة بكافة البيانات الأصلية. اضغط للضبط.</string>
+    <string name="dialog_secure_sharing_hint_title">المشاركة الآمنة</string>
+    <string name="dialog_secure_sharing_hint_desc">يمكن لـ Iris إزالة إحداثيات GPS وبيانات الكاميرا تلقائياً قبل مشاركة الوسائط مع التطبيقات لحماية خصوصيتك. تبقى ملفاتك الأصلية دون تعديل.</string>
+    <string name="action_dont_show_again">عدم الإظهار مجدداً</string>
+    <string name="action_configure">ضبط</string>
 </resources>

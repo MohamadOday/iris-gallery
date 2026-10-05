@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">ロックに移動</string>
     <string name="action_favorite">お気に入り</string>
     <string name="action_favorited">お気に入り追加済み</string>
+    <string name="action_unfavorite">お気に入りから削除</string>
     <string name="action_empty_trash">空にする</string>
     <string name="action_comfortable_grid">ゆったりグリッド</string>
     <string name="action_compact_grid">コンパクトグリッド</string>

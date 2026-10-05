@@ -101,6 +101,7 @@ fun FolderBrowserScreen(
     gridSpacing: GridSpacing = GridSpacing.STANDARD,
     timelineDateFormat: com.iris.gallery.data.TimelineDateFormat = com.iris.gallery.data.TimelineDateFormat.SYSTEM_DEFAULT,
     customTimelineDateFormat: String = "d. MMMM yyyy",
+    favorites: Set<Long> = emptySet(),
     onOpenMedia: (MediaImage, List<MediaImage>) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -400,7 +401,8 @@ fun FolderBrowserScreen(
                                         MediaThumbnail(
                                             image = image,
                                             modifier = Modifier.fillMaxSize(),
-                                            targetSizePx = 160
+                                            targetSizePx = 160,
+                                            isFavorite = image.id in favorites
                                         )
                                     }
                                     Column(
@@ -537,7 +539,8 @@ fun FolderBrowserScreen(
                                     MediaThumbnail(
                                         image = image,
                                         modifier = Modifier.fillMaxSize(),
-                                        targetSizePx = 256
+                                        targetSizePx = 256,
+                                        isFavorite = image.id in favorites
                                     )
                                 }
                             }

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ fun LibraryScreen(
     padding: PaddingValues,
     trashCount: Int,
     lockedCount: Int,
+    videoCount: Int = 0,
     onOpen: (String) -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
@@ -66,6 +68,7 @@ fun LibraryScreen(
                 modifier = Modifier.padding(vertical = 8.dp)
             )
         }
+        item { LibraryCard(Icons.Outlined.Videocam, stringResource(R.string.section_videos), stringResource(R.string.section_videos_desc, videoCount)) { onOpen("videos") } }
         item { LibraryCard(Icons.Outlined.AutoAwesome, stringResource(R.string.library_memories_title), stringResource(R.string.library_memories_subtitle)) { onOpen("memories") } }
         item { LibraryCard(Icons.Outlined.ContentCopy, stringResource(R.string.library_duplicates_title), stringResource(R.string.library_duplicates_subtitle)) { onOpen("duplicates") } }
         item { LibraryCard(Icons.Outlined.Lock, stringResource(R.string.library_locked_title), stringResource(R.string.library_locked_subtitle, lockedCount)) { onOpen("locked") } }

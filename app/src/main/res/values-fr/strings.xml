@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Déplacer vers les éléments verrouillés</string>
     <string name="action_favorite">Ajouter aux favoris</string>
     <string name="action_favorited">Ajouté aux favoris</string>
+    <string name="action_unfavorite">Retirer des favoris</string>
     <string name="action_empty_trash">Vider</string>
     <string name="action_comfortable_grid">Grille aérée</string>
     <string name="action_compact_grid">Grille compacte</string>
@@ -609,6 +610,8 @@
     <string name="viewer_rotate_tip">Astuce : vous pouvez faire pivoter les photos à deux doigts. Désactivable à tout moment dans les Paramètres.</string>
     <string name="settings_video_double_tap_zoom_title">Double-toucher pour zoomer la vidéo</string>
     <string name="settings_video_double_tap_zoom_desc">Double-toucher au centre pour zoomer la vidéo au lieu de lire/mettre en pause</string>
+    <string name="settings_video_gesture_controls_title">Commandes gestuelles</string>
+    <string name="settings_video_gesture_controls_desc">Glissez vers le haut ou le bas sur les côtés de l\'écran pour régler la luminosité et le volume</string>
 
     <!-- Storage & Sorting -->
     <string name="storage_internal">Stockage interne</string>

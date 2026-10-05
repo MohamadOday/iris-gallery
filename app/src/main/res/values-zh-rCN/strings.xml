@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">移至私密相册</string>
     <string name="action_favorite">收藏</string>
     <string name="action_favorited">已收藏</string>
+    <string name="action_unfavorite">取消收藏</string>
     <string name="action_empty_trash">清空</string>
     <string name="action_comfortable_grid">舒适网格</string>
     <string name="action_compact_grid">紧凑网格</string>
@@ -599,6 +600,8 @@
     <string name="sort_size_asc">文件最小优先</string>
     <string name="settings_video_double_tap_zoom_title">双击缩放视频</string>
     <string name="settings_video_double_tap_zoom_desc">双击中心区域缩放视频，而非播放/暂停</string>
+    <string name="settings_video_gesture_controls_title">手势控制</string>
+    <string name="settings_video_gesture_controls_desc">在屏幕左右边缘上下滑动以调节亮度和音量</string>
     <string name="settings_show_user_comments_title">显示备注悬浮层</string>
     <string name="settings_show_user_comments_desc">在查看器中直接在照片上显示嵌入的用户备注与附注</string>
     <string name="settings_show_filmstrip_title">底部缩略图胶卷</string>

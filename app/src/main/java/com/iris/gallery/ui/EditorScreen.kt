@@ -105,6 +105,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.iris.gallery.R
@@ -116,6 +117,7 @@ import org.aomedia.avif.android.AvifDecoder
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 
 enum class EditorCategory {
     TRANSFORM,
@@ -168,6 +170,11 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
     var rotation by remember { mutableIntStateOf(0) }
     var flipHorizontal by remember { mutableStateOf(false) }
     var flipVertical by remember { mutableStateOf(false) }
+    var straightenAngle by remember { mutableFloatStateOf(0f) }
+    var isStraightening by remember { mutableStateOf(false) }
+    var canvasZoom by remember { mutableFloatStateOf(1f) }
+    var canUndo by remember { mutableStateOf(false) }
+    var canRedo by remember { mutableStateOf(false) }
     var brightness by remember { mutableFloatStateOf(0f) }
     var saturation by remember { mutableFloatStateOf(1f) }
     var contrast by remember { mutableFloatStateOf(1f) }
@@ -258,20 +265,55 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.editor_title)) },
+                    title = {
+                        Text(
+                            stringResource(R.string.editor_title),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onClose) {
                             Icon(Icons.Outlined.Close, stringResource(R.string.editor_close))
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = { editorView?.undoStroke() },
+                            enabled = canUndo,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.Undo,
+                                stringResource(R.string.editor_undo_stroke),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { editorView?.redoStroke() },
+                            enabled = canRedo,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.Redo,
+                                stringResource(R.string.editor_redo_stroke),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
                         Button(
                             enabled = !saving && transformedPreview != null,
-                            onClick = { showSaveAsDialog = true }
+                            onClick = { showSaveAsDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier.height(36.dp)
                         ) {
                             Text(
                                 if (saving) stringResource(R.string.action_saving)
-                                else stringResource(R.string.action_save_as)
+                                else stringResource(R.string.action_save_as),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1
                             )
                         }
                     }
@@ -338,10 +380,19 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                 view.onTextSelected = { overlay ->
                                     selectedOverlay = overlay
                                 }
+                                view.onZoomChanged = { zoom ->
+                                    canvasZoom = zoom
+                                }
+                                view.onHistoryChanged = { u, r ->
+                                    canUndo = u
+                                    canRedo = r
+                                }
                             }
                         },
                         update = { view ->
                             view.setSource(transformedPreview)
+                            view.straightenAngle = straightenAngle
+                            view.isStraightening = isStraightening
                             view.tool = activeTool
                             view.brushRadius = when (activeTool) {
                                 EditorTool.DRAW -> drawBrushSize
@@ -360,12 +411,44 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                     if (transformedPreview == null) {
                         Text(stringResource(R.string.editor_preparing), color = Color.White)
                     }
+                    if (canvasZoom > 1.05f) {
+                        Surface(
+                            onClick = { editorView?.resetZoom() },
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 4.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "${((canvasZoom * 10).roundToInt() / 10f)}×",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "•",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Text(
+                                    text = stringResource(R.string.editor_reset_zoom),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (landscape) 130.dp else 215.dp)
+                        .height(if (landscape) 130.dp else 225.dp)
                 ) {
                     AnimatedContent(
                         targetState = category,
@@ -385,15 +468,19 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                     rotation = rotation,
                                     flipH = flipHorizontal,
                                     flipV = flipVertical,
+                                    straightenAngle = straightenAngle,
                                     cropPreset = cropPreset,
                                     onRotateLeft = { rotation = (rotation - 90 + 360) % 360 },
                                     onRotateRight = { rotation = (rotation + 90) % 360 },
                                     onToggleFlipH = { flipHorizontal = !flipHorizontal },
                                     onToggleFlipV = { flipVertical = !flipVertical },
+                                    onStraightenChange = { straightenAngle = it },
+                                    onStraightenActive = { isStraightening = it },
                                     onReset = {
                                         rotation = 0
                                         flipHorizontal = false
                                         flipVertical = false
+                                        straightenAngle = 0f
                                     },
                                     onSelectCropAspect = { label, aspect ->
                                         cropPreset = label
@@ -432,8 +519,6 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                     onSize = { drawBrushSize = it },
                                     onColor = { drawColor = it },
                                     onErase = { drawErasing = it },
-                                    onUndo = { editorView?.undoStroke() },
-                                    onRedo = { editorView?.redoStroke() },
                                     onClear = { editorView?.clearStrokes() },
                                     shapeType = shapeType,
                                     onShapeTypeChange = { shapeType = it },
@@ -444,7 +529,7 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                     selectedOverlay = selectedOverlay,
                                     onAddOrUpdateText = { text, color, bg, size ->
                                         if (selectedOverlay != null) {
-                                            editorView?.updateSelectedText(text, color, bg, size)
+                                             editorView?.updateSelectedText(text, color, bg, size)
                                             selectedOverlay = editorView?.session?.textOverlays?.find { it.id == selectedOverlay?.id }
                                         } else {
                                             val newOverlay = editorView?.addTextOverlay(text, color, bg, size)
@@ -473,8 +558,6 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                                     onSize = { brushSize = it },
                                     onStrength = { strength = it },
                                     onErase = { erasing = it },
-                                    onUndo = { editorView?.undoStroke() },
-                                    onRedo = { editorView?.redoStroke() },
                                     onClear = { editorView?.clearStrokes() }
                                 )
                             }
@@ -528,12 +611,13 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (Boolean) -> U
                     val saved = runCatching {
                         saveEditedCopy(
                             context, image, rotation, flipHorizontal, flipVertical,
-                            brightness, saturation, contrast, warmth,
-                            crop,
-                            if (isCustomResized) resizeWidth.toIntOrNull() else null,
-                            if (isCustomResized) resizeHeight.toIntOrNull() else null,
-                            strokes,
-                            textOverlays,
+                            straightenAngle = straightenAngle,
+                            brightness = brightness, saturation = saturation, contrast = contrast, warmth = warmth,
+                            crop = crop,
+                            requestedWidth = if (isCustomResized) resizeWidth.toIntOrNull() else null,
+                            requestedHeight = if (isCustomResized) resizeHeight.toIntOrNull() else null,
+                            strokes = strokes,
+                            textOverlays = textOverlays,
                             targetMaxBytes = if (isCustomResized) targetMaxBytes else null,
                             format = format
                         )
@@ -643,11 +727,14 @@ private fun TransformControls(
     rotation: Int,
     flipH: Boolean,
     flipV: Boolean,
+    straightenAngle: Float,
     cropPreset: String,
     onRotateLeft: () -> Unit,
     onRotateRight: () -> Unit,
     onToggleFlipH: () -> Unit,
     onToggleFlipV: () -> Unit,
+    onStraightenChange: (Float) -> Unit,
+    onStraightenActive: (Boolean) -> Unit,
     onReset: () -> Unit,
     onSelectCropAspect: (String, Float?) -> Unit,
     onOpenResize: () -> Unit,
@@ -675,6 +762,11 @@ private fun TransformControls(
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.editor_rotate_right), maxLines = 1, style = MaterialTheme.typography.bodySmall)
         }
+        if (rotation != 0 || flipH || flipV) {
+            IconButton(onClick = onReset, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Outlined.RestartAlt, stringResource(R.string.editor_reset_orientation), modifier = Modifier.size(20.dp))
+            }
+        }
     }
 
     Row(
@@ -685,13 +777,13 @@ private fun TransformControls(
         FilterChip(
             selected = flipH,
             onClick = onToggleFlipH,
-            label = { Text(stringResource(R.string.editor_flip_horizontal), maxLines = 1, style = MaterialTheme.typography.bodySmall) },
+            label = { Text(stringResource(R.string.editor_flip_horizontal), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) },
             modifier = Modifier.weight(1f)
         )
         FilterChip(
             selected = flipV,
             onClick = onToggleFlipV,
-            label = { Text(stringResource(R.string.editor_flip_vertical), maxLines = 1, style = MaterialTheme.typography.bodySmall) },
+            label = { Text(stringResource(R.string.editor_flip_vertical), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) },
             modifier = Modifier.weight(1f)
         )
         OutlinedButton(
@@ -702,11 +794,56 @@ private fun TransformControls(
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.editor_custom_resize), style = MaterialTheme.typography.bodySmall)
         }
-        if (rotation != 0 || flipH || flipV) {
-            IconButton(onClick = onReset, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Outlined.RestartAlt, stringResource(R.string.editor_reset_orientation), modifier = Modifier.size(20.dp))
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    stringResource(R.string.editor_straighten),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                val angleDisplay = (straightenAngle * 10).roundToInt() / 10f
+                Text(
+                    text = "${if (angleDisplay > 0) "+" else ""}${angleDisplay}°",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            if (straightenAngle != 0f) {
+                TextButton(
+                    onClick = { onStraightenChange(0f) },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(stringResource(R.string.editor_reset_adjustments), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
+
+        Slider(
+            value = straightenAngle,
+            onValueChange = { angle ->
+                onStraightenActive(true)
+                val snapped = if (angle in -0.75f..0.75f) 0f else angle
+                onStraightenChange(snapped)
+            },
+            onValueChangeFinished = {
+                onStraightenActive(false)
+            },
+            valueRange = -45f..45f,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 
     Row(
@@ -843,8 +980,6 @@ private fun MarkupControls(
     onSize: (Float) -> Unit,
     onColor: (Int) -> Unit,
     onErase: (Boolean) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onClear: () -> Unit,
     shapeType: ShapeType,
     onShapeTypeChange: (ShapeType) -> Unit,
@@ -892,8 +1027,6 @@ private fun MarkupControls(
                 onSize = onSize,
                 onColor = onColor,
                 onErase = onErase,
-                onUndo = onUndo,
-                onRedo = onRedo,
                 onClear = onClear
             )
         }
@@ -909,8 +1042,6 @@ private fun MarkupControls(
                 onColor = onColor,
                 erasing = erasing,
                 onErase = onErase,
-                onUndo = onUndo,
-                onRedo = onRedo,
                 onClear = onClear
             )
         }
@@ -936,8 +1067,6 @@ private fun PrivacyControls(
     onSize: (Float) -> Unit,
     onStrength: (Float) -> Unit,
     onErase: (Boolean) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onClear: () -> Unit
 ) {
     Row(
@@ -968,8 +1097,6 @@ private fun PrivacyControls(
         onSize = onSize,
         onStrength = onStrength,
         onErase = onErase,
-        onUndo = onUndo,
-        onRedo = onRedo,
         onClear = onClear
     )
 }
@@ -1195,8 +1322,6 @@ private fun BrushControls(
     onSize: (Float) -> Unit,
     onStrength: (Float) -> Unit,
     onErase: (Boolean) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onClear: () -> Unit
 ) {
     val effectLabel = if (tool == EditorTool.PIXELATE) stringResource(R.string.editor_brush_pixelation)
@@ -1226,12 +1351,6 @@ private fun BrushControls(
                 )
             }
         )
-        IconButton(onClick = onUndo) {
-            Icon(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.editor_undo_stroke))
-        }
-        IconButton(onClick = onRedo) {
-            Icon(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.editor_redo_stroke))
-        }
         IconButton(onClick = onClear) {
             Icon(Icons.Outlined.DeleteSweep, stringResource(R.string.editor_clear_effects))
         }
@@ -1246,8 +1365,6 @@ private fun DrawControls(
     onSize: (Float) -> Unit,
     onColor: (Int) -> Unit,
     onErase: (Boolean) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onClear: () -> Unit
 ) {
     val colors = remember {
@@ -1328,12 +1445,6 @@ private fun DrawControls(
                 )
             }
         )
-        IconButton(onClick = onUndo) {
-            Icon(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.editor_undo_stroke))
-        }
-        IconButton(onClick = onRedo) {
-            Icon(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.editor_redo_stroke))
-        }
         IconButton(onClick = onClear) {
             Icon(Icons.Outlined.DeleteSweep, stringResource(R.string.editor_clear_effects))
         }
@@ -1352,8 +1463,6 @@ private fun ShapeControls(
     onColor: (Int) -> Unit,
     erasing: Boolean,
     onErase: (Boolean) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onClear: () -> Unit
 ) {
     val colors = remember {
@@ -1491,12 +1600,6 @@ private fun ShapeControls(
                 )
             }
         )
-        IconButton(onClick = onUndo) {
-            Icon(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.editor_undo_stroke))
-        }
-        IconButton(onClick = onRedo) {
-            Icon(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.editor_redo_stroke))
-        }
         IconButton(onClick = onClear) {
             Icon(Icons.Outlined.DeleteSweep, stringResource(R.string.editor_clear_effects))
         }
@@ -1737,6 +1840,7 @@ private suspend fun saveEditedCopy(
     rotation: Int,
     flipH: Boolean,
     flipV: Boolean,
+    straightenAngle: Float = 0f,
     brightness: Float,
     saturation: Float,
     contrast: Float,
@@ -1788,12 +1892,29 @@ private suspend fun saveEditedCopy(
     val matrix = Matrix()
     if (rotation != 0) matrix.postRotate(rotation.toFloat())
     if (flipH || flipV) matrix.postScale(if (flipH) -1f else 1f, if (flipV) -1f else 1f)
-    val source = if (!matrix.isIdentity) {
+    var source = if (!matrix.isIdentity) {
         Bitmap.createBitmap(rawSource, 0, 0, rawSource.width, rawSource.height, matrix, true).also {
             if (it !== rawSource) rawSource.recycle()
         }
     } else {
         rawSource
+    }
+
+    if (straightenAngle != 0f) {
+        val rad = Math.toRadians(kotlin.math.abs(straightenAngle).toDouble())
+        val r = source.width.toFloat() / source.height.toFloat().coerceAtLeast(1f)
+        val maxR = maxOf(r, 1f / r)
+        val scale = (Math.cos(rad) + Math.sin(rad) * maxR).toFloat()
+        val strMatrix = Matrix().apply {
+            postRotate(straightenAngle, source.width / 2f, source.height / 2f)
+            postScale(scale, scale, source.width / 2f, source.height / 2f)
+        }
+        val straightened = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        Canvas(straightened).drawBitmap(source, strMatrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        if (source !== rawSource) {
+            source.recycle()
+        }
+        source = straightened
     }
 
     val left = (crop.left * source.width).toInt().coerceIn(0, source.width - 1)

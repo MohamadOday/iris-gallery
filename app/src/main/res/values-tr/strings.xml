@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Kilitliye taşı</string>
     <string name="action_favorite">Favorilere ekle</string>
     <string name="action_favorited">Favorilere eklendi</string>
+    <string name="action_unfavorite">Favorilerden kaldır</string>
     <string name="action_empty_trash">Boşalt</string>
     <string name="action_comfortable_grid">Rahat ızgara</string>
     <string name="action_compact_grid">Kompakt ızgara</string>

@@ -297,9 +297,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
             return
         }
+        if (showLoading) {
+            repository.clearVerifiedPathsCache()
+        }
         refreshJob = viewModelScope.launch {
             try {
-                kotlinx.coroutines.withTimeout(8_000) {
+                kotlinx.coroutines.withTimeout(15_000) {
                     vaultRepository.loadVaultItems()
                     val internalTrash = trashRepository.loadTrashItems()
                     val systemTrash = if (android.os.Build.VERSION.SDK_INT >= 30) {

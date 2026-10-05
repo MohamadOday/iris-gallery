@@ -11,7 +11,9 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Rect
 import android.graphics.Shader
+import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import kotlin.math.hypot
 
@@ -71,19 +73,100 @@ class EditorCanvasView(context: Context) : View(context) {
     private var lastCropPoint = BrushPoint(0f, 0f)
     private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
+    var straightenAngle: Float = 0f; set(value) { field = value; invalidate() }
+    var isStraightening: Boolean = false; set(value) { field = value; invalidate() }
+
+    var userZoom: Float = 1f; private set
+    var userPanX: Float = 0f; private set
+    var userPanY: Float = 0f; private set
+    var onZoomChanged: ((Float) -> Unit)? = null
+
+    val canUndo: Boolean get() = session.strokes.isNotEmpty()
+    val canRedo: Boolean get() = redoStrokes.isNotEmpty()
+    var onHistoryChanged: ((canUndo: Boolean, canRedo: Boolean) -> Unit)? = null
+
+    private fun notifyHistoryChanged() {
+        onHistoryChanged?.invoke(canUndo, canRedo)
+    }
+
+    private var lastMidX: Float? = null
+    private var lastMidY: Float? = null
+    private var isTwoFingerGesture = false
+
+    fun resetZoom() {
+        userZoom = 1f
+        userPanX = 0f
+        userPanY = 0f
+        onZoomChanged?.invoke(1f)
+        invalidate()
+    }
+
+    private fun clampPan() {
+        val maxPanX = ((width * userZoom - width) / 2f).coerceAtLeast(0f)
+        val maxPanY = ((height * userZoom - height) / 2f).coerceAtLeast(0f)
+        userPanX = userPanX.coerceIn(-maxPanX, maxPanX)
+        userPanY = userPanY.coerceIn(-maxPanY, maxPanY)
+    }
+
+    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val oldZoom = userZoom
+            userZoom = (userZoom * detector.scaleFactor).coerceIn(1f, 5f)
+            if (userZoom <= 1.02f) {
+                userZoom = 1f
+                userPanX = 0f
+                userPanY = 0f
+            } else {
+                val cx = width / 2f
+                val cy = height / 2f
+                val focalX = detector.focusX
+                val focalY = detector.focusY
+                val zoomChange = userZoom / oldZoom
+                userPanX += (focalX - cx) * (1f - zoomChange)
+                userPanY += (focalY - cy) * (1f - zoomChange)
+            }
+            clampPan()
+            onZoomChanged?.invoke(userZoom)
+            invalidate()
+            return true
+        }
+    })
+
+    private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            if (userZoom > 1.05f) {
+                resetZoom()
+            } else {
+                userZoom = 2.5f
+                val cx = width / 2f
+                val cy = height / 2f
+                userPanX = (cx - e.x) * 1.5f
+                userPanY = (cy - e.y) * 1.5f
+                clampPan()
+                onZoomChanged?.invoke(userZoom)
+                invalidate()
+            }
+            return true
+        }
+    })
+
     fun setSource(value: Bitmap?) {
         if (bitmap === value) return
         bitmap = value
         rebuildComposite()
         rebuildEffects()
         invalidate()
+        notifyHistoryChanged()
     }
 
     fun clearBitmaps() {
+        session.strokes.clear()
+        redoStrokes.clear()
         pixelated?.recycle(); pixelated = null
         blurred?.recycle(); blurred = null
         composite?.takeIf { it !== bitmap }?.recycle(); composite = null
         bitmap = null
+        notifyHistoryChanged()
     }
 
     var lockedAspect: Float? = null
@@ -118,28 +201,86 @@ class EditorCanvasView(context: Context) : View(context) {
     fun undoStroke() {
         if (session.strokes.isNotEmpty()) redoStrokes.add(session.strokes.removeLast())
         rebuildComposite(); invalidate()
+        notifyHistoryChanged()
     }
     fun redoStroke() {
         if (redoStrokes.isNotEmpty()) session.strokes.add(redoStrokes.removeLast())
         rebuildComposite(); invalidate()
+        notifyHistoryChanged()
     }
     fun clearStrokes() {
         redoStrokes.clear(); redoStrokes.addAll(session.strokes.asReversed()); session.strokes.clear()
         rebuildComposite(); invalidate()
+        notifyHistoryChanged()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val source = composite ?: bitmap ?: return
         fitRect(source, destination, cropped = tool != EditorTool.CROP)
+
+        canvas.save()
+        if (userZoom > 1f || userPanX != 0f || userPanY != 0f) {
+            canvas.translate(userPanX, userPanY)
+            canvas.scale(userZoom, userZoom, width / 2f, height / 2f)
+        }
+
+        if (straightenAngle != 0f) {
+            val rad = Math.toRadians(kotlin.math.abs(straightenAngle).toDouble())
+            val r = destination.width() / destination.height().coerceAtLeast(1f)
+            val maxR = maxOf(r, 1f / r)
+            val scale = (Math.cos(rad) + Math.sin(rad) * maxR).toFloat()
+            canvas.save()
+            canvas.clipRect(destination)
+            canvas.rotate(straightenAngle, destination.centerX(), destination.centerY())
+            canvas.scale(scale, scale, destination.centerX(), destination.centerY())
+        }
+
         imagePaint.colorFilter = colorFilter
         canvas.drawBitmap(source, sourcePixelRect(source), destination, imagePaint)
         imagePaint.colorFilter = null
+
         canvas.save(); canvas.clipRect(destination)
         activeStroke?.let { drawStroke(canvas, it) }
         drawTextOverlays(canvas)
         canvas.restore()
+
+        if (straightenAngle != 0f) {
+            canvas.restore()
+        }
+
         if (tool == EditorTool.CROP) drawCrop(canvas)
+
+        if (isStraightening) {
+            drawStraightenGrid(canvas)
+        }
+
+        canvas.restore()
+    }
+
+    private fun drawStraightenGrid(canvas: Canvas) {
+        val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(130, 255, 255, 255)
+            strokeWidth = 1.5f
+        }
+        val cols = 6
+        val rows = 6
+        val stepX = destination.width() / cols
+        val stepY = destination.height() / rows
+        for (i in 1 until cols) {
+            val x = destination.left + i * stepX
+            canvas.drawLine(x, destination.top, x, destination.bottom, gridPaint)
+        }
+        for (i in 1 until rows) {
+            val y = destination.top + i * stepY
+            canvas.drawLine(destination.left, y, destination.right, y, gridPaint)
+        }
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(160, 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+        canvas.drawRect(destination, borderPaint)
     }
 
     private fun drawStroke(canvas: Canvas, stroke: BrushStroke) {
@@ -282,14 +423,61 @@ class EditorCanvasView(context: Context) : View(context) {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (tool != EditorTool.CROP && tool != EditorTool.PIXELATE && tool != EditorTool.BLUR &&
             tool != EditorTool.DRAW && tool != EditorTool.SHAPE && tool != EditorTool.TEXT) return super.onTouchEvent(event)
+
+        gestureDetector.onTouchEvent(event)
+        scaleDetector.onTouchEvent(event)
+
+        val pointers = event.pointerCount
+
+        if (pointers >= 2) {
+            if (activeStroke != null) {
+                activeStroke = null
+                invalidate()
+            }
+            if (isDraggingText) {
+                isDraggingText = false
+                draggedTextOverlay = null
+            }
+            val midX = (event.getX(0) + event.getX(1)) / 2f
+            val midY = (event.getY(0) + event.getY(1)) / 2f
+            if (isTwoFingerGesture && lastMidX != null && lastMidY != null) {
+                userPanX += (midX - lastMidX!!)
+                userPanY += (midY - lastMidY!!)
+                clampPan()
+                invalidate()
+            }
+            lastMidX = midX
+            lastMidY = midY
+            isTwoFingerGesture = true
+            return true
+        }
+
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            lastMidX = null
+            lastMidY = null
+            isTwoFingerGesture = false
+        }
+
+        if (isTwoFingerGesture) {
+            return true
+        }
+
+        val cx = width / 2f
+        val cy = height / 2f
+        val unpannedX = event.x - userPanX
+        val unpannedY = event.y - userPanY
+        val canvasX = cx + (unpannedX - cx) / userZoom
+        val canvasY = cy + (unpannedY - cy) / userZoom
+
         if (event.action == MotionEvent.ACTION_DOWN) {
             val touchSlop = if (tool == EditorTool.CROP) 48f * resources.displayMetrics.density else 0f
             val extendedDest = RectF(destination).apply { inset(-touchSlop, -touchSlop) }
-            if (!extendedDest.contains(event.x, event.y)) return true
+            if (!extendedDest.contains(canvasX, canvasY)) return true
         }
+
         val point = viewToNormalized(event.x, event.y)
         when (tool) {
-            EditorTool.CROP -> handleCropTouch(event, point)
+            EditorTool.CROP -> handleCropTouch(event, point, canvasX, canvasY)
             EditorTool.PIXELATE, EditorTool.BLUR, EditorTool.DRAW -> handleBrushTouch(event, point)
             EditorTool.SHAPE -> handleShapeTouch(event, point)
             EditorTool.TEXT -> handleTextTouch(event, point)
@@ -304,7 +492,7 @@ class EditorCanvasView(context: Context) : View(context) {
                 val changed = session.strokes.removeAll { stroke ->
                     isPointNearStrokeOrShape(point, stroke, brushRadius)
                 }
-                if (changed) { redoStrokes.clear(); rebuildComposite() }
+                if (changed) { redoStrokes.clear(); rebuildComposite(); notifyHistoryChanged() }
                 invalidate()
             }
             return
@@ -326,7 +514,11 @@ class EditorCanvasView(context: Context) : View(context) {
                 )
             }
             MotionEvent.ACTION_MOVE -> activeStroke?.points?.add(point)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> activeStroke?.let { session.strokes.add(it) }.also {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> activeStroke?.let {
+                session.strokes.add(it)
+                redoStrokes.clear()
+                notifyHistoryChanged()
+            }.also {
                 activeStroke = null; rebuildComposite(); rebuildEffects()
             }
         }
@@ -339,7 +531,7 @@ class EditorCanvasView(context: Context) : View(context) {
                 val changed = session.strokes.removeAll { stroke ->
                     isPointNearStrokeOrShape(point, stroke, brushRadius)
                 }
-                if (changed) { redoStrokes.clear(); rebuildComposite() }
+                if (changed) { redoStrokes.clear(); rebuildComposite(); notifyHistoryChanged() }
                 invalidate()
             }
             return
@@ -372,6 +564,8 @@ class EditorCanvasView(context: Context) : View(context) {
                     val p2 = stroke.points.last()
                     if (hypot(p2.x - p1.x, p2.y - p1.y) > 0.006f) {
                         session.strokes.add(stroke)
+                        redoStrokes.clear()
+                        notifyHistoryChanged()
                     }
                 }
                 activeStroke = null
@@ -415,7 +609,7 @@ class EditorCanvasView(context: Context) : View(context) {
         }
     }
 
-    private fun handleCropTouch(event: MotionEvent, point: BrushPoint) {
+    private fun handleCropTouch(event: MotionEvent, point: BrushPoint, canvasX: Float, canvasY: Float) {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 val cropRect = cropViewRect()
@@ -427,12 +621,12 @@ class EditorCanvasView(context: Context) : View(context) {
                 )
                 val cornerSlopPx = 44f * resources.displayMetrics.density
                 val nearestCornerIdx = cornersPx.indices.minByOrNull {
-                    hypot(cornersPx[it].first - event.x, cornersPx[it].second - event.y)
+                    hypot(cornersPx[it].first - canvasX, cornersPx[it].second - canvasY)
                 } ?: -1
 
-                if (nearestCornerIdx >= 0 && hypot(cornersPx[nearestCornerIdx].first - event.x, cornersPx[nearestCornerIdx].second - event.y) <= cornerSlopPx) {
+                if (nearestCornerIdx >= 0 && hypot(cornersPx[nearestCornerIdx].first - canvasX, cornersPx[nearestCornerIdx].second - canvasY) <= cornerSlopPx) {
                     cropHandle = nearestCornerIdx
-                } else if (cropRect.contains(event.x, event.y)) {
+                } else if (cropRect.contains(canvasX, canvasY)) {
                     cropHandle = 4
                 } else {
                     cropHandle = -1
@@ -536,9 +730,37 @@ class EditorCanvasView(context: Context) : View(context) {
     private fun cropViewRect() = RectF(destination.left + session.crop.left * destination.width(),
         destination.top + session.crop.top * destination.height(), destination.left + session.crop.right * destination.width(),
         destination.top + session.crop.bottom * destination.height())
-    private fun viewToNormalized(x: Float, y: Float) = BrushPoint(
-        visibleLeft() + ((x - destination.left) / destination.width()).coerceIn(0f, 1f) * visibleWidth(),
-        visibleTop() + ((y - destination.top) / destination.height()).coerceIn(0f, 1f) * visibleHeight())
+    private fun viewToNormalized(x: Float, y: Float): BrushPoint {
+        val cx = width / 2f
+        val cy = height / 2f
+        val unpannedX = x - userPanX
+        val unpannedY = y - userPanY
+        var canvasX = cx + (unpannedX - cx) / userZoom
+        var canvasY = cy + (unpannedY - cy) / userZoom
+
+        if (straightenAngle != 0f) {
+            val rad = Math.toRadians(kotlin.math.abs(straightenAngle).toDouble())
+            val r = destination.width() / destination.height().coerceAtLeast(1f)
+            val maxR = maxOf(r, 1f / r)
+            val scale = (Math.cos(rad) + Math.sin(rad) * maxR).toFloat()
+            val destCx = destination.centerX()
+            val destCy = destination.centerY()
+            val angleRad = Math.toRadians(straightenAngle.toDouble())
+            val cosA = Math.cos(angleRad).toFloat()
+            val sinA = Math.sin(angleRad).toFloat()
+            val relX = canvasX - destCx
+            val relY = canvasY - destCy
+            val unrotX = (relX * cosA + relY * sinA) / scale
+            val unrotY = (-relX * sinA + relY * cosA) / scale
+            canvasX = destCx + unrotX
+            canvasY = destCy + unrotY
+        }
+
+        return BrushPoint(
+            visibleLeft() + ((canvasX - destination.left) / destination.width()).coerceIn(0f, 1f) * visibleWidth(),
+            visibleTop() + ((canvasY - destination.top) / destination.height()).coerceIn(0f, 1f) * visibleHeight()
+        )
+    }
     private fun fitRect(source: Bitmap, out: RectF, cropped: Boolean) {
         val sourceWidth = source.width * if (cropped) session.crop.width() else 1f
         val sourceHeight = source.height * if (cropped) session.crop.height() else 1f

@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +76,14 @@ object ThumbnailCache {
 
 fun loadThumbnailSync(context: Context, image: MediaImage, targetSizePx: Int = 320): Bitmap? =
     loadThumbnail(context, image, targetSizePx)
+
+fun getThumbnailTargetSizePx(columns: Int): Int = when {
+    columns >= 6 -> 180
+    columns == 5 -> 256
+    columns in 3..4 -> 384
+    columns == 2 -> 512
+    else -> 768
+}
 
 fun getThumbnailTargetSizePx(cellSizeDp: Float, density: Float = 2.5f): Int {
     val pixelSize = (cellSizeDp * density).toInt()
@@ -175,6 +185,7 @@ fun MediaThumbnail(
     targetSizePx: Int = 320,
     showVideoDuration: Boolean = true,
     showFormatBadge: Boolean = true,
+    isFavorite: Boolean = false,
 ) {
     val context = LocalContext.current
     val cacheKey = remember(image.id, targetSizePx) { (image.id shl 16) xor (targetSizePx.toLong() and 0xFFFFL) }
@@ -196,6 +207,23 @@ fun MediaThumbnail(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+        if (isFavorite) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(5.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                    .padding(3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = Color(0xFFFF3B30),
+                    modifier = Modifier.size(11.dp)
+                )
+            }
         }
         if (image.isVideo && showVideoDuration) {
             Row(

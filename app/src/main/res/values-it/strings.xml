@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Sposta in Bloccati</string>
     <string name="action_favorite">Aggiungi ai preferiti</string>
     <string name="action_favorited">Nei preferiti</string>
+    <string name="action_unfavorite">Rimuovi dai preferiti</string>
     <string name="action_empty_trash">Svuota</string>
     <string name="action_comfortable_grid">Griglia ampia</string>
     <string name="action_compact_grid">Griglia compatta</string>

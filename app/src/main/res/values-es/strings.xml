@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Mover a Bloqueados</string>
     <string name="action_favorite">Favorito</string>
     <string name="action_favorited">En favoritos</string>
+    <string name="action_unfavorite">Quitar de favoritos</string>
     <string name="action_empty_trash">Vaciar</string>
     <string name="action_comfortable_grid">Cuadrícula amplia</string>
     <string name="action_compact_grid">Cuadrícula compacta</string>

@@ -106,6 +106,7 @@ enum class AlbumCategory {
     ALL,
     CAMERA_SYSTEM,
     APPS,
+    VIDEOS,
 }
 
 private val SYSTEM_FOLDER_NAMES = setOf(
@@ -233,6 +234,7 @@ fun AlbumsGrid(
             AlbumCategory.ALL -> albums
             AlbumCategory.CAMERA_SYSTEM -> albums.filter { isCameraOrSystemAlbum(it) }
             AlbumCategory.APPS -> albums.filter { isAppAlbum(it) }
+            AlbumCategory.VIDEOS -> albums.filter { it.images.any { img -> img.isVideo } }
         }
     }
 
@@ -264,14 +266,25 @@ fun AlbumsGrid(
                             if (kotlin.math.abs(zoom - 1f) > 0.001f) {
                                 val nextSize = (currentCellSize.value * zoom).coerceIn(48f, 420f)
                                 currentOnCellSizeChange?.invoke(nextSize.dp)
-                                event.changes.forEach { it.consume() }
                             }
+                            event.changes.forEach { it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
                 }
             }
     ) {
-        val targetThumbnailPx = remember(cellSize) { getThumbnailTargetSizePx(cellSize.value) }
+        val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val actualColumns = remember(screenWidthDp, cellSize, gridSpacing, density, startPadding, endPadding) {
+            GridCalculations.calculateAlbumColumns(
+                screenWidthDp = screenWidthDp,
+                cellSizeDp = cellSize.value,
+                gridSpacingDp = gridSpacing.dp.toFloat(),
+                density = density,
+                horizontalPaddingDp = (startPadding + endPadding).value / 2f
+            )
+        }
+        val targetThumbnailPx = remember(actualColumns) { getThumbnailTargetSizePx(actualColumns) }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(cellSize),
             state = state,
@@ -335,6 +348,11 @@ fun AlbumsGrid(
                                 selected = selectedCategory == AlbumCategory.APPS,
                                 onClick = { selectedCategory = AlbumCategory.APPS },
                                 label = { Text(stringResource(com.iris.gallery.R.string.filter_apps)) }
+                            )
+                            FilterChip(
+                                selected = selectedCategory == AlbumCategory.VIDEOS,
+                                onClick = { selectedCategory = AlbumCategory.VIDEOS },
+                                label = { Text(stringResource(com.iris.gallery.R.string.filter_videos)) }
                             )
                         }
 

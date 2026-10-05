@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Move to Locked</string>
     <string name="action_favorite">Favorite</string>
     <string name="action_favorited">Favorited</string>
+    <string name="action_unfavorite">Remove from favorites</string>
     <string name="action_empty_trash">Empty</string>
     <string name="action_comfortable_grid">Comfortable grid</string>
     <string name="action_compact_grid">Compact grid</string>
@@ -131,7 +132,8 @@
 
     <!-- Albums Screen -->
     <string name="search_albums_placeholder">Search %1$d albums…</string>
-    <string name="search_files_placeholder">Search photos, videos, formats…</string>
+    <string name="search_files_placeholder">Search photos…</string>
+    <string name="search_videos_placeholder">Search videos…</string>
     <string name="empty_search_files">No files matching \"%1$s\"</string>
     <string name="action_search">Search</string>
     <string name="clear_search">Clear search</string>
@@ -405,6 +407,8 @@
     <string name="settings_loop_video_desc">Repeat video playback continuously</string>
     <string name="settings_video_double_tap_zoom_title">Double-tap to zoom video</string>
     <string name="settings_video_double_tap_zoom_desc">Double-tap center to zoom video instead of play/pause</string>
+    <string name="settings_video_gesture_controls_title">Gesture controls</string>
+    <string name="settings_video_gesture_controls_desc">Swipe up or down on the left and right sides to adjust brightness and volume</string>
     <string name="settings_show_user_comments_title">Show comments overlay</string>
     <string name="settings_show_user_comments_desc">Display embedded user comments and notes directly on photos in the viewer</string>
     <string name="settings_show_filmstrip_title">Thumbnail filmstrip</string>
@@ -519,6 +523,8 @@
     <string name="editor_flip_h">Flip ⇄</string>
     <string name="editor_flip_v">Flip ⇅</string>
     <string name="editor_reset_orientation">Reset orientation</string>
+    <string name="editor_straighten">Straighten</string>
+    <string name="editor_reset_zoom">Reset zoom</string>
     <string name="editor_crop_manual_hint">Drag any corner to crop manually</string>
     <string name="editor_crop_help">Drag inside the frame to reposition it. White handles resize it.</string>
     <string name="editor_crop_manual">Manual</string>
@@ -747,4 +753,36 @@
     <string name="wallpaper_set_lock_success">Lock screen wallpaper updated</string>
     <string name="wallpaper_set_both_success">Wallpaper updated</string>
     <string name="wallpaper_set_error">Failed to set wallpaper</string>
+    <!-- Phase 3: Secure Sharing, Recursive Exclusions & Videos Smart View -->
+    <string name="settings_secure_sharing_title">Secure sharing</string>
+    <string name="settings_secure_sharing_desc">Strip sensitive metadata before sharing media with other apps</string>
+    <string name="settings_secure_sharing_off">Off</string>
+    <string name="settings_secure_sharing_off_desc">Share original files with all metadata intact</string>
+    <string name="settings_secure_sharing_strip_location">Remove location data</string>
+    <string name="settings_secure_sharing_strip_location_desc">Remove GPS coordinates and location tags from shared images</string>
+    <string name="settings_secure_sharing_strip_all">Remove all metadata</string>
+    <string name="settings_secure_sharing_strip_all_desc">Remove GPS location, camera details, timestamps, and device metadata</string>
+    <string name="secure_sharing_preparing">Preparing media for sharing…</string>
+
+    <string name="action_add_excluded_folder">Add folder</string>
+    <string name="dialog_add_excluded_folder_title">Exclude folder</string>
+    <string name="dialog_add_excluded_folder_message">Enter a folder name or path. All media inside this folder and its subfolders will be hidden from the gallery.</string>
+    <string name="dialog_add_excluded_folder_hint">e.g. Music or /Music</string>
+    <string name="dialog_excluded_folder_suggestions">Suggestions:</string>
+    <string name="dialog_folder_already_excluded">Folder is already excluded</string>
+
+    <string name="section_videos">Videos</string>
+    <string name="section_videos_desc">%1$d videos in your library</string>
+    <string name="filter_videos">Videos</string>
+    <string name="empty_videos">No videos found</string>
+    <string name="filter_videos_count">%1$d Videos</string>
+
+    <string name="viewer_secure_sharing_tip">Secure sharing: strip location or metadata before sharing. Tap to configure.</string>
+    <string name="viewer_secure_sharing_tip_location">Secure sharing: GPS location is stripped before sharing. Tap to configure.</string>
+    <string name="viewer_secure_sharing_tip_all">Secure sharing: all metadata is stripped before sharing. Tap to configure.</string>
+    <string name="viewer_secure_sharing_tip_off">Secure sharing: files are shared with full metadata. Tap to configure.</string>
+    <string name="dialog_secure_sharing_hint_title">Secure Sharing</string>
+    <string name="dialog_secure_sharing_hint_desc">Iris can strip GPS coordinates and camera metadata before sharing to protect your privacy. Original files remain untouched.</string>
+    <string name="action_dont_show_again">Don\'t show again</string>
+    <string name="action_configure">Configure</string>
 </resources>

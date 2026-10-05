@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +38,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Dashboard
@@ -44,13 +47,17 @@ import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.LocationOff
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ViewDay
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +68,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -96,6 +105,7 @@ import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,6 +118,7 @@ import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.DeleteMode
 import com.iris.gallery.data.GridSpacing
 import com.iris.gallery.data.PreferredEditor
+import com.iris.gallery.data.SecureSharingMode
 import com.iris.gallery.data.SettingsPreferences
 import com.iris.gallery.data.SettingsState
 import com.iris.gallery.data.StartupTab
@@ -128,6 +139,7 @@ fun SettingsScreen(
     preferences: SettingsPreferences,
     excludedFolders: Set<String> = emptySet(),
     onRemoveExcludedFolder: (String) -> Unit = {},
+    onAddExcludedFolder: (String) -> Unit = {},
     onOpenAbout: () -> Unit = {},
     onRescanMedia: () -> Unit = {},
     onBack: () -> Unit
@@ -142,6 +154,7 @@ fun SettingsScreen(
     var showViewerHeaderDialog by remember { mutableStateOf(false) }
     var showTimePickerDialog by remember { mutableStateOf(false) }
     var showExcludedFoldersDialog by remember { mutableStateOf(false) }
+    var showSecureSharingDialog by remember { mutableStateOf(false) }
 
     fun clearCache() {
         runCatching {
@@ -407,6 +420,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                     val screenWidthDp = LocalConfiguration.current.screenWidthDp.toFloat()
+                    val density = LocalDensity.current
                     val photoSpacingDp = settings.gridSpacing.dp.toFloat()
                     val photoAvailableWidth = (screenWidthDp - 2 * photoSpacingDp).coerceAtLeast(100f)
 
@@ -414,16 +428,26 @@ fun SettingsScreen(
                     val minPhotoDp = maxOf(36f, ((photoAvailableWidth + photoSpacingDp) / 6.8f - photoSpacingDp).coerceAtLeast(36f))
                     val maxPhotoDp = (photoAvailableWidth * 0.72f).coerceIn(160f, 320f)
                     val currentPhotoSize = settings.photoGridSize.coerceIn(minPhotoDp, maxPhotoDp)
-                    val photoColumns = maxOf(1, ((photoAvailableWidth + photoSpacingDp) / (currentPhotoSize + photoSpacingDp + 0.001f)).toInt())
+                    val photoColumns = GridCalculations.calculatePhotoColumns(
+                        screenWidthDp = screenWidthDp,
+                        cellSizeDp = currentPhotoSize,
+                        gridSpacingDp = photoSpacingDp,
+                        density = density
+                    )
 
                     // Dynamic slider boundaries for Albums
-                    val albumSpacingDp = 12f
-                    val albumPaddingDp = 16f
+                    val albumSpacingDp = (settings.gridSpacing.dp + 8).toFloat()
+                    val albumPaddingDp = 12f
                     val albumAvailableWidth = (screenWidthDp - 2 * albumPaddingDp).coerceAtLeast(100f)
                     val minAlbumDp = maxOf(48f, ((albumAvailableWidth + albumSpacingDp) / 4.8f - albumSpacingDp).coerceAtLeast(48f))
                     val maxAlbumDp = (albumAvailableWidth * 0.85f).coerceIn(200f, 420f)
                     val currentAlbumSize = settings.albumGridSize.coerceIn(minAlbumDp, maxAlbumDp)
-                    val albumColumns = maxOf(1, ((albumAvailableWidth + albumSpacingDp) / (currentAlbumSize + albumSpacingDp + 0.001f)).toInt())
+                    val albumColumns = GridCalculations.calculateAlbumColumns(
+                        screenWidthDp = screenWidthDp,
+                        cellSizeDp = currentAlbumSize,
+                        gridSpacingDp = settings.gridSpacing.dp.toFloat(),
+                        density = density
+                    )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
@@ -582,7 +606,12 @@ fun SettingsScreen(
                                     modifier = Modifier.weight(1f),
                                     selected = isCurrentCol,
                                     onClick = {
-                                        val idealDp = ((photoAvailableWidth + photoSpacingDp) / (targetCols + 0.45f) - photoSpacingDp).coerceIn(minPhotoDp, maxPhotoDp)
+                                        val idealDp = GridCalculations.idealPhotoCellSizeForColumns(
+                                            targetCols = targetCols,
+                                            screenWidthDp = screenWidthDp,
+                                            gridSpacingDp = photoSpacingDp,
+                                            density = density
+                                        ).coerceIn(minPhotoDp, maxPhotoDp)
                                         preferences.setPhotoGridSize(idealDp)
                                     },
                                     label = {
@@ -702,7 +731,12 @@ fun SettingsScreen(
                                     modifier = Modifier.weight(1f),
                                     selected = isCurrentCol,
                                     onClick = {
-                                        val idealDp = ((albumAvailableWidth + albumSpacingDp) / (targetCols + 0.45f) - albumSpacingDp).coerceIn(minAlbumDp, maxAlbumDp)
+                                        val idealDp = GridCalculations.idealAlbumCellSizeForColumns(
+                                            targetCols = targetCols,
+                                            screenWidthDp = screenWidthDp,
+                                            gridSpacingDp = settings.gridSpacing.dp.toFloat(),
+                                            density = density
+                                        ).coerceIn(minAlbumDp, maxAlbumDp)
                                         preferences.setAlbumGridSize(idealDp)
                                     },
                                     label = {
@@ -955,6 +989,15 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_video_double_tap_zoom_desc),
                         checked = settings.videoDoubleTapToZoom,
                         onCheckedChange = { preferences.setVideoDoubleTapToZoom(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_video_gesture_controls_title),
+                        subtitle = stringResource(R.string.settings_video_gesture_controls_desc),
+                        checked = settings.videoGestureControls,
+                        onCheckedChange = { preferences.setVideoGestureControls(it) }
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -1347,6 +1390,57 @@ fun SettingsScreen(
                             )
                         }
                     }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showSecureSharingDialog = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f).padding(end = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Security,
+                                    contentDescription = null,
+                                    tint = if (settings.secureSharingMode != SecureSharingMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    stringResource(R.string.settings_secure_sharing_title),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Text(
+                                stringResource(settings.secureSharingMode.getTitleRes()),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (settings.secureSharingMode != SecureSharingMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                stringResource(settings.secureSharingMode.getDescriptionRes()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1587,10 +1681,98 @@ fun SettingsScreen(
         )
     }
 
+    if (showSecureSharingDialog) {
+        AlertDialog(
+            onDismissRequest = { showSecureSharingDialog = false },
+            icon = {
+                Icon(
+                    Icons.Outlined.Security,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = { Text(stringResource(R.string.settings_secure_sharing_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.settings_secure_sharing_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    SecureSharingMode.values().forEach { mode ->
+                        val isSelected = settings.secureSharingMode == mode
+                        val modeIcon = when (mode) {
+                            SecureSharingMode.OFF -> Icons.Outlined.Share
+                            SecureSharingMode.STRIP_LOCATION -> Icons.Outlined.LocationOff
+                            SecureSharingMode.STRIP_ALL -> Icons.Outlined.Security
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                            border = BorderStroke(
+                                width = if (isSelected) 1.5.dp else 0.5.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    preferences.setSecureSharingMode(mode)
+                                    showSecureSharingDialog = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    modeIcon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(mode.getTitleRes()),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        stringResource(mode.getDescriptionRes()),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        preferences.setSecureSharingMode(mode)
+                                        showSecureSharingDialog = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSecureSharingDialog = false }) {
+                    Text(stringResource(R.string.action_done_editing))
+                }
+            }
+        )
+    }
+
     if (showExcludedFoldersDialog) {
         ExcludedFoldersDialog(
             excludedFolders = excludedFolders,
             onRemoveExcludedFolder = onRemoveExcludedFolder,
+            onAddExcludedFolder = onAddExcludedFolder,
             onDismissRequest = { showExcludedFoldersDialog = false }
         )
     }
@@ -1600,9 +1782,13 @@ fun SettingsScreen(
 fun ExcludedFoldersDialog(
     excludedFolders: Set<String>,
     onRemoveExcludedFolder: (String) -> Unit,
+    onAddExcludedFolder: (String) -> Unit = {},
     onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showAddFolderDialog by remember { mutableStateOf(false) }
+    var folderInput by remember { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text(stringResource(R.string.excluded_folders_title)) },
@@ -1635,12 +1821,84 @@ fun ExcludedFoldersDialog(
                 }
             }
         },
+        dismissButton = {
+            TextButton(onClick = { showAddFolderDialog = true }) {
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.action_add_excluded_folder))
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismissRequest) {
                 Text(stringResource(R.string.action_done_editing))
             }
         }
     )
+
+    if (showAddFolderDialog) {
+        val commonSuggestions = listOf("Music", "Podcasts", "Audiobooks", "Documents")
+        AlertDialog(
+            onDismissRequest = { showAddFolderDialog = false; folderInput = "" },
+            title = { Text(stringResource(R.string.dialog_add_excluded_folder_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.dialog_add_excluded_folder_message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = folderInput,
+                        onValueChange = { folderInput = it },
+                        placeholder = { Text(stringResource(R.string.dialog_add_excluded_folder_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        stringResource(R.string.dialog_excluded_folder_suggestions),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        commonSuggestions.forEach { suggestion ->
+                            AssistChip(
+                                onClick = { folderInput = suggestion },
+                                label = { Text(suggestion) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = folderInput.trim().trimEnd('/')
+                        if (trimmed.isNotBlank()) {
+                            if (trimmed in excludedFolders) {
+                                Toast.makeText(context, R.string.dialog_folder_already_excluded, Toast.LENGTH_SHORT).show()
+                            } else {
+                                onAddExcludedFolder(trimmed)
+                                Toast.makeText(context, R.string.toast_folder_excluded, Toast.LENGTH_SHORT).show()
+                                showAddFolderDialog = false
+                                folderInput = ""
+                            }
+                        }
+                    },
+                    enabled = folderInput.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.action_exclude_folder))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddFolderDialog = false; folderInput = "" }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
 }
 
 @Composable

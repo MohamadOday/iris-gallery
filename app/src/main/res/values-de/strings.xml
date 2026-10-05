@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">In „Gesperrt“ verschieben</string>
     <string name="action_favorite">Favorit</string>
     <string name="action_favorited">Favorit</string>
+    <string name="action_unfavorite">Aus Favoriten entfernen</string>
     <string name="action_empty_trash">Leeren</string>
     <string name="action_comfortable_grid">Komfortables Raster</string>
     <string name="action_compact_grid">Kompaktes Raster</string>

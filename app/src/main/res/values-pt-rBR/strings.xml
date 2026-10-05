@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Mover para Bloqueados</string>
     <string name="action_favorite">Favoritar</string>
     <string name="action_favorited">Favoritado</string>
+    <string name="action_unfavorite">Remover dos favoritos</string>
     <string name="action_empty_trash">Esvaziar</string>
     <string name="action_comfortable_grid">Grade confortável</string>
     <string name="action_compact_grid">Grade compacta</string>

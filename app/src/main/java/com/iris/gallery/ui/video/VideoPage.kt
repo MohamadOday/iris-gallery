@@ -2,12 +2,15 @@ package com.iris.gallery.ui.video
 
 import android.graphics.Bitmap
 import android.app.Activity
+import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.SystemClock
+import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -44,16 +47,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.outlined.BrightnessHigh
+import androidx.compose.material.icons.outlined.BrightnessLow
+import androidx.compose.material.icons.outlined.BrightnessMedium
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material3.Icon
@@ -69,10 +78,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlin.math.roundToInt
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -110,6 +122,7 @@ fun VideoPage(
     autoPlay: Boolean = true,
     loop: Boolean = true,
     doubleTapToZoom: Boolean = false,
+    gestureControls: Boolean = true,
     onTap: () -> Unit,
     onSwipeUp: () -> Unit = {},
     onSwipeDown: () -> Unit = {},
@@ -119,6 +132,30 @@ fun VideoPage(
     onMuteToggled: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val activity = remember(context) {
+        generateSequence(context) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<Activity>()
+            .firstOrNull()
+    }
+    val audioManager = remember(context) {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }
+    val maxVolume = remember(audioManager) {
+        audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+    }
+    val minVolume = remember(audioManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            audioManager?.getStreamMinVolume(AudioManager.STREAM_MUSIC) ?: 0
+        } else 0
+    }
+
+    var currentBrightness by remember { mutableFloatStateOf(0.5f) }
+    var currentVolume by remember { mutableIntStateOf(0) }
+    var brightnessHudVisible by remember { mutableStateOf(false) }
+    var volumeHudVisible by remember { mutableStateOf(false) }
+    var brightnessHudTimer by remember { mutableLongStateOf(0L) }
+    var volumeHudTimer by remember { mutableLongStateOf(0L) }
+
     var playing by remember { mutableStateOf(false) }
     var isMuted by remember(engine.isMuted) { mutableStateOf(engine.isMuted) }
     var isLooping by remember(media.id, loop) { mutableStateOf(engine.player.repeatMode == Player.REPEAT_MODE_ONE || loop) }
@@ -193,7 +230,26 @@ fun VideoPage(
         onDispose {
             if (active) {
                 engine.player.pause()
+                activity?.let { act ->
+                    val lp = act.window.attributes
+                    if (lp.screenBrightness != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                        act.window.attributes = lp
+                    }
+                }
             }
+        }
+    }
+    LaunchedEffect(brightnessHudTimer) {
+        if (brightnessHudTimer > 0L) {
+            delay(850)
+            brightnessHudVisible = false
+        }
+    }
+    LaunchedEffect(volumeHudTimer) {
+        if (volumeHudTimer > 0L) {
+            delay(850)
+            volumeHudVisible = false
         }
     }
     LaunchedEffect(media.id) {
@@ -327,77 +383,180 @@ fun VideoPage(
                     },
                 )
             }
-            .pointerInput(media.id) { awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
-                var totalDragY = 0f
-                var totalDragX = 0f
-                var isSwipeUpDetected = false
-                var isDismissDragging = false
-                var lastDragTime = SystemClock.uptimeMillis()
-                var lastDragY = 0f
-                var releaseVelocityY = 0f
-                do {
-                    val event = awaitPointerEvent()
-                    val pointers = event.changes.count { it.pressed }
-                    if (pointers >= 2 || (pointers == 1 && scale > 1f)) {
-                        if (isDismissDragging) {
-                            isDismissDragging = false
-                            onDismissRelease(0f)
-                        }
-                        val zoomChange = event.calculateZoom()
-                        val panChange = event.calculatePan()
-                        val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
-                        val validPan = if (panChange.isSpecified && !panChange.x.isNaN() && !panChange.y.isNaN()) panChange else Offset.Zero
+            .pointerInput(media.id, gestureControls, active) {
+                if (!active) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startX = down.position.x
+                    var totalDragY = 0f
+                    var totalDragX = 0f
+                    var gestureType = 0 // 0 = UNLOCKED, 1 = BRIGHTNESS, 2 = VOLUME, 3 = SWIPE_UP, 4 = DISMISS, -1 = HORIZONTAL, -2 = DEADZONE, -3 = 2X_ACTIVE
+                    var dragStartBrightness = 0.5f
+                    var dragStartVolume = 0
+                    var lastDragTime = SystemClock.uptimeMillis()
+                    var lastDragY = 0f
+                    var releaseVelocityY = 0f
+                    do {
+                        val event = awaitPointerEvent()
+                        val pointers = event.changes.count { it.pressed }
+                        if (pointers >= 2 || (pointers == 1 && scale > 1f)) {
+                            if (gestureType == 4) {
+                                gestureType = 0
+                                onDismissRelease(0f)
+                            }
+                            brightnessHudVisible = false
+                            volumeHudVisible = false
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+                            val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
+                            val validPan = if (panChange.isSpecified && !panChange.x.isNaN() && !panChange.y.isNaN()) panChange else Offset.Zero
 
-                        val calculated = (scale * validZoom).coerceIn(1f, 5f)
-                        val next = if (calculated < 1.02f) 1f else calculated
+                            val calculated = (scale * validZoom).coerceIn(1f, 5f)
+                            val next = if (calculated < 1.02f) 1f else calculated
 
-                        if (pointers >= 2 && size != IntSize.Zero) {
-                            val centroid = event.calculateCentroid(useCurrent = true)
-                            if (centroid.isSpecified && !centroid.x.isNaN() && !centroid.y.isNaN()) {
-                                val center = Offset(size.width / 2f, size.height / 2f)
-                                val effectiveZoom = next / scale
-                                val focalOffset = (offset + validPan) + (centroid - center - offset) * (1f - effectiveZoom)
-                                offset = clamp(focalOffset, next)
+                            if (pointers >= 2 && size != IntSize.Zero) {
+                                val centroid = event.calculateCentroid(useCurrent = true)
+                                if (centroid.isSpecified && !centroid.x.isNaN() && !centroid.y.isNaN()) {
+                                    val center = Offset(size.width / 2f, size.height / 2f)
+                                    val effectiveZoom = next / scale
+                                    val focalOffset = (offset + validPan) + (centroid - center - offset) * (1f - effectiveZoom)
+                                    offset = clamp(focalOffset, next)
+                                } else {
+                                    offset = clamp(offset + validPan, next)
+                                }
                             } else {
                                 offset = clamp(offset + validPan, next)
                             }
-                        } else {
-                            offset = clamp(offset + validPan, next)
-                        }
 
-                        scale = next
-                        onZoomChanged(next > 1f)
-                        event.changes.forEach { it.consume() }
-                    } else if (pointers == 1 && scale <= 1.02f) {
-                        val panChange = event.calculatePan()
-                        totalDragY += panChange.y
-                        totalDragX += panChange.x
-                        val now = SystemClock.uptimeMillis()
-                        val dt = (now - lastDragTime).coerceAtLeast(1)
-                        releaseVelocityY = (totalDragY - lastDragY) / (dt / 1000f)
-                        lastDragTime = now
-                        lastDragY = totalDragY
-
-                        if (!isSwipeUpDetected && !isDismissDragging && totalDragY < -75f && kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f) {
-                            isSwipeUpDetected = true
+                            scale = next
+                            onZoomChanged(next > 1f)
                             event.changes.forEach { it.consume() }
-                            onSwipeUp()
-                        } else if (!isSwipeUpDetected) {
-                            if (!isDismissDragging && totalDragY > 15f && totalDragY > kotlin.math.abs(totalDragX) * 1.3f) {
-                                isDismissDragging = true
+                        } else if (pointers == 1 && scale <= 1.02f) {
+                            val panChange = event.calculatePan()
+                            totalDragY += panChange.y
+                            totalDragX += panChange.x
+                            val now = SystemClock.uptimeMillis()
+                            val dt = (now - lastDragTime).coerceAtLeast(1)
+                            releaseVelocityY = (totalDragY - lastDragY) / (dt / 1000f)
+                            lastDragTime = now
+                            lastDragY = totalDragY
+
+                            val w = size.width.toFloat().coerceAtLeast(1f)
+                            val h = size.height.toFloat().coerceAtLeast(1f)
+
+                            if (gestureType == 0) {
+                                if (gestureFeedback != null) {
+                                    gestureType = -3
+                                } else {
+                                    val absX = kotlin.math.abs(totalDragX)
+                                    val absY = kotlin.math.abs(totalDragY)
+                                    if (absX > 20f && absX > absY) {
+                                        gestureType = -1
+                                    } else if (absY > 16f && absY > absX * 1.2f) {
+                                        if (startX < w * 0.08f || startX > w * 0.92f) {
+                                            gestureType = -2
+                                        } else if (gestureControls && startX < w * 0.42f) {
+                                            gestureType = 1
+                                            val curWinBrightness = activity?.window?.attributes?.screenBrightness ?: -1f
+                                            dragStartBrightness = if (curWinBrightness in 0f..1f) {
+                                                curWinBrightness
+                                            } else {
+                                                try {
+                                                    android.provider.Settings.System.getInt(
+                                                        context.contentResolver,
+                                                        android.provider.Settings.System.SCREEN_BRIGHTNESS
+                                                    ) / 255f
+                                                } catch (_: Exception) {
+                                                    0.5f
+                                                }
+                                            }.coerceIn(0.01f, 1f)
+                                            currentBrightness = dragStartBrightness
+                                            brightnessHudVisible = true
+                                            brightnessHudTimer = SystemClock.uptimeMillis()
+                                        } else if (gestureControls && startX > w * 0.58f) {
+                                            gestureType = 2
+                                            dragStartVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                                            currentVolume = dragStartVolume
+                                            volumeHudVisible = true
+                                            volumeHudTimer = SystemClock.uptimeMillis()
+                                        } else {
+                                            if (totalDragY < -75f) {
+                                                gestureType = 3
+                                                onSwipeUp()
+                                            } else if (totalDragY > 15f) {
+                                                gestureType = 4
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            if (isDismissDragging) {
-                                event.changes.forEach { it.consume() }
-                                onDismissDrag(panChange.y)
+
+                            when (gestureType) {
+                                1 -> {
+                                    val scrollRange = (h * 0.75f).coerceAtLeast(200f)
+                                    val delta = -totalDragY / scrollRange
+                                    val newBrightness = (dragStartBrightness + delta).coerceIn(0.01f, 1f)
+                                    currentBrightness = newBrightness
+                                    activity?.let { act ->
+                                        val lp = act.window.attributes
+                                        lp.screenBrightness = newBrightness
+                                        act.window.attributes = lp
+                                    }
+                                    brightnessHudVisible = true
+                                    brightnessHudTimer = SystemClock.uptimeMillis()
+                                    event.changes.forEach { it.consume() }
+                                }
+                                2 -> {
+                                    val scrollRange = (h * 0.75f).coerceAtLeast(200f)
+                                    val deltaRatio = -totalDragY / scrollRange
+                                    val steps = (maxVolume - minVolume).coerceAtLeast(1)
+                                    val newVolume = (dragStartVolume + (deltaRatio * steps).roundToInt()).coerceIn(minVolume, maxVolume)
+                                    if (newVolume != currentVolume) {
+                                        currentVolume = newVolume
+                                        audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0)
+                                        if (newVolume > 0 && engine.isMuted) {
+                                            engine.setMuted(false)
+                                            isMuted = false
+                                        }
+                                    }
+                                    volumeHudVisible = true
+                                    volumeHudTimer = SystemClock.uptimeMillis()
+                                    event.changes.forEach { it.consume() }
+                                }
+                                3 -> {
+                                    event.changes.forEach { it.consume() }
+                                }
+                                4 -> {
+                                    event.changes.forEach { it.consume() }
+                                    onDismissDrag(panChange.y)
+                                }
+                                0 -> {
+                                    if (startX in (w * 0.42f)..(w * 0.58f) || !gestureControls) {
+                                        if (totalDragY < -75f && kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f) {
+                                            gestureType = 3
+                                            event.changes.forEach { it.consume() }
+                                            onSwipeUp()
+                                        } else if (totalDragY > 15f && totalDragY > kotlin.math.abs(totalDragX) * 1.3f) {
+                                            gestureType = 4
+                                            event.changes.forEach { it.consume() }
+                                            onDismissDrag(panChange.y)
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    // Unconsumed (-1, -2, -3)
+                                }
                             }
                         }
+                    } while (event.changes.any { it.pressed })
+                    if (gestureType == 4) {
+                        onDismissRelease(releaseVelocityY)
                     }
-                } while (event.changes.any { it.pressed })
-                if (isDismissDragging) {
-                    onDismissRelease(releaseVelocityY)
+                    if (gestureType == 1 || gestureType == 2) {
+                        suppressTapUntil = SystemClock.uptimeMillis() + 150L
+                    }
                 }
-            } }
+            }
     ) {
         Box(
             Modifier.fillMaxSize().background(Color.Black).graphicsLayer(
@@ -523,6 +682,39 @@ fun VideoPage(
                 )
             }
         }
+
+        val brightnessPercent = (currentBrightness * 100).roundToInt().coerceIn(0, 100)
+        val brightnessIcon = when {
+            currentBrightness < 0.33f -> Icons.Outlined.BrightnessLow
+            currentBrightness < 0.67f -> Icons.Outlined.BrightnessMedium
+            else -> Icons.Outlined.BrightnessHigh
+        }
+        VideoGestureHud(
+            visible = brightnessHudVisible,
+            modifier = Modifier
+                .align(AbsoluteAlignment.CenterLeft)
+                .padding(start = 32.dp),
+            icon = brightnessIcon,
+            percentage = brightnessPercent,
+            progress = currentBrightness,
+        )
+
+        val volumePercent = ((currentVolume.toFloat() / maxVolume.coerceAtLeast(1)) * 100).roundToInt().coerceIn(0, 100)
+        val volumeIcon = when {
+            currentVolume == 0 -> Icons.AutoMirrored.Filled.VolumeOff
+            currentVolume < maxVolume / 2 -> Icons.AutoMirrored.Filled.VolumeDown
+            else -> Icons.AutoMirrored.Filled.VolumeUp
+        }
+        VideoGestureHud(
+            visible = volumeHudVisible,
+            modifier = Modifier
+                .align(AbsoluteAlignment.CenterRight)
+                .padding(end = 32.dp),
+            icon = volumeIcon,
+            percentage = volumePercent,
+            progress = (currentVolume - minVolume).toFloat() / (maxVolume - minVolume).coerceAtLeast(1),
+        )
+
         AnimatedVisibility(
           visible = controlsVisible,
           modifier = Modifier.align(Alignment.BottomCenter),
@@ -641,3 +833,55 @@ private fun formatTime(ms: Long): String {
     return if (seconds >= 3_600) "%d:%02d:%02d".format(seconds / 3_600, seconds % 3_600 / 60, seconds % 60)
     else "%d:%02d".format(seconds / 60, seconds % 60)
 }
+
+@Composable
+private fun VideoGestureHud(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    percentage: Int,
+    progress: Float,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(tween(120)) + scaleIn(tween(140), initialScale = 0.9f),
+        exit = fadeOut(tween(220)),
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(22.dp))
+                .padding(vertical = 14.dp, horizontal = 10.dp)
+                .width(44.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(96.dp)
+                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(progress.coerceIn(0f, 1f))
+                        .background(Color.White, RoundedCornerShape(2.dp))
+                )
+            }
+            Text(
+                text = "$percentage%",
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            )
+        }
+    }
+}
+

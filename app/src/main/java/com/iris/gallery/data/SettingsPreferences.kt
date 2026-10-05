@@ -59,6 +59,24 @@ enum class ViewerHeaderStyle {
     }
 }
 
+enum class SecureSharingMode {
+    OFF,
+    STRIP_LOCATION,
+    STRIP_ALL;
+
+    fun getTitleRes(): Int = when (this) {
+        OFF -> R.string.settings_secure_sharing_off
+        STRIP_LOCATION -> R.string.settings_secure_sharing_strip_location
+        STRIP_ALL -> R.string.settings_secure_sharing_strip_all
+    }
+
+    fun getDescriptionRes(): Int = when (this) {
+        OFF -> R.string.settings_secure_sharing_off_desc
+        STRIP_LOCATION -> R.string.settings_secure_sharing_strip_location_desc
+        STRIP_ALL -> R.string.settings_secure_sharing_strip_all_desc
+    }
+}
+
 data class AppLanguage(
     val code: String, // "" for system, or "en", "ar", "es", etc.
     val displayName: String,
@@ -127,6 +145,7 @@ data class SettingsState(
     val autoPlayVideo: Boolean = true,
     val loopVideo: Boolean = true,
     val videoDoubleTapToZoom: Boolean = false,
+    val videoGestureControls: Boolean = true,
     val showViewerUserComments: Boolean = true,
     val viewerHeaderStyle: ViewerHeaderStyle = ViewerHeaderStyle.DATE,
     val showViewerPageCount: Boolean = true,
@@ -154,6 +173,8 @@ data class SettingsState(
     val memoriesNotificationHour: Int = 10,
     val memoriesNotificationMinute: Int = 0,
     val dismissedMemoriesTip: Boolean = false,
+    val secureSharingMode: SecureSharingMode = SecureSharingMode.OFF,
+    val dismissedSecureSharingTip: Boolean = false,
 ) {
     val hasPin: Boolean get() = appLockPinHash.isNotEmpty()
 }
@@ -193,6 +214,7 @@ class SettingsPreferences(context: Context) {
     fun setAutoPlayVideo(autoPlay: Boolean) = update { copy(autoPlayVideo = autoPlay) }
     fun setLoopVideo(loop: Boolean) = update { copy(loopVideo = loop) }
     fun setVideoDoubleTapToZoom(enabled: Boolean) = update { copy(videoDoubleTapToZoom = enabled) }
+    fun setVideoGestureControls(enabled: Boolean) = update { copy(videoGestureControls = enabled) }
     fun setShowViewerUserComments(show: Boolean) = update { copy(showViewerUserComments = show) }
     fun setViewerHeaderStyle(style: ViewerHeaderStyle) = update { copy(viewerHeaderStyle = style) }
     fun setShowViewerPageCount(show: Boolean) = update { copy(showViewerPageCount = show) }
@@ -215,6 +237,8 @@ class SettingsPreferences(context: Context) {
     fun setMemoriesNotificationEnabled(enabled: Boolean) = update { copy(memoriesNotificationEnabled = enabled) }
     fun setMemoriesNotificationTime(hour: Int, minute: Int) = update { copy(memoriesNotificationHour = hour, memoriesNotificationMinute = minute) }
     fun setDismissedMemoriesTip(dismissed: Boolean) = update { copy(dismissedMemoriesTip = dismissed) }
+    fun setSecureSharingMode(mode: SecureSharingMode) = update { copy(secureSharingMode = mode) }
+    fun setDismissedSecureSharingTip(dismissed: Boolean) = update { copy(dismissedSecureSharingTip = dismissed) }
 
     fun setPin(pin: String) {
         val salt = java.util.UUID.randomUUID().toString()
@@ -283,6 +307,7 @@ class SettingsPreferences(context: Context) {
             autoPlayVideo = prefs.getBoolean("auto_play_video", true),
             loopVideo = prefs.getBoolean("loop_video", true),
             videoDoubleTapToZoom = prefs.getBoolean("video_double_tap_to_zoom", false),
+            videoGestureControls = prefs.getBoolean("video_gesture_controls", true),
             showViewerUserComments = prefs.getBoolean("show_viewer_user_comments", true),
             viewerHeaderStyle = runCatching { ViewerHeaderStyle.valueOf(prefs.getString("viewer_header_style", null).orEmpty()) }.getOrDefault(ViewerHeaderStyle.DATE),
             showViewerPageCount = prefs.getBoolean("show_viewer_page_count", true),
@@ -310,6 +335,8 @@ class SettingsPreferences(context: Context) {
             memoriesNotificationHour = prefs.getInt("memories_notification_hour", 10),
             memoriesNotificationMinute = prefs.getInt("memories_notification_minute", 0),
             dismissedMemoriesTip = prefs.getBoolean("dismissed_memories_tip", false),
+            secureSharingMode = runCatching { SecureSharingMode.valueOf(prefs.getString("secure_sharing_mode", null).orEmpty()) }.getOrDefault(SecureSharingMode.OFF),
+            dismissedSecureSharingTip = prefs.getBoolean("dismissed_secure_sharing_tip", false),
         )
     }
 
@@ -335,6 +362,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("auto_play_video", state.autoPlayVideo)
             .putBoolean("loop_video", state.loopVideo)
             .putBoolean("video_double_tap_to_zoom", state.videoDoubleTapToZoom)
+            .putBoolean("video_gesture_controls", state.videoGestureControls)
             .putBoolean("show_viewer_user_comments", state.showViewerUserComments)
             .putString("viewer_header_style", state.viewerHeaderStyle.name)
             .putBoolean("show_viewer_page_count", state.showViewerPageCount)
@@ -362,6 +390,8 @@ class SettingsPreferences(context: Context) {
             .putInt("memories_notification_hour", state.memoriesNotificationHour)
             .putInt("memories_notification_minute", state.memoriesNotificationMinute)
             .putBoolean("dismissed_memories_tip", state.dismissedMemoriesTip)
+            .putString("secure_sharing_mode", state.secureSharingMode.name)
+            .putBoolean("dismissed_secure_sharing_tip", state.dismissedSecureSharingTip)
             .apply()
     }
 }

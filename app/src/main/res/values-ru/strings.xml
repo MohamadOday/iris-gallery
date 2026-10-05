@@ -38,6 +38,7 @@
     <string name="action_move_to_locked">Переместить в личное</string>
     <string name="action_favorite">В избранное</string>
     <string name="action_favorited">В избранном</string>
+    <string name="action_unfavorite">Удалить из избранного</string>
     <string name="action_empty_trash">Очистить</string>
     <string name="action_comfortable_grid">Просторная сетка</string>
     <string name="action_compact_grid">Компактная сетка</string>
