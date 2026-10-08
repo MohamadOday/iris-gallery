@@ -4810,9 +4810,9 @@ private fun PhotoDetailsSheet(
 ) {
     val context = LocalContext.current
     var exifRevision by remember { mutableIntStateOf(0) }
-    val exif by produceState<ExifMetadata?>(initialValue = null, image.id, image.uri, exifRevision) {
+    val exif by produceState<ExifMetadata?>(initialValue = null, image.id, image.uri, image.dateTaken, image.title, image.description, exifRevision) {
         value = withContext(Dispatchers.IO) {
-            loadExifMetadata(context, image.uri)
+            loadExifMetadata(context, image.uri, image.path)
         }
     }
     val currentExif = exif
@@ -4822,12 +4822,16 @@ private fun PhotoDetailsSheet(
     val draggableState = rememberDraggableState { delta ->
         dragOffset += delta
     }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val screenHeightDp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = (screenHeightDp * 0.75f).dp)
                 .navigationBarsPadding()
                 .draggable(
                     state = draggableState,
@@ -4841,12 +4845,12 @@ private fun PhotoDetailsSheet(
                         dragOffset = 0f
                     }
                 )
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(bottom = 24.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -4890,7 +4894,15 @@ private fun PhotoDetailsSheet(
                 }
             }
 
-            val currentLocale = rememberAppLocale()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                val currentLocale = rememberAppLocale()
             val resolvedTitle = (currentExif?.title?.takeIf { it.isNotBlank() } ?: image.title).takeIf {
                 it.isNotBlank() && it != image.name && it != image.name.substringBeforeLast('.')
             }
@@ -4918,10 +4930,10 @@ private fun PhotoDetailsSheet(
                         if (commentText != null) {
                             DetailBlock(stringResource(R.string.details_exif_user_comment), commentText)
                         }
-                        if (!currentExif?.xpComment.isNullOrBlank()) {
+                        if (!currentExif?.xpComment.isNullOrBlank() && currentExif?.xpComment != commentText) {
                             DetailBlock(stringResource(R.string.details_xp_comment), currentExif!!.xpComment!!)
                         }
-                        currentExif?.jpegComments?.let { comments ->
+                        currentExif?.jpegComments?.filter { it != commentText && it != currentExif?.xpComment }?.let { comments ->
                             comments.forEachIndexed { idx, jc ->
                                 val label = if (comments.size > 1) {
                                     stringResource(R.string.details_jpeg_comment_numbered, idx + 1)
@@ -4939,16 +4951,27 @@ private fun PhotoDetailsSheet(
             }
 
             // 2. Origin Card (Captured Date & Time, Location, Artist, Copyright, Software)
-            val parsedCapturedDate = remember(currentExif?.dateTimeOriginal, image.dateTaken, currentLocale, timelineDateFormat, customTimelineDateFormat) {
+            val parsedCapturedDate = remember(currentExif?.dateTimeOriginal, currentExif?.offsetTimeOriginal, currentLocale, timelineDateFormat, customTimelineDateFormat) {
+                val raw = currentExif?.dateTimeOriginal?.trim()
+                if (raw.isNullOrBlank()) return@remember null
+                val offset = currentExif?.offsetTimeOriginal?.trim()
+                val tz = if (!offset.isNullOrBlank()) {
+                    val prefix = if (offset.startsWith("+") || offset.startsWith("-")) "GMT" else "GMT+"
+                    java.util.TimeZone.getTimeZone(prefix + offset)
+                } else {
+                    java.util.TimeZone.getDefault()
+                }
                 val dateMillis = runCatching {
-                    currentExif?.dateTimeOriginal?.let { raw ->
-                        val parser = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US)
-                        parser.parse(raw)?.time
+                    val parser = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US).apply {
+                        timeZone = tz
                     }
-                }.getOrNull() ?: image.dateTaken
-                val tf = DateFormat.getTimeInstance(DateFormat.MEDIUM, currentLocale)
+                    parser.parse(raw)?.time
+                }.getOrNull() ?: return@remember null
+                val tf = DateFormat.getTimeInstance(DateFormat.MEDIUM, currentLocale).apply {
+                    timeZone = tz
+                }
                 val timeStr = tf.format(Date(dateMillis))
-                val localDate = Instant.ofEpochMilli(dateMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                val localDate = Instant.ofEpochMilli(dateMillis).atZone(tz.toZoneId()).toLocalDate()
                 val formatter = getTimelineFormatter(
                     format = timelineDateFormat,
                     isSameYear = false,
@@ -4957,9 +4980,10 @@ private fun PhotoDetailsSheet(
                     customPattern = customTimelineDateFormat,
                     smartYearHiding = false,
                 )
-                "${localDate.format(formatter)} · $timeStr"
+                val tzSuffix = if (!offset.isNullOrBlank()) " ($offset)" else ""
+                "${localDate.format(formatter)} · $timeStr$tzSuffix"
             }
-            val hasOrigin = parsedCapturedDate.isNotBlank() ||
+            val hasOrigin = !parsedCapturedDate.isNullOrBlank() ||
                 (currentExif?.latitude != null && currentExif.longitude != null) ||
                 !currentExif?.artist.isNullOrBlank() ||
                 !currentExif?.copyright.isNullOrBlank() ||
@@ -4976,7 +5000,9 @@ private fun PhotoDetailsSheet(
                             Icon(Icons.Outlined.LocationOn, stringResource(R.string.details_section_origin), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Text(stringResource(R.string.details_section_origin), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         }
-                        DetailItem(stringResource(R.string.details_captured), parsedCapturedDate)
+                        if (!parsedCapturedDate.isNullOrBlank()) {
+                            DetailItem(stringResource(R.string.details_captured), parsedCapturedDate)
+                        }
 
                         if (currentExif?.latitude != null && currentExif.longitude != null) {
                             Row(
@@ -5048,7 +5074,25 @@ private fun PhotoDetailsSheet(
                 }
             }
 
-            // 4. Image Properties Card
+            // 4. Video or Image Properties Card
+            val isVideo = image.isVideo
+            val formattedVideoCreatedDate = remember(image.dateTaken, currentLocale, timelineDateFormat, customTimelineDateFormat) {
+                if (!isVideo || image.dateTaken <= 0) null else {
+                    val tf = DateFormat.getTimeInstance(DateFormat.MEDIUM, currentLocale)
+                    val timeStr = tf.format(Date(image.dateTaken))
+                    val localDate = Instant.ofEpochMilli(image.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
+                    val formatter = getTimelineFormatter(
+                        format = timelineDateFormat,
+                        isSameYear = false,
+                        showDayOfWeek = false,
+                        locale = currentLocale,
+                        customPattern = customTimelineDateFormat,
+                        smartYearHiding = false,
+                    )
+                    val dateStr = localDate.format(formatter)
+                    "$dateStr · $timeStr"
+                }
+            }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)),
@@ -5056,8 +5100,20 @@ private fun PhotoDetailsSheet(
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Outlined.Image, stringResource(R.string.details_image_properties), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Text(stringResource(R.string.details_image_properties), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Icon(
+                            if (isVideo) Icons.Outlined.Videocam else Icons.Outlined.Image,
+                            if (isVideo) stringResource(R.string.details_video_properties) else stringResource(R.string.details_image_properties),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            if (isVideo) stringResource(R.string.details_video_properties) else stringResource(R.string.details_image_properties),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (formattedVideoCreatedDate != null) {
+                        DetailItem(stringResource(R.string.details_captured), formattedVideoCreatedDate)
                     }
                     val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
                     val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
@@ -5066,7 +5122,7 @@ private fun PhotoDetailsSheet(
                         DetailBlock(stringResource(R.string.details_image_unique_id), currentExif.imageUniqueId!!)
                     }
                     if (image.orientation != 0) DetailItem(stringResource(R.string.details_orientation), "${image.orientation}°")
-                    if (image.isVideo && image.durationMs > 0) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
+                    if (isVideo && image.durationMs > 0) DetailItem(stringResource(R.string.details_duration), formatMediaDuration(image.durationMs))
                 }
             }
 
@@ -5107,10 +5163,38 @@ private fun PhotoDetailsSheet(
                             }
                         }
                     }
-                    val formattedDate = remember(image.dateTaken, currentLocale, timelineDateFormat, customTimelineDateFormat) {
+                    val addedMillis = remember(image.dateAdded) {
+                        image.dateAdded.takeIf { it > 0 }
+                    }
+                    val formattedAddedDate = remember(addedMillis, currentLocale, timelineDateFormat, customTimelineDateFormat) {
+                        if (addedMillis == null) null else {
+                            val tf = DateFormat.getTimeInstance(DateFormat.SHORT, currentLocale)
+                            val timeStr = tf.format(Date(addedMillis))
+                            val localDate = Instant.ofEpochMilli(addedMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                            val formatter = getTimelineFormatter(
+                                format = timelineDateFormat,
+                                isSameYear = false,
+                                showDayOfWeek = false,
+                                locale = currentLocale,
+                                customPattern = customTimelineDateFormat,
+                                smartYearHiding = false,
+                            )
+                            val dateStr = localDate.format(formatter)
+                            "$dateStr · $timeStr"
+                        }
+                    }
+                    val modifiedMillis = remember(image.path, image.dateModified, image.dateTaken) {
+                        if (image.dateModified > 0) {
+                            image.dateModified
+                        } else {
+                            val f = File(image.path)
+                            if (f.exists() && f.lastModified() > 0) f.lastModified() else image.dateTaken
+                        }
+                    }
+                    val formattedModifiedDate = remember(modifiedMillis, currentLocale, timelineDateFormat, customTimelineDateFormat) {
                         val tf = DateFormat.getTimeInstance(DateFormat.SHORT, currentLocale)
-                        val timeStr = tf.format(Date(image.dateTaken))
-                        val localDate = Instant.ofEpochMilli(image.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val timeStr = tf.format(Date(modifiedMillis))
+                        val localDate = Instant.ofEpochMilli(modifiedMillis).atZone(ZoneId.systemDefault()).toLocalDate()
                         val formatter = getTimelineFormatter(
                             format = timelineDateFormat,
                             isSameYear = false,
@@ -5122,9 +5206,13 @@ private fun PhotoDetailsSheet(
                         val dateStr = localDate.format(formatter)
                         "$dateStr · $timeStr"
                     }
-                    DetailItem(stringResource(R.string.details_modified), formattedDate)
+                    if (formattedAddedDate != null) {
+                        DetailItem(stringResource(R.string.details_added), formattedAddedDate)
+                    }
+                    DetailItem(stringResource(R.string.details_modified), formattedModifiedDate)
                     DetailItem(stringResource(R.string.details_type), image.mimeType.ifBlank { if (image.isVideo) stringResource(R.string.format_video) else stringResource(R.string.format_image) })
                     DetailItem(stringResource(R.string.details_size), formatFileSize(image.sizeBytes))
+                    DetailBlock(stringResource(R.string.details_url), image.uri.toString())
                     DetailBlock(stringResource(R.string.details_path), image.path)
                 }
             }
@@ -5143,6 +5231,7 @@ private fun PhotoDetailsSheet(
             }
         }
     }
+}
     if (editing) {
         ExifEditorSheet(
             image = image,
@@ -5168,9 +5257,9 @@ private fun PhotoDetailsSheet(
 }
 
 private fun formatFileSize(bytes: Long): String = when {
-    bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)
-    bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
+    bytes >= 1_000_000_000 -> "%.1f GB".format(java.util.Locale.US, bytes / 1_000_000_000.0)
+    bytes >= 1_000_000 -> "%.1f MB".format(java.util.Locale.US, bytes / 1_000_000.0)
+    bytes >= 1_000 -> "%.1f KB".format(java.util.Locale.US, bytes / 1_000.0)
     else -> "$bytes B"
 }
 
