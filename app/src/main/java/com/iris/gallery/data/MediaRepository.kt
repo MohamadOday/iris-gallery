@@ -521,6 +521,7 @@ class MediaRepository(private val context: Context) {
         }
         val sorted = result.distinctBy { it.id }.sortedWith(
             compareByDescending<MediaImage> { it.dateTaken }
+                .thenByDescending { it.dateModified }
                 .thenByDescending { it.id }
         )
         if (!trashed) {

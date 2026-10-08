@@ -141,7 +141,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val currentImages = _uiState.value.images
             val remainingImages = currentImages.filterNot { it.id in movedOldIds || it.path in movedOldPaths }
             val updatedImages = (remainingImages + result.movedMedia).sortedWith(
-                compareByDescending<MediaImage> { it.dateTaken }.thenByDescending { it.id }
+                compareByDescending<MediaImage> { it.dateTaken }
+                    .thenByDescending { it.dateModified }
+                    .thenByDescending { it.id }
             )
             _uiState.value = _uiState.value.copy(images = updatedImages)
         }
@@ -154,7 +156,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         if (result.successCount > 0) {
             val currentImages = _uiState.value.images
             val updatedImages = (currentImages + result.movedMedia).distinctBy { it.path }.sortedWith(
-                compareByDescending<MediaImage> { it.dateTaken }.thenByDescending { it.id }
+                compareByDescending<MediaImage> { it.dateTaken }
+                    .thenByDescending { it.dateModified }
+                    .thenByDescending { it.id }
             )
             _uiState.value = _uiState.value.copy(images = updatedImages)
         }
@@ -325,7 +329,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         }
                         val combined = if (currentPending.isNotEmpty()) {
                             (loaded + currentPending).distinctBy { it.path }.sortedWith(
-                                compareByDescending<MediaImage> { it.dateTaken }.thenByDescending { it.id }
+                                compareByDescending<MediaImage> { it.dateTaken }
+                                    .thenByDescending { it.dateModified }
+                                    .thenByDescending { it.id }
                             )
                         } else {
                             loaded

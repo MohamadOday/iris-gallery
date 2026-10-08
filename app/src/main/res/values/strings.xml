@@ -262,6 +262,7 @@
     <string name="details_white_balance_manual">Manual</string>
     <string name="details_megapixels">%1$s MP</string>
     <string name="details_image_properties">Image Properties</string>
+    <string name="details_video_properties">Video Properties</string>
     <string name="details_modified">Modified</string>
     <string name="details_image_unique_id">Image Unique ID</string>
     <string name="details_exif_user_comment">EXIF User Comment</string>
@@ -672,6 +673,7 @@
     <string name="excluded_folders_desc">Manage folders hidden from the gallery</string>
     <string name="toast_folder_excluded">Folder excluded from gallery</string>
     <string name="toast_folder_unexcluded">Folder restored to gallery</string>
+    <string name="toast_share_failed">Could not prepare media for sharing</string>
     <string name="no_excluded_folders">No excluded folders</string>
     <string name="filter_all_albums">All</string>
     <string name="filter_camera_system">Camera &amp; System</string>
