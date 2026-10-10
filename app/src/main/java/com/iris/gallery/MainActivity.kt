@@ -279,6 +279,7 @@ import com.iris.gallery.data.isGif
 import com.iris.gallery.data.isPanorama
 import com.iris.gallery.data.isMotionPhoto
 import com.iris.gallery.data.isScreenshot
+import com.iris.gallery.data.isSvg
 import com.iris.gallery.ui.GalleryViewModel
 import com.iris.gallery.ui.DuplicateScanState
 import com.iris.gallery.ui.MediaThumbnail
@@ -504,6 +505,7 @@ private fun GalleryApp(
         permitted = permissions.all { permission -> it[permission] == true }
     }
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var trashFeedback by remember { mutableStateOf<TrashFeedback?>(null) }
     var pendingPermanentDeleteMedia by remember { mutableStateOf<List<MediaImage>?>(null) }
     var pendingPermanentDeleteCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -516,6 +518,7 @@ private fun GalleryApp(
                 val delIds = pending.map { it.id }.toSet()
                 val delPaths = pending.map { it.path }.toSet()
                 viewModel.markMediaDeleted(delIds, delPaths)
+                trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, pending.size)
             }
             viewModel.refresh(showLoading = false)
             cb?.invoke()
@@ -663,6 +666,7 @@ private fun GalleryApp(
             }
             viewModel.refresh(showLoading = false)
             val count = pending?.trashedMedia?.size ?: 0
+            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, count)
             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, count), Toast.LENGTH_SHORT).show()
             cb?.invoke()
         } else {
@@ -687,6 +691,7 @@ private fun GalleryApp(
             val delPaths = items.map { it.path }.toSet()
             viewModel.markMediaDeleted(delIds, delPaths)
             viewModel.refresh(showLoading = false)
+            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, items.size)
             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, items.size), Toast.LENGTH_SHORT).show()
             cb?.invoke()
         }
@@ -700,6 +705,7 @@ private fun GalleryApp(
             val ids = items.map { it.id }.toSet()
             val paths = items.map { it.path }.toSet()
             viewModel.restoreSystemTrash(ids, paths)
+            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, items.size)
             Toast.makeText(context, "${items.size} item(s) restored", Toast.LENGTH_SHORT).show()
         }
     }
@@ -963,6 +969,8 @@ private fun GalleryApp(
                     label = "language_transition"
                 ) { _ ->
                     GalleryScaffold(
+                        trashFeedback = trashFeedback,
+                        onTrashFeedbackChange = { trashFeedback = it },
                         settings = settings,
                         settingsPreferences = settingsPreferences,
                         images = visibleMedia,
@@ -1034,6 +1042,7 @@ private fun GalleryApp(
                                                     val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                     viewModel.markMediaDeleted(delIds, delPaths)
                                                     viewModel.refresh(showLoading = false)
+                                                    trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                     onConfirmed?.invoke()
                                                     Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                                 } else if (Build.VERSION.SDK_INT >= 30) {
@@ -1057,6 +1066,7 @@ private fun GalleryApp(
                                                             val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                             viewModel.markMediaDeleted(delIds, delPaths)
                                                             viewModel.refresh(showLoading = false)
+                                                            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                             onConfirmed?.invoke()
                                                             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                                         } else {
@@ -1079,6 +1089,7 @@ private fun GalleryApp(
                                                 val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                 viewModel.markMediaDeleted(delIds, delPaths)
                                                 viewModel.refresh(showLoading = false)
+                                                trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                 onConfirmed?.invoke()
                                                 Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                             } else if (Build.VERSION.SDK_INT >= 30) {
@@ -1102,6 +1113,7 @@ private fun GalleryApp(
                                                         val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                         viewModel.markMediaDeleted(delIds, delPaths)
                                                         viewModel.refresh(showLoading = false)
+                                                        trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                         onConfirmed?.invoke()
                                                         Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                                     } else {
@@ -1123,6 +1135,7 @@ private fun GalleryApp(
                                                     val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                     viewModel.markMediaDeleted(delIds, delPaths)
                                                     viewModel.refresh(showLoading = false)
+                                                    trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                     onConfirmed?.invoke()
                                                     Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                                 } else {
@@ -1159,6 +1172,7 @@ private fun GalleryApp(
                                     coroutineScope.launch {
                                         val restored = viewModel.restoreFromTrash(media)
                                         if (restored.isNotEmpty()) {
+                                            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, restored.size)
                                             Toast.makeText(context, "${restored.size} item(s) restored", Toast.LENGTH_SHORT).show()
                                         }
                                     }
@@ -1176,6 +1190,7 @@ private fun GalleryApp(
                                         viewModel.markMediaDeleted(delIds, delPaths)
                                         viewModel.deletePermanently(internalItems)
                                         if (externalItems.isEmpty()) {
+                                            trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, internalItems.size)
                                             onConfirmed?.invoke()
                                         }
                                     }
@@ -1201,6 +1216,7 @@ private fun GalleryApp(
                                                     val delPaths = externalItems.map { it.path }.toSet()
                                                     viewModel.markMediaDeleted(delIds, delPaths)
                                                     viewModel.deletePermanently(externalItems)
+                                                    trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, externalItems.size)
                                                     onConfirmed?.invoke()
                                                 } else {
                                                     pendingPermanentDeleteMedia = null
@@ -1213,6 +1229,7 @@ private fun GalleryApp(
                                             val delPaths = externalItems.map { it.path }.toSet()
                                             viewModel.markMediaDeleted(delIds, delPaths)
                                             viewModel.deletePermanently(externalItems)
+                                            trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, externalItems.size)
                                             onConfirmed?.invoke()
                                         }
                                     }
@@ -1416,21 +1433,30 @@ private fun resolveVolumeName(path: String): String {
 }
 
 private fun canonicalMediaUri(context: android.content.Context, item: MediaImage): Uri {
-    if (item.uri.authority == "media") {
-        return item.uri.buildUpon().clearQuery().build()
-    }
-    val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(item.path) else "external"
-    val baseTable = if (item.isVideo) {
-        if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
-        else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-    } else {
-        if (Build.VERSION.SDK_INT >= 29) MediaStore.Images.Media.getContentUri(vol)
-        else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-    }
     if (item.id > 0) {
+        val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(item.path) else "external"
+        val baseTable = if (item.isVideo) {
+            if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
+            else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            if (Build.VERSION.SDK_INT >= 29) MediaStore.Images.Media.getContentUri(vol)
+            else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
         return ContentUris.withAppendedId(baseTable, item.id)
     }
+    val uriPath = item.uri.path.orEmpty()
+    if (item.uri.authority == "media" && (uriPath.contains("/images/media/") || uriPath.contains("/video/media/"))) {
+        return item.uri.buildUpon().clearQuery().build()
+    }
     if (item.path.isNotBlank()) {
+        val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(item.path) else "external"
+        val baseTable = if (item.isVideo) {
+            if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
+            else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            if (Build.VERSION.SDK_INT >= 29) MediaStore.Images.Media.getContentUri(vol)
+            else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
         runCatching {
             context.contentResolver.query(
                 baseTable,
@@ -1448,13 +1474,10 @@ private fun canonicalMediaUri(context: android.content.Context, item: MediaImage
             }
         }
     }
-    return item.uri
+    return item.uri.buildUpon().clearQuery().build()
 }
 
 private fun canonicalMediaUri(item: MediaImage): Uri {
-    if (item.uri.authority == "media") {
-        return item.uri.buildUpon().clearQuery().build()
-    }
     if (item.id > 0) {
         val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(item.path) else "external"
         val baseTable = if (item.isVideo) {
@@ -1466,7 +1489,11 @@ private fun canonicalMediaUri(item: MediaImage): Uri {
         }
         return ContentUris.withAppendedId(baseTable, item.id)
     }
-    return item.uri
+    val uriPath = item.uri.path.orEmpty()
+    if (item.uri.authority == "media" && (uriPath.contains("/images/media/") || uriPath.contains("/video/media/"))) {
+        return item.uri.buildUpon().clearQuery().build()
+    }
+    return item.uri.buildUpon().clearQuery().build()
 }
 
 private fun getShareUri(context: android.content.Context, item: MediaImage): Uri {
@@ -1797,6 +1824,8 @@ private enum class GalleryTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GalleryScaffold(
+    trashFeedback: TrashFeedback? = null,
+    onTrashFeedbackChange: (TrashFeedback?) -> Unit = {},
     settings: SettingsState,
     settingsPreferences: SettingsPreferences,
     images: List<MediaImage>,
@@ -2121,29 +2150,25 @@ private fun GalleryScaffold(
     var pendingAlbumMedia by remember { mutableStateOf<List<MediaImage>?>(null) }
     var pendingDeleteItems by remember { mutableStateOf<List<MediaImage>?>(null) }
     var pendingPermanentDeleteItems by remember { mutableStateOf<List<MediaImage>?>(null) }
-    var trashFeedback by remember { mutableStateOf<TrashFeedback?>(null) }
     LaunchedEffect(trashFeedback) {
         if (trashFeedback != null) {
             kotlinx.coroutines.delay(1800)
-            trashFeedback = null
+            onTrashFeedbackChange(null)
         }
     }
 
     fun handleTrash(items: List<MediaImage>, onConfirmed: (() -> Unit)? = null) {
         if (items.isNotEmpty()) {
-            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, items.size)
             onTrash(items, onConfirmed)
         }
     }
     fun handleRestore(items: List<MediaImage>) {
         if (items.isNotEmpty()) {
-            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, items.size)
             onRestore(items)
         }
     }
     fun handleDeletePermanently(items: List<MediaImage>, onConfirmed: (() -> Unit)? = null) {
         if (items.isNotEmpty()) {
-            trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, items.size)
             onDeletePermanently(items, onConfirmed)
         }
     }
@@ -3387,7 +3412,7 @@ private fun GalleryScaffold(
                     pendingDeleteItems = null
                     clearSelection()
                     if (isLockedSection) {
-                        trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, toDelete.size)
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, toDelete.size))
                         onDeleteFromLocked(toDelete)
                     } else if (isInTrash || deletePermanently) {
                         handleDeletePermanently(toDelete)
@@ -3463,7 +3488,7 @@ private fun GalleryScaffold(
                     onMoveToAlbum(toProcess, targetDir, album.name) { result ->
                         if (result.successCount > 0) {
                             clearSelection()
-                            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, album.name)
+                            onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, album.name))
                         } else {
                             Toast.makeText(context, R.string.toast_could_not_move_media, Toast.LENGTH_SHORT).show()
                         }
@@ -3472,7 +3497,7 @@ private fun GalleryScaffold(
                     onCopyToAlbum(toProcess, targetDir, album.name) { result ->
                         if (result.successCount > 0) {
                             clearSelection()
-                            trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, album.name)
+                            onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, album.name))
                         } else {
                             Toast.makeText(context, R.string.toast_could_not_copy_media, Toast.LENGTH_SHORT).show()
                         }
@@ -3489,7 +3514,7 @@ private fun GalleryScaffold(
                     onMoveToAlbum(toProcess, targetDir, newName) { result ->
                         if (result.successCount > 0) {
                             clearSelection()
-                            trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, newName)
+                            onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, newName))
                         } else {
                             Toast.makeText(context, R.string.toast_could_not_move_media, Toast.LENGTH_SHORT).show()
                         }
@@ -3498,7 +3523,7 @@ private fun GalleryScaffold(
                     onCopyToAlbum(toProcess, targetDir, newName) { result ->
                         if (result.successCount > 0) {
                             clearSelection()
-                            trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, newName)
+                            onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, newName))
                         } else {
                             Toast.makeText(context, R.string.toast_could_not_copy_media, Toast.LENGTH_SHORT).show()
                         }
@@ -3595,7 +3620,7 @@ private fun GalleryScaffold(
             onMoveToAlbum = { mediaList, dir, name, onDone ->
                 onMoveToAlbum(mediaList, dir, name) { result ->
                     if (result.successCount > 0) {
-                        trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, name)
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, name))
                         externalMedia = null
                     } else {
                         Toast.makeText(context, R.string.toast_could_not_move_media, Toast.LENGTH_SHORT).show()
@@ -3606,7 +3631,7 @@ private fun GalleryScaffold(
             onCopyToAlbum = { mediaList, dir, name, onDone ->
                 onCopyToAlbum(mediaList, dir, name) { result ->
                     if (result.successCount > 0) {
-                        trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, name)
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, name))
                     } else {
                         Toast.makeText(context, R.string.toast_could_not_copy_media, Toast.LENGTH_SHORT).show()
                     }
@@ -3688,7 +3713,7 @@ private fun GalleryScaffold(
                 if (isViewingTrash || deletePermanently) {
                     handleDeletePermanently(listOf(media), onConfirmedAction)
                 } else if (isViewingLocked) {
-                    trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, 1)
+                    onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, 1))
                     onDeleteFromLocked(listOf(media))
                     onConfirmedAction()
                 } else {
@@ -3711,7 +3736,7 @@ private fun GalleryScaffold(
             onMoveToAlbum = { mediaList, dir, name, onDone ->
                 onMoveToAlbum(mediaList, dir, name) { result ->
                     if (result.successCount > 0) {
-                        trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, name)
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.MOVED_TO_ALBUM, result.successCount, name))
                     } else {
                         Toast.makeText(context, R.string.toast_could_not_move_media, Toast.LENGTH_SHORT).show()
                     }
@@ -3721,7 +3746,7 @@ private fun GalleryScaffold(
             onCopyToAlbum = { mediaList, dir, name, onDone ->
                 onCopyToAlbum(mediaList, dir, name) { result ->
                     if (result.successCount > 0) {
-                        trashFeedback = TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, name)
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.COPIED_TO_ALBUM, result.successCount, name))
                     } else {
                         Toast.makeText(context, R.string.toast_could_not_copy_media, Toast.LENGTH_SHORT).show()
                     }
@@ -6079,11 +6104,18 @@ private fun ZoomablePhoto(
     }
 
     val imageRequest: ImageRequest = remember(image.id, image.uri) {
-        ImageRequest.Builder(context)
-            .data(image.uri)
-            .size(coil3.size.Size.ORIGINAL)
-            .precision(Precision.EXACT)
-            .build()
+        val reqBuilder = ImageRequest.Builder(context).data(image.uri)
+        if (image.isSvg) {
+            val metrics = context.resources.displayMetrics
+            val maxScreen = maxOf(metrics.widthPixels, metrics.heightPixels, 2560)
+            val targetDim = maxOf(maxScreen, 2880).coerceAtMost(3840)
+            reqBuilder.size(targetDim, targetDim)
+                .precision(Precision.INEXACT)
+        } else {
+            reqBuilder.size(coil3.size.Size.ORIGINAL)
+                .precision(Precision.EXACT)
+        }
+        reqBuilder.build()
     }
     val painter = rememberAsyncImagePainter(model = imageRequest)
     val painterState by painter.state.collectAsState()
@@ -6174,7 +6206,7 @@ private fun ZoomablePhoto(
                                         containerSize.width.toFloat() / displayedWidth.coerceAtLeast(1f),
                                         containerSize.height.toFloat() / displayedHeight.coerceAtLeast(1f)
                                     ).coerceIn(1f, 8f)
-                                    val originalScale = (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 8f)
+                                    val originalScale = if (image.isSvg) 2.5f else (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 8f)
                                     val candidateStages = listOf(fillScale, originalScale)
                                         .filter { it > 1.15f }
                                         .sorted()
@@ -6775,7 +6807,13 @@ private fun PhotoDetailsSheet(
                         DetailItem(stringResource(R.string.details_captured), formattedVideoCreatedDate)
                     }
                     val mp = if (image.width > 0 && image.height > 0) (image.width * image.height) / 1_000_000.0 else 0.0
-                    val resText = if (mp > 0) "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp) else "${image.width} × ${image.height}"
+                    val resText = if (image.isSvg) {
+                        if (image.width > 0 && image.height > 0) "${image.width} × ${image.height} (Vector)" else "Scalable Vector"
+                    } else if (mp > 0) {
+                        "${image.width} × ${image.height} (%.1f MP)".format(Locale.US, mp)
+                    } else {
+                        "${image.width} × ${image.height}"
+                    }
                     DetailItem(stringResource(R.string.details_resolution), resText)
                     if (!currentExif?.imageUniqueId.isNullOrBlank()) {
                         DetailBlock(stringResource(R.string.details_image_unique_id), currentExif.imageUniqueId!!)

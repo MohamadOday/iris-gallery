@@ -30,7 +30,7 @@ class MediaRepository(private val context: Context) {
             if (input.readInt() != 3) return@use emptyList()
             val list = List(input.readInt().coerceIn(0, 100_000)) {
                 val id = input.readLong(); val isVideo = input.readBoolean()
-                val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                val collection = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 val name = input.readUTF(); val dateTaken = input.readLong()
                 val width = input.readInt(); val height = input.readInt()
                 val path = input.readUTF(); val bucketId = input.readLong(); val bucketName = input.readUTF()
