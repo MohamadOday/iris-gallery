@@ -714,4 +714,10 @@
     <string name="editor_resize_mb">Mo</string>
     <string name="editor_resize_scale">Échelle : %1$d%%</string>
     <string name="editor_resize_result">Résultat : %1$d × %2$d px</string>
+
+    <string name="settings_navigation_tabs_title">Onglets de navigation</string>
+    <string name="settings_navigation_tabs_desc">Choisir les onglets affichés dans la barre de navigation</string>
+    <string name="settings_multi_stage_zoom_title">Zoom à plusieurs étapes</string>
+    <string name="settings_multi_stage_zoom_desc">Le double appui alterne entre ajuster, remplir et taille réelle 1:1</string>
+    <string name="format_svg">SVG</string>
 </resources>

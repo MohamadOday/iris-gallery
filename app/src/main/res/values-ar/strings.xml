@@ -750,4 +750,10 @@
     <string name="dialog_secure_sharing_hint_desc">يمكن لـ Iris إزالة إحداثيات GPS وبيانات الكاميرا تلقائياً قبل مشاركة الوسائط مع التطبيقات لحماية خصوصيتك. تبقى ملفاتك الأصلية دون تعديل.</string>
     <string name="action_dont_show_again">عدم الإظهار مجدداً</string>
     <string name="action_configure">ضبط</string>
+
+    <string name="settings_navigation_tabs_title">تبويبات التنقل</string>
+    <string name="settings_navigation_tabs_desc">اختر التبويبات المعروضة في شريط التنقل السفلي</string>
+    <string name="settings_multi_stage_zoom_title">تكبير متعدد المراحل</string>
+    <string name="settings_multi_stage_zoom_desc">النقر المزدوج يتنقل بين ملاءمة الشاشة، ملء الشاشة، والحجم الأصلي 1:1</string>
+    <string name="format_svg">SVG</string>
 </resources>

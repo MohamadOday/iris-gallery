@@ -83,7 +83,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
-private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng")
+private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg")
 private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts")
 
 data class FolderItem(

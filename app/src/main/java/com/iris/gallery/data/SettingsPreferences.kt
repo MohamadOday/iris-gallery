@@ -155,7 +155,12 @@ data class SettingsState(
     val pinchToRotate: Boolean = true,
     val dismissedRotateTip: Boolean = false,
     val doubleTapZoomLevel: Float = 2.5f,
+    val multiStageZoom: Boolean = false,
     val startupTab: StartupTab = StartupTab.PHOTOS,
+    val showPhotosTab: Boolean = true,
+    val showAlbumsTab: Boolean = true,
+    val showFavoritesTab: Boolean = true,
+    val showLibraryTab: Boolean = true,
     val biometricLockEnabled: Boolean = true,
     val vaultHideFromStorage: Boolean = true,
     val appLockEnabled: Boolean = false,
@@ -224,7 +229,24 @@ class SettingsPreferences(context: Context) {
     fun setPinchToRotate(enabled: Boolean) = update { copy(pinchToRotate = enabled) }
     fun setDismissedRotateTip(dismissed: Boolean) = update { copy(dismissedRotateTip = dismissed) }
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
+    fun setMultiStageZoom(enabled: Boolean) = update { copy(multiStageZoom = enabled) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
+    fun setShowPhotosTab(show: Boolean) = update {
+        if (!show && !showAlbumsTab && !showFavoritesTab && !showLibraryTab) this
+        else copy(showPhotosTab = show)
+    }
+    fun setShowAlbumsTab(show: Boolean) = update {
+        if (!show && !showPhotosTab && !showFavoritesTab && !showLibraryTab) this
+        else copy(showAlbumsTab = show)
+    }
+    fun setShowFavoritesTab(show: Boolean) = update {
+        if (!show && !showPhotosTab && !showAlbumsTab && !showLibraryTab) this
+        else copy(showFavoritesTab = show)
+    }
+    fun setShowLibraryTab(show: Boolean) = update {
+        if (!show && !showPhotosTab && !showAlbumsTab && !showFavoritesTab) this
+        else copy(showLibraryTab = show)
+    }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
     fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
@@ -317,7 +339,12 @@ class SettingsPreferences(context: Context) {
             pinchToRotate = prefs.getBoolean("pinch_to_rotate", true),
             dismissedRotateTip = prefs.getBoolean("dismissed_rotate_tip", false),
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
+            multiStageZoom = prefs.getBoolean("multi_stage_zoom", false),
             startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.PHOTOS),
+            showPhotosTab = prefs.getBoolean("show_photos_tab", true),
+            showAlbumsTab = prefs.getBoolean("show_albums_tab", true),
+            showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
+            showLibraryTab = prefs.getBoolean("show_library_tab", true),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
             vaultHideFromStorage = prefs.getBoolean("vault_hide_from_storage", true),
             appLockEnabled = prefs.getBoolean("app_lock_enabled", false),
@@ -372,7 +399,12 @@ class SettingsPreferences(context: Context) {
             .putBoolean("pinch_to_rotate", state.pinchToRotate)
             .putBoolean("dismissed_rotate_tip", state.dismissedRotateTip)
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
+            .putBoolean("multi_stage_zoom", state.multiStageZoom)
             .putString("startup_tab", state.startupTab.name)
+            .putBoolean("show_photos_tab", state.showPhotosTab)
+            .putBoolean("show_albums_tab", state.showAlbumsTab)
+            .putBoolean("show_favorites_tab", state.showFavoritesTab)
+            .putBoolean("show_library_tab", state.showLibraryTab)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)
             .putBoolean("vault_hide_from_storage", state.vaultHideFromStorage)
             .putBoolean("app_lock_enabled", state.appLockEnabled)

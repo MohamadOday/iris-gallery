@@ -110,6 +110,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.iris.gallery.R
 import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.isSvg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1798,7 +1799,7 @@ private suspend fun loadPreview(context: Context, image: MediaImage): Bitmap? = 
     if (standardBitmap != null) return@withContext standardBitmap
 
     // Fallback using AvifDecoder if standard Android decoders fail (e.g. yuv422p AVIF)
-    runCatching {
+    val avifBitmap = runCatching {
         val bytes = if (isFile) {
             File(image.path).readBytes()
         } else {
@@ -1832,6 +1833,18 @@ private suspend fun loadPreview(context: Context, image: MediaImage): Bitmap? = 
             } else null
         } else null
     }.getOrNull()
+
+    if (avifBitmap != null) avifBitmap
+    else if (image.isSvg) {
+        runCatching {
+            val req = coil3.request.ImageRequest.Builder(context)
+                .data(image.uri)
+                .size(1600, 1600)
+                .build()
+            val res = coil3.SingletonImageLoader.get(context).execute(req)
+            (res.image as? coil3.BitmapImage)?.bitmap
+        }.getOrNull()
+    } else null
 }
 
 private suspend fun saveEditedCopy(
@@ -1854,7 +1867,7 @@ private suspend fun saveEditedCopy(
     format: ExportFormat = ExportFormat.JPEG
 ) = withContext(Dispatchers.IO) {
     val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
-    val rawSource = runCatching {
+    val rawSource: Bitmap = runCatching {
         if (Build.VERSION.SDK_INT >= 28) {
             val source = if (isFile) ImageDecoder.createSource(File(image.path))
             else ImageDecoder.createSource(context.contentResolver, image.uri)
@@ -1887,7 +1900,16 @@ private suspend fun saveEditedCopy(
                 }
             } else null
         } else null
-    }.getOrNull() ?: error("Could not decode image")
+    }.getOrNull() ?: (if (image.isSvg) {
+        runCatching {
+            val req = coil3.request.ImageRequest.Builder(context)
+                .data(image.uri)
+                .size(coil3.size.Size.ORIGINAL)
+                .build()
+            val res = coil3.SingletonImageLoader.get(context).execute(req)
+            (res.image as? coil3.BitmapImage)?.bitmap
+        }.getOrNull()
+    } else null) ?: error("Could not decode image")
 
     val matrix = Matrix()
     if (rotation != 0) matrix.postRotate(rotation.toFloat())

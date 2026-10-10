@@ -164,7 +164,7 @@ class MediaRepository(private val context: Context) {
         }
 
         val mediaExtensions = setOf(
-            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng",
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg",
             "cr2", "nef", "arw", "rw2", "orf", "pef", "raf",
             "mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts", "m4v", "wmv"
         )

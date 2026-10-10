@@ -707,4 +707,10 @@
     <string name="editor_resize_mb">MB</string>
     <string name="editor_resize_scale">比例：%1$d%%</string>
     <string name="editor_resize_result">结果：%1$d × %2$d 像素</string>
+
+    <string name="settings_navigation_tabs_title">导航标签页</string>
+    <string name="settings_navigation_tabs_desc">选择在底部导航栏中显示的标签页</string>
+    <string name="settings_multi_stage_zoom_title">多级缩放</string>
+    <string name="settings_multi_stage_zoom_desc">双击在适应屏幕、填满屏幕和 1:1 原始像素大小之间循环</string>
+    <string name="format_svg">SVG</string>
 </resources>

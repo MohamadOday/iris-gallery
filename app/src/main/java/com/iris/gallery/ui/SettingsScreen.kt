@@ -1043,6 +1043,15 @@ fun SettingsScreen(
                             )
                         }
                     }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_multi_stage_zoom_title),
+                        subtitle = stringResource(R.string.settings_multi_stage_zoom_desc),
+                        checked = settings.multiStageZoom,
+                        onCheckedChange = { preferences.setMultiStageZoom(it) }
+                    )
                 }
             }
         }
@@ -1141,6 +1150,90 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(stringResource(R.string.settings_navigation_tabs_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_navigation_tabs_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.showPhotosTab,
+                                onClick = {
+                                    val next = !settings.showPhotosTab
+                                    preferences.setShowPhotosTab(next)
+                                    if (!next && settings.startupTab == StartupTab.PHOTOS) {
+                                        val fallback = when {
+                                            settings.showAlbumsTab -> StartupTab.ALBUMS
+                                            settings.showFavoritesTab -> StartupTab.FAVORITES
+                                            settings.showLibraryTab -> StartupTab.LIBRARY
+                                            else -> StartupTab.PHOTOS
+                                        }
+                                        preferences.setStartupTab(fallback)
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.tab_photos), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.showAlbumsTab,
+                                onClick = {
+                                    val next = !settings.showAlbumsTab
+                                    preferences.setShowAlbumsTab(next)
+                                    if (!next && settings.startupTab == StartupTab.ALBUMS) {
+                                        val fallback = when {
+                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showFavoritesTab -> StartupTab.FAVORITES
+                                            settings.showLibraryTab -> StartupTab.LIBRARY
+                                            else -> StartupTab.PHOTOS
+                                        }
+                                        preferences.setStartupTab(fallback)
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.tab_albums), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.showFavoritesTab,
+                                onClick = {
+                                    val next = !settings.showFavoritesTab
+                                    preferences.setShowFavoritesTab(next)
+                                    if (!next && settings.startupTab == StartupTab.FAVORITES) {
+                                        val fallback = when {
+                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showAlbumsTab -> StartupTab.ALBUMS
+                                            settings.showLibraryTab -> StartupTab.LIBRARY
+                                            else -> StartupTab.PHOTOS
+                                        }
+                                        preferences.setStartupTab(fallback)
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.tab_favorites), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.showLibraryTab,
+                                onClick = {
+                                    val next = !settings.showLibraryTab
+                                    preferences.setShowLibraryTab(next)
+                                    if (!next && settings.startupTab == StartupTab.LIBRARY) {
+                                        val fallback = when {
+                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showAlbumsTab -> StartupTab.ALBUMS
+                                            settings.showFavoritesTab -> StartupTab.FAVORITES
+                                            else -> StartupTab.PHOTOS
+                                        }
+                                        preferences.setStartupTab(fallback)
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.tab_library), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
                     Text(stringResource(R.string.settings_startup_tab), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     
                     // 2x2 grid for symmetrical, perfect alignment
@@ -1149,12 +1242,14 @@ fun SettingsScreen(
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.PHOTOS,
+                                enabled = settings.showPhotosTab,
                                 onClick = { preferences.setStartupTab(StartupTab.PHOTOS) },
                                 label = { Text(stringResource(R.string.tab_photos), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.ALBUMS,
+                                enabled = settings.showAlbumsTab,
                                 onClick = { preferences.setStartupTab(StartupTab.ALBUMS) },
                                 label = { Text(stringResource(R.string.tab_albums), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
@@ -1163,12 +1258,14 @@ fun SettingsScreen(
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.FAVORITES,
+                                enabled = settings.showFavoritesTab,
                                 onClick = { preferences.setStartupTab(StartupTab.FAVORITES) },
                                 label = { Text(stringResource(R.string.tab_favorites), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.LIBRARY,
+                                enabled = settings.showLibraryTab,
                                 onClick = { preferences.setStartupTab(StartupTab.LIBRARY) },
                                 label = { Text(stringResource(R.string.tab_library), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )

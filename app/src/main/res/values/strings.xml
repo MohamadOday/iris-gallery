@@ -789,4 +789,10 @@
     <string name="dialog_secure_sharing_hint_desc">Iris can strip GPS coordinates and camera metadata before sharing to protect your privacy. Original files remain untouched.</string>
     <string name="action_dont_show_again">Don\'t show again</string>
     <string name="action_configure">Configure</string>
+
+    <string name="settings_navigation_tabs_title">Navigation tabs</string>
+    <string name="settings_navigation_tabs_desc">Choose which tabs appear in the bottom navigation bar</string>
+    <string name="settings_multi_stage_zoom_title">Multi-stage zoom</string>
+    <string name="settings_multi_stage_zoom_desc">Double-tap cycles between Fit, Fill, and 1:1 original pixel size</string>
+    <string name="format_svg">SVG</string>
 </resources>

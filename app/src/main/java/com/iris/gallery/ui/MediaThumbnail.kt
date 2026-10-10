@@ -40,6 +40,7 @@ import com.iris.gallery.data.isGif
 import com.iris.gallery.data.isMotionPhoto
 import com.iris.gallery.data.isPanorama
 import com.iris.gallery.data.isRaw
+import com.iris.gallery.data.isSvg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -179,6 +180,17 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
                     } else null
                 } else null
             }.getOrNull()
+        } else if (image.isSvg) {
+            runCatching {
+                val req = coil3.request.ImageRequest.Builder(context)
+                    .data(image.uri)
+                    .size(targetSizePx, targetSizePx)
+                    .build()
+                val res = kotlinx.coroutines.runBlocking {
+                    coil3.SingletonImageLoader.get(context).execute(req)
+                }
+                (res.image as? coil3.BitmapImage)?.bitmap
+            }.getOrNull()
         } else null
     }
     finalBitmap?.prepareToDraw()
@@ -301,6 +313,7 @@ fun MediaThumbnail(
             val badge = when {
                 image.isRaw -> "RAW"
                 image.isGif -> "GIF"
+                image.isSvg -> "SVG"
                 image.isPanorama -> "PANO"
                 image.isMotionPhoto -> "MOTION"
                 isHdr || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && bitmap?.hasGainmap() == true) -> "HDR"

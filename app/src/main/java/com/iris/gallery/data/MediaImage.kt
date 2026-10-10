@@ -76,6 +76,13 @@ val MediaImage.isPanorama: Boolean
         return isPanoName || isPanoRatio
     }
 
+val MediaImage.isSvg: Boolean
+    get() = !isVideo && (
+        mimeType.equals("image/svg+xml", ignoreCase = true) ||
+        name.endsWith(".svg", ignoreCase = true) ||
+        path.endsWith(".svg", ignoreCase = true)
+    )
+
 data class ExifMetadata(
     val title: String? = null,
     val cameraModel: String? = null,
@@ -1031,6 +1038,40 @@ fun resolveMediaUri(context: Context, uri: Uri): MediaImage {
                 android.graphics.BitmapFactory.decodeStream(stream, null, opts)
                 width = opts.outWidth
                 height = opts.outHeight
+            }
+        }
+        if (width <= 0 || height <= 0) {
+            val isSvgFile = resolvedMime == "image/svg+xml" || name.endsWith(".svg", ignoreCase = true) || physicalPath?.endsWith(".svg", ignoreCase = true) == true
+            if (isSvgFile) {
+                runCatching {
+                    cr.openInputStream(uri)?.use { stream ->
+                        val parser = android.util.Xml.newPullParser()
+                        parser.setInput(stream, "UTF-8")
+                        var eventType = parser.eventType
+                        while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                            if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name.equals("svg", ignoreCase = true)) {
+                                val wAttr = parser.getAttributeValue(null, "width")
+                                val hAttr = parser.getAttributeValue(null, "height")
+                                val vbAttr = parser.getAttributeValue(null, "viewBox")
+                                var w = wAttr?.filter { it.isDigit() || it == '.' }?.toFloatOrNull()?.toInt() ?: 0
+                                var h = hAttr?.filter { it.isDigit() || it == '.' }?.toFloatOrNull()?.toInt() ?: 0
+                                if ((w <= 0 || h <= 0) && !vbAttr.isNullOrBlank()) {
+                                    val parts = vbAttr.trim().split(Regex("""[\s,]+"""))
+                                    if (parts.size == 4) {
+                                        w = parts[2].toFloatOrNull()?.toInt() ?: 0
+                                        h = parts[3].toFloatOrNull()?.toInt() ?: 0
+                                    }
+                                }
+                                if (w > 0 && h > 0) {
+                                    width = w
+                                    height = h
+                                }
+                                break
+                            }
+                            eventType = parser.next()
+                        }
+                    }
+                }
             }
         }
         runCatching {

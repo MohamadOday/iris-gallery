@@ -762,6 +762,7 @@ private fun GalleryApp(
                 dismissedRotateTip = settings.dismissedRotateTip,
                 onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
                 doubleTapZoomLevel = settings.doubleTapZoomLevel,
+                multiStageZoom = settings.multiStageZoom,
                 timelineDateFormat = settings.timelineDateFormat,
                 customTimelineDateFormat = settings.customTimelineDateFormat,
                 smartYearHiding = settings.smartYearHiding,
@@ -1782,6 +1783,17 @@ private fun BoxScope.IrisPullToRefreshIndicator(
     }
 }
 
+private enum class GalleryTab(
+    val destination: Int,
+    val labelRes: Int,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    PHOTOS(0, R.string.tab_photos, Icons.Outlined.PhotoLibrary),
+    ALBUMS(1, R.string.tab_albums, Icons.Outlined.PhotoAlbum),
+    FAVORITES(2, R.string.tab_favorites, Icons.Outlined.FavoriteBorder),
+    LIBRARY(3, R.string.tab_library, Icons.Outlined.Dashboard),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GalleryScaffold(
@@ -1837,12 +1849,37 @@ private fun GalleryScaffold(
     initialOpenLatest: Boolean = false,
 ) {
     val context = LocalContext.current
+    val visibleTabs = remember(settings.showPhotosTab, settings.showAlbumsTab, settings.showFavoritesTab, settings.showLibraryTab) {
+        val list = mutableListOf<GalleryTab>()
+        if (settings.showPhotosTab) list.add(GalleryTab.PHOTOS)
+        if (settings.showAlbumsTab) list.add(GalleryTab.ALBUMS)
+        if (settings.showFavoritesTab) list.add(GalleryTab.FAVORITES)
+        if (settings.showLibraryTab) list.add(GalleryTab.LIBRARY)
+        if (list.isEmpty()) listOf(GalleryTab.PHOTOS) else list
+    }
+    val initialTargetTab = if (initialMemories) {
+        GalleryTab.LIBRARY
+    } else {
+        when (settings.startupTab) {
+            StartupTab.PHOTOS -> GalleryTab.PHOTOS
+            StartupTab.ALBUMS -> GalleryTab.ALBUMS
+            StartupTab.FAVORITES -> GalleryTab.FAVORITES
+            StartupTab.LIBRARY -> GalleryTab.LIBRARY
+        }
+    }
+    val initialPageIndex = visibleTabs.indexOf(initialTargetTab).let { if (it >= 0) it else 0 }
     val tabPagerState = rememberPagerState(
-        initialPage = if (initialMemories) 3 else settings.startupTab.pageIndex,
-        pageCount = { 4 }
+        initialPage = initialPageIndex,
+        pageCount = { visibleTabs.size }
     )
     val tabScope = rememberCoroutineScope()
-    val destination = tabPagerState.targetPage
+    LaunchedEffect(visibleTabs) {
+        if (tabPagerState.currentPage >= visibleTabs.size) {
+            tabPagerState.scrollToPage(visibleTabs.lastIndex.coerceAtLeast(0))
+        }
+    }
+    val currentVisibleTab = visibleTabs.getOrElse(tabPagerState.targetPage.coerceIn(0, visibleTabs.lastIndex)) { visibleTabs.first() }
+    val destination = currentVisibleTab.destination
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var externalMedia by remember { mutableStateOf<MediaImage?>(null) }
     var viewerImages by remember { mutableStateOf<List<MediaImage>?>(null) }
@@ -1923,8 +1960,6 @@ private fun GalleryScaffold(
     val albumsTabLabel = stringResource(R.string.tab_albums)
     val favoritesTabLabel = stringResource(R.string.tab_favorites)
     val libraryTabLabel = stringResource(R.string.tab_library)
-    val labels = listOf(photoTabLabel, albumsTabLabel, favoritesTabLabel, libraryTabLabel)
-    val icons = remember { listOf(Icons.Outlined.PhotoLibrary, Icons.Outlined.PhotoAlbum, Icons.Outlined.FavoriteBorder, Icons.Outlined.Dashboard) }
     val photoCellSize = customCellSize
     val onCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
         customCellSize = newSize
@@ -2126,13 +2161,14 @@ private fun GalleryScaffold(
     val handleTabSelected: (Int) -> Unit = { index ->
         tabScope.launch {
             val current = tabPagerState.currentPage
+            val targetTab = visibleTabs.getOrNull(index)
             if (isFileSearching) {
                 isFileSearching = false
                 fileSearchQuery = ""
             }
             if (current == index) {
-                if (index == 1) selectedAlbumId = null
-                if (index == 3) {
+                if (targetTab == GalleryTab.ALBUMS) selectedAlbumId = null
+                if (targetTab == GalleryTab.LIBRARY) {
                     librarySection = null
                     selectedLockedAlbum = null
                 }
@@ -2540,11 +2576,13 @@ private fun GalleryScaffold(
                         windowInsets = WindowInsets(0, 0, 0, 0),
                         modifier = Modifier.widthIn(max = 560.dp)
                     ) {
-                        labels.forEachIndexed { index, label ->
+                        visibleTabs.forEachIndexed { index, tab ->
+                            val isSelected = currentVisibleTab == tab
+                            val label = stringResource(tab.labelRes)
                             NavigationBarItem(
-                                selected = destination == index,
+                                selected = isSelected,
                                 onClick = { handleTabSelected(index) },
-                                icon = { AnimatedNavigationIcon(icons[index], destination == index, label) },
+                                icon = { AnimatedNavigationIcon(tab.icon, isSelected, label) },
                                 label = { Text(label) },
                                 alwaysShowLabel = true,
                             )
@@ -2573,12 +2611,13 @@ private fun GalleryScaffold(
         error != null && images.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(error) }
         else -> HorizontalPager(
           state = tabPagerState,
-          beyondViewportPageCount = 3,
+          beyondViewportPageCount = (visibleTabs.size - 1).coerceIn(0, 3),
           userScrollEnabled = selectedIds.isEmpty() && selectedAlbum == null && (destination != 3 || librarySection == null),
           modifier = Modifier.fillMaxSize(),
         ) { page ->
-          when (page) {
-            0 -> {
+          val activeTab = visibleTabs.getOrElse(page) { GalleryTab.PHOTOS }
+          when (activeTab) {
+            GalleryTab.PHOTOS -> {
               val pullRefreshState0 = rememberPullToRefreshState()
               val fastRefreshConnection0 = remember(pullRefreshState0, loading, onRefresh) {
                 object : NestedScrollConnection {
@@ -2634,7 +2673,7 @@ private fun GalleryScaffold(
                 }
               }
             }
-            1 -> {
+            GalleryTab.ALBUMS -> {
               val pullRefreshState1 = rememberPullToRefreshState()
               val fastRefreshConnection1 = remember(pullRefreshState1, loading, onRefresh) {
                 object : NestedScrollConnection {
@@ -2718,9 +2757,8 @@ private fun GalleryScaffold(
                 }
               }
             }
-            else -> {
-                if (page == 3) {
-                    when (librarySection) {
+            GalleryTab.LIBRARY -> {
+                when (librarySection) {
                         "trash" -> if (trashed.isEmpty()) EmptyState(stringResource(R.string.empty_trash), padding) else PhotoGrid(
                             images = trashed,
                             padding = padding,
@@ -3165,8 +3203,8 @@ private fun GalleryScaffold(
                             }
                         }
                     }
-                    return@HorizontalPager
-                }
+            }
+            GalleryTab.FAVORITES -> {
                 if (displayedFavoritePhotos.isEmpty()) {
                     if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
                     else EmptyState(stringResource(R.string.empty_favorites), padding)
@@ -3231,11 +3269,13 @@ private fun GalleryScaffold(
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 modifier = Modifier.height(60.dp)
             ) {
-                labels.forEachIndexed { index, label ->
+                visibleTabs.forEachIndexed { index, tab ->
+                    val isSelected = currentVisibleTab == tab
+                    val label = stringResource(tab.labelRes)
                     NavigationBarItem(
-                        selected = destination == index,
+                        selected = isSelected,
                         onClick = { handleTabSelected(index) },
-                        icon = { AnimatedNavigationIcon(icons[index], destination == index, label) },
+                        icon = { AnimatedNavigationIcon(tab.icon, isSelected, label) },
                         label = null,
                         alwaysShowLabel = false,
                     )
@@ -3508,6 +3548,7 @@ private fun GalleryScaffold(
             dismissedRotateTip = settings.dismissedRotateTip,
             onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
+            multiStageZoom = settings.multiStageZoom,
             timelineDateFormat = settings.timelineDateFormat,
             customTimelineDateFormat = settings.customTimelineDateFormat,
             smartYearHiding = settings.smartYearHiding,
@@ -3601,6 +3642,7 @@ private fun GalleryScaffold(
             dismissedRotateTip = settings.dismissedRotateTip,
             onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
+            multiStageZoom = settings.multiStageZoom,
             timelineDateFormat = settings.timelineDateFormat,
             customTimelineDateFormat = settings.customTimelineDateFormat,
             smartYearHiding = settings.smartYearHiding,
@@ -4605,6 +4647,7 @@ private fun PhotoViewer(
     dismissedRotateTip: Boolean = false,
     onDismissRotateTip: () -> Unit = {},
     doubleTapZoomLevel: Float = 2.5f,
+    multiStageZoom: Boolean = false,
     timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
     customTimelineDateFormat: String = "d. MMMM yyyy",
     smartYearHiding: Boolean = true,
@@ -4922,6 +4965,7 @@ private fun PhotoViewer(
                     image = media,
                     active = page == pagerState.currentPage,
                     doubleTapZoomLevel = doubleTapZoomLevel,
+                    multiStageZoom = multiStageZoom,
                     pinchToRotate = pinchToRotate,
                     onTap = { controlsVisible = !controlsVisible },
                     onSwipeUp = { showInfo = true },
@@ -5995,6 +6039,7 @@ private fun ZoomablePhoto(
     image: MediaImage,
     active: Boolean = true,
     doubleTapZoomLevel: Float = 2.5f,
+    multiStageZoom: Boolean = false,
     pinchToRotate: Boolean = true,
     onTap: () -> Unit,
     onSwipeUp: () -> Unit = {},
@@ -6054,8 +6099,7 @@ private fun ZoomablePhoto(
         }
     }
 
-    fun clampOffset(candidate: Offset, atScale: Float): Offset {
-        if (atScale <= 1f || containerSize == IntSize.Zero || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
+    fun computeImageMetrics(): Triple<Float, Float, Float> {
         val intrinsic = painter.intrinsicSize
         val hasIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
         val thumbIntrinsic = thumbPainter?.intrinsicSize
@@ -6083,6 +6127,12 @@ private fun ZoomablePhoto(
             displayedHeight = containerSize.height.toFloat()
             displayedWidth = displayedHeight * imageAspect
         }
+        return Triple(displayedWidth, displayedHeight, imgWidth)
+    }
+
+    fun clampOffset(candidate: Offset, atScale: Float): Offset {
+        if (atScale <= 1f || containerSize == IntSize.Zero || candidate.x.isNaN() || candidate.y.isNaN()) return Offset.Zero
+        val (displayedWidth, displayedHeight, _) = computeImageMetrics()
         val maxX = (displayedWidth * atScale - containerSize.width).coerceAtLeast(0f) / 2f
         val maxY = (displayedHeight * atScale - containerSize.height).coerceAtLeast(0f) / 2f
         val clampedX = candidate.x.coerceIn(-maxX, maxX)
@@ -6096,26 +6146,70 @@ private fun ZoomablePhoto(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { containerSize = it }
-                .pointerInput(image.id, doubleTapZoomLevel) {
+                .pointerInput(image.id, doubleTapZoomLevel, multiStageZoom) {
                     detectTapGestures(
                         onTap = { onTap() },
                         onDoubleTap = { tapPos ->
                             coroutineScope.launch {
                                 val currentScale = scaleAnim.value
                                 val currentOffset = offsetAnim.value
-                                if (currentScale > 1.05f || kotlin.math.abs(rotationAnim.value) > 1f) {
-                                    launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
-                                    launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
-                                    launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
-                                    onZoomChanged(false)
+                                if (!multiStageZoom) {
+                                    if (currentScale > 1.05f || kotlin.math.abs(rotationAnim.value) > 1f) {
+                                        launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
+                                        onZoomChanged(false)
+                                    } else {
+                                        val targetScale = doubleTapZoomLevel
+                                        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                        val z = targetScale / currentScale
+                                        val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), targetScale)
+                                        launch { scaleAnim.animateTo(targetScale, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
+                                        onZoomChanged(true)
+                                    }
                                 } else {
-                                    val targetScale = doubleTapZoomLevel
-                                    val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                    val z = targetScale / currentScale
-                                    val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), targetScale)
-                                    launch { scaleAnim.animateTo(targetScale, tween(260, easing = FastOutSlowInEasing)) }
-                                    launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
-                                    onZoomChanged(true)
+                                    val (displayedWidth, displayedHeight, imgWidth) = computeImageMetrics()
+                                    val fillScale = maxOf(
+                                        containerSize.width.toFloat() / displayedWidth.coerceAtLeast(1f),
+                                        containerSize.height.toFloat() / displayedHeight.coerceAtLeast(1f)
+                                    ).coerceIn(1f, 8f)
+                                    val originalScale = (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 8f)
+                                    val candidateStages = listOf(fillScale, originalScale)
+                                        .filter { it > 1.15f }
+                                        .sorted()
+                                    val distinctStages = mutableListOf<Float>()
+                                    for (stage in candidateStages) {
+                                        if (distinctStages.none { kotlin.math.abs(it - stage) < 0.2f }) {
+                                            distinctStages.add(stage)
+                                        }
+                                    }
+                                    if (distinctStages.isEmpty()) {
+                                        distinctStages.add(doubleTapZoomLevel.coerceIn(1.5f, 4f))
+                                    }
+                                    val stages = listOf(1f) + distinctStages
+                                    val nextScale = if (kotlin.math.abs(rotationAnim.value) > 1f) {
+                                        1f
+                                    } else {
+                                        stages.firstOrNull { it > currentScale + 0.15f } ?: 1f
+                                    }
+
+                                    if (nextScale <= 1.05f) {
+                                        launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
+                                        onZoomChanged(false)
+                                    } else {
+                                        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                        val z = nextScale / currentScale
+                                        val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), nextScale)
+                                        launch { scaleAnim.animateTo(nextScale, tween(260, easing = FastOutSlowInEasing)) }
+                                        launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
+                                        if (rotationAnim.value != 0f) {
+                                            launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
+                                        }
+                                        onZoomChanged(true)
+                                    }
                                 }
                             }
                         },

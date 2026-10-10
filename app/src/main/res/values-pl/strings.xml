@@ -794,4 +794,9 @@
     <string name="viewer_secure_sharing_tip_all">Wszystkie metadane usunięte</string>
     <string name="viewer_secure_sharing_tip_off">Wyłączone</string>
 
+    <string name="settings_navigation_tabs_title">Karty nawigacji</string>
+    <string name="settings_navigation_tabs_desc">Wybierz karty widoczne na dolnym pasku nawigacji</string>
+    <string name="settings_multi_stage_zoom_title">Powiększenie wieloetapowe</string>
+    <string name="settings_multi_stage_zoom_desc">Podwójne dotknięcie przełącza między dopasowaniem, wypełnieniem i rozmiarem 1:1</string>
+    <string name="format_svg">SVG</string>
 </resources>
