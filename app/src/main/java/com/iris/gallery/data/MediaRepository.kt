@@ -122,34 +122,6 @@ class MediaRepository(private val context: Context) {
         }
     }
 
-    private fun resolveDateTaken(
-        cursorDateTaken: Long,
-        cursorDateModified: Long,
-        cursorDateAdded: Long,
-        diskLastModified: Long = 0L,
-        existingDateTaken: Long = 0L,
-        existingDateModified: Long = 0L
-    ): Long {
-        val effectiveModified = if (diskLastModified > 0L) diskLastModified else cursorDateModified
-        if (cursorDateTaken <= 0L) {
-            return if (effectiveModified > 0L) effectiveModified else cursorDateAdded
-        }
-        val takenSec = cursorDateTaken / 1000L
-        val addedSec = cursorDateAdded / 1000L
-        val modSec = cursorDateModified / 1000L
-        val existingTakenSec = existingDateTaken / 1000L
-        val existingModSec = existingDateModified / 1000L
-
-        val isSyntheticDateTaken = (takenSec == addedSec && addedSec > 0L) ||
-                (takenSec == modSec && modSec > 0L) ||
-                (existingTakenSec > 0L && existingTakenSec == existingModSec && effectiveModified != existingDateModified)
-
-        if (isSyntheticDateTaken && effectiveModified > 0L) {
-            return effectiveModified
-        }
-        return cursorDateTaken
-    }
-
     suspend fun rescanStorage(): Int = withContext(Dispatchers.IO) {
         verifiedPathsCache.clear()
         inMemoryCache.clear()
@@ -456,22 +428,6 @@ class MediaRepository(private val context: Context) {
                         val itemOrientation = cursor.getInt(orientation)
                         val itemTitle = libraryPreferences.getCustomTitle(mediaId) ?: cursor.getString(title).orEmpty()
 
-                        val existing = inMemoryCache[mediaId]
-                        if (!trashed && existing != null &&
-                            existing.name == displayName &&
-                            existing.path == filePath &&
-                            existing.dateModified == cursorDateModified &&
-                            existing.sizeBytes == itemSize &&
-                            existing.orientation == itemOrientation &&
-                            existing.width == itemWidth &&
-                            existing.height == itemHeight &&
-                            existing.title == itemTitle &&
-                            existing.isVideo == isVid
-                        ) {
-                            add(existing)
-                            continue
-                        }
-
                         var diskModifiedMs = 0L
                         var diskSizeBytes = -1L
                         if (!trashed && filePath.isNotBlank()) {
@@ -522,29 +478,33 @@ class MediaRepository(private val context: Context) {
                             }
                         }
 
+                        val existing = inMemoryCache[mediaId]
+                        if (!trashed && existing != null &&
+                            existing.name == displayName &&
+                            existing.path == filePath &&
+                            existing.dateTaken == cursorDateTaken &&
+                            existing.dateModified == effectiveModified &&
+                            existing.dateAdded == cursorDateAdded &&
+                            existing.sizeBytes == itemSize &&
+                            existing.orientation == itemOrientation &&
+                            existing.width == itemWidth &&
+                            existing.height == itemHeight &&
+                            existing.title == itemTitle &&
+                            existing.isVideo == isVid
+                        ) {
+                            add(existing)
+                            continue
+                        }
+
                         var takenTime = cursorDateTaken
-                        val takenSec = cursorDateTaken / 1000L
-                        val addedSec = cursorDateAdded / 1000L
-                        val modSec = effectiveModified / 1000L
-
-                        val isSyntheticDateTaken = (takenSec == addedSec && addedSec > 0L) ||
-                                (takenSec == modSec && modSec > 0L)
-
-                        if (!isVid && (cursorDateTaken <= 0L || isSyntheticDateTaken)) {
+                        if (!isVid) {
                             val exifTaken = extractExifDateTaken(context, mediaUri, filePath)
-                            if (exifTaken != null && exifTaken > 0L) {
-                                takenTime = exifTaken
-                            }
+                            if (exifTaken != null && exifTaken > 0L) takenTime = exifTaken
                         }
 
-                        if (takenTime <= 0L || (isSyntheticDateTaken && takenTime == cursorDateTaken)) {
-                            takenTime = resolveDateTaken(
-                                cursorDateTaken = cursorDateTaken,
-                                cursorDateModified = effectiveModified,
-                                cursorDateAdded = cursorDateAdded,
-                                diskLastModified = diskModifiedMs
-                            )
-                        }
+                        if (takenTime <= 0L && cursorDateTaken > 0L) takenTime = cursorDateTaken
+                        if (takenTime <= 0L && effectiveModified > 0L) takenTime = effectiveModified
+                        if (takenTime <= 0L && cursorDateAdded > 0L) takenTime = cursorDateAdded
 
                         val itemBucketId = if (trashed) -2L else cursor.getLong(bucketId)
                         val itemBucketName = if (trashed) "Trash" else cursor.getString(bucketName).orEmpty().ifBlank { "Other" }
@@ -576,7 +536,7 @@ class MediaRepository(private val context: Context) {
                 }
             }
         }
-        val sorted = result.distinctBy { it.id }.sortedWith(
+        val sorted = result.distinctBy { it.uri }.sortedWith(
             compareByDescending<MediaImage> { it.dateTaken }
                 .thenByDescending { it.dateModified }
                 .thenByDescending { it.dateAdded }
