@@ -370,7 +370,7 @@ internal fun ZoomablePhoto(
 
                                 if (pinchToRotate && pointersDown >= 2 && !rotationChange.isNaN()) {
                                     accumulatedAngleDelta += rotationChange
-                                    if (!isRotating && kotlin.math.abs(accumulatedAngleDelta) >= 15f) {
+                                    if (!isRotating && kotlin.math.abs(accumulatedAngleDelta) >= 20f) {
                                         isRotating = true
                                         onRotateGestureTriggered()
                                     }
@@ -419,15 +419,9 @@ internal fun ZoomablePhoto(
 
                         // When gesture ends, snap rotation to nearest 90° angle if rotated
                         if (isRotating) {
-                            val normalized = (totalRotation % 360f + 360f) % 360f
-                            val targetAngle = when {
-                                normalized in 45f..135f -> 90f
-                                normalized in 135f..225f -> 180f
-                                normalized in 225f..315f -> 270f
-                                else -> 0f
-                            }
-                            val diff = (targetAngle - normalized)
-                            val snapTarget = totalRotation + diff
+                            val targetAngle = kotlin.math.round(totalRotation / 90f) * 90f
+                            val delta = ((targetAngle - totalRotation + 540f) % 360f) - 180f
+                            val snapTarget = totalRotation + delta
                             coroutineScope.launch {
                                 rotationAnim.animateTo(
                                     targetValue = snapTarget,
