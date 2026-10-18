@@ -772,25 +772,17 @@
     <string name="wallpaper_set_lock_success">Zaktualizowano tapetę ekranu blokady</string>
     <string name="wallpaper_set_both_success">Zaktualizowano tapetę</string>
     <string name="wallpaper_set_error">Nie udało się ustawić tapety</string>
-    
-    <!-- New Videos Section & Search -->
-    <string name="section_videos">Filmy</string>
-    <string name="section_videos_desc">Wszystkie pliki wideo w Twojej bibliotece</string>
-    <string name="empty_videos">Nie znaleziono filmów</string>
-    <string name="filter_videos">Wideo</string>
-    <string name="filter_videos_count">Wideo (%1)</string>
-    <string name="search_videos_placeholder">Szukaj filmów…</string>
-    <string name="action_unfavorite">Usuń z ulubionych</string>
-    
-    <!-- Editor Enhancements -->
-    <string name="editor_straighten">Wyprostuj</string>
-    <string name="editor_reset_zoom">Resetuj powiększenie</string>
-    
-    <!-- Video Gestures -->
-    <string name="settings_video_gesture_controls_title">Sterowanie gestami</string>
-    <string name="settings_video_gesture_controls_desc">Przesuń w górę lub w dół po bokach ekranu, aby dostosować jasność i głośność</string>
-    
-    <!-- Folder Exclusion Dialog -->
+    <!-- Phase 3: Secure Sharing, Recursive Exclusions & Videos Smart View -->
+    <string name="settings_secure_sharing_title">Bezpieczne udostępnianie</string>
+    <string name="settings_secure_sharing_desc">Usuń wrażliwe metadane EXIF lub lokalizację GPS przed udostępnieniem multimediów</string>
+    <string name="settings_secure_sharing_off">Wyłączone</string>
+    <string name="settings_secure_sharing_off_desc">Udostępniaj multimedia z oryginalnymi metadanymi i danymi GPS</string>
+    <string name="settings_secure_sharing_strip_location">Usuń lokalizację</string>
+    <string name="settings_secure_sharing_strip_location_desc">Usuń współrzędne GPS, zachowując pozostałe dane aparatu</string>
+    <string name="settings_secure_sharing_strip_all">Usuń wszystkie metadane</string>
+    <string name="settings_secure_sharing_strip_all_desc">Usuń wszystkie metadane EXIF (lokalizację, aparat, datę, czas)</string>
+    <string name="secure_sharing_preparing">Przygotowywanie bezpiecznego udostępniania…</string>
+
     <string name="action_add_excluded_folder">Dodaj folder</string>
     <string name="dialog_add_excluded_folder_title">Wyklucz folder ze ścieżki</string>
     <string name="dialog_add_excluded_folder_message">Wpisz względną ścieżkę folderu lub nazwę katalogu do wykluczenia (np. Music lub Download/Temp).</string>
@@ -806,34 +798,30 @@
     <string name="dialog_choose_album_to_exclude_title">Wybierz album do wykluczenia</string>
     <string name="no_albums_to_exclude">Nie znaleziono żadnych albumów</string>
     
-    <!-- Secure Sharing -->
-    <string name="settings_secure_sharing_title">Bezpieczne udostępnianie</string>
-    <string name="settings_secure_sharing_desc">Usuń wrażliwe metadane EXIF lub lokalizację GPS przed udostępnieniem multimediów</string>
-    <string name="settings_secure_sharing_off">Wyłączone</string>
-    <string name="settings_secure_sharing_off_desc">Udostępniaj multimedia z oryginalnymi metadanymi i danymi GPS</string>
-    <string name="settings_secure_sharing_strip_location">Usuń lokalizację</string>
-    <string name="settings_secure_sharing_strip_location_desc">Usuń współrzędne GPS, zachowując pozostałe dane aparatu</string>
-    <string name="settings_secure_sharing_strip_all">Usuń wszystkie metadane</string>
-    <string name="settings_secure_sharing_strip_all_desc">Usuń wszystkie metadane EXIF (lokalizację, aparat, datę, czas)</string>
-    <string name="secure_sharing_preparing">Przygotowywanie bezpiecznego udostępniania…</string>
-    <string name="dialog_secure_sharing_hint_title">Bezpieczne udostępnianie</string>
-    <string name="dialog_secure_sharing_hint_desc">Iris może automatycznie usunąć lokalizację GPS i metadane EXIF przed udostępnieniem zdjęć lub filmów do innych aplikacji.</string>
-    <string name="action_configure">Skonfiguruj</string>
-    <string name="action_dont_show_again">Nie pokazuj ponownie</string>
-    <string name="viewer_secure_sharing_tip">Bezpieczne udostępnianie: %1</string>
-    <string name="viewer_secure_sharing_tip_location">Lokalizacja usunięta</string>
-    <string name="viewer_secure_sharing_tip_all">Wszystkie metadane usunięte</string>
-    <string name="viewer_secure_sharing_tip_off">Wyłączone</string>
+    <string name="section_videos">Filmy</string>
+    <string name="section_videos_desc">Wszystkie pliki wideo w Twojej bibliotece</string>
+    <string name="empty_videos">Nie znaleziono filmów</string>
+    <string name="filter_videos">Wideo</string>
+    <string name="filter_videos_count">Wideo (%1)</string>
     
+    <string name="viewer_secure_sharing_tip">Bezpieczne udostępnianie: usuwaj lokalizację lub metadane przed udostępnieniem. Dotknij, aby skonfigurować.</string>
+    <string name="viewer_secure_sharing_tip_location">Bezpieczne udostępnianie: lokalizacja GPS jest usuwana przed udostępnieniem. Dotknij, aby skonfigurować.</string>
+    <string name="viewer_secure_sharing_tip_all">Bezpieczne udostępnianie: wszystkie metadane są usuwane przed udostępnieniem. Dotknij, aby skonfigurować.</string>
+    <string name="viewer_secure_sharing_tip_off">Bezpieczne udostępnianie: pliki są udostępniane z pełnymi metadanymi. Dotknij, aby skonfigurować.</string>
+    <string name="dialog_secure_sharing_hint_title">Bezpieczne udostępnianie</string>
+    <string name="dialog_secure_sharing_hint_desc">Aby chronić Twoją prywatność, Iris może usuwać współrzędne GPS i metadane aparatu przed udostępnieniem plików. Oryginalne pliki pozostaną nienaruszone.</string>
+    <string name="action_dont_show_again">Nie pokazuj ponownie</string>
+    <string name="action_configure">Konfiguruj</string>
+
     <string name="settings_navigation_tabs_title">Karty nawigacji</string>
-    <string name="settings_navigation_tabs_desc">Wybierz karty widoczne na dolnym pasku nawigacji</string>
-    <string name="settings_multi_stage_zoom_title">Powiększenie wieloetapowe</string>
-    <string name="settings_multi_stage_zoom_desc">Podwójne dotknięcie przełącza między dopasowaniem, wypełnieniem i rozmiarem 1:1</string>
+    <string name="settings_navigation_tabs_desc">Wybierz, które karty mają pojawiać się na dolnym pasku nawigacji</string>
+    <string name="settings_multi_stage_zoom_title">Wielostopniowe powiększenie</string>
+    <string name="settings_multi_stage_zoom_desc">Dwukrotne dotknięcie przełącza między dopasowaniem, wypełnieniem a oryginalnym rozmiarem pikseli 1:1</string>
     <string name="format_svg">SVG</string>
     <string name="action_overwrite">Nadpisz</string>
-    <string name="settings_editor_overwrite_title">Nadpisuj oryginalne zdjęcie</string>
-    <string name="settings_editor_overwrite_desc">Zastępuj oryginalny plik podczas zapisywania edycji zamiast tworzyć kopię</string>
-    <string name="dialog_overwrite_original_title">Nadpisać oryginał?</string>
-    <string name="dialog_overwrite_original_desc">Zastąpić oryginalny plik zamiast zapisywać kopię?</string>
-    <string name="toast_edited_overwritten">Oryginalne zdjęcie zostało zastąpione</string>
+    <string name="settings_editor_overwrite_title">Nadpisz oryginalny obraz</string>
+    <string name="settings_editor_overwrite_desc">Zastąp oryginalny plik podczas zapisywania zmian zamiast tworzyć kopię</string>
+    <string name="dialog_overwrite_original_title">Nadpisz oryginał</string>
+    <string name="dialog_overwrite_original_desc">Zastąp oryginalny plik zamiast zapisywać kopię</string>
+    <string name="toast_edited_overwritten">Oryginalny obraz został zastąpiony</string>
 </resources>
