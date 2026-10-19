@@ -290,11 +290,11 @@ internal fun ZoomablePhoto(
                                         }
                                         if (stageIndex == 0) fillIndex = index else originalIndex = index
                                     }
-                                    if (stages.size == 1 && stages[0] == 1f && defaultTapZoomLevel != 1f) {
+                                    val referenceScale = currentScale.coerceAtLeast(0.001f)
+                                    if (stages.size == 1 && stages[0] == 1f && referenceScale <= 1.05f && defaultTapZoomLevel != 1f) {
                                         stages.add(defaultTapZoomLevel)
                                         originalIndex = stages.lastIndex
                                     }
-                                    val referenceScale = currentScale.coerceAtLeast(0.001f)
                                     val nextStage = when {
                                         referenceScale < stages[0] * 0.95f -> 0
                                         fillIndex > 0 && referenceScale < stages[fillIndex] * 0.95f -> fillIndex
