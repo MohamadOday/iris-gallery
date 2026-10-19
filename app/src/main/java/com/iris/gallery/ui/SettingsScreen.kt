@@ -1301,8 +1301,6 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Text(stringResource(R.string.settings_app_lock_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
                     SettingsSwitchRow(
                         title = stringResource(R.string.settings_app_lock_title),
                         subtitle = stringResource(R.string.settings_app_lock_desc),
