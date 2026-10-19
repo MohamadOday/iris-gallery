@@ -251,7 +251,17 @@ internal fun ZoomablePhoto(
                                         launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
                                         onZoomChanged(false)
                                     } else {
-                                        val targetScale = doubleTapZoomLevel
+                                        val targetScale = if (doubleTapZoomLevel == -1.0f) {
+                                            val (displayedWidth, _, imgWidth) = computeImageMetrics()
+                                            if (image.isSvg) {
+                                                2.5f
+                                            } else {
+                                                val originalScale = (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(0.1f, 50f)
+                                                if (currentScale >= originalScale) 2.5f else originalScale
+                                            }
+                                        } else {
+                                            doubleTapZoomLevel
+                                        }
                                         val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
                                         val z = targetScale / currentScale
                                         val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), targetScale)
@@ -264,46 +274,46 @@ internal fun ZoomablePhoto(
                                     val fillScale = maxOf(
                                         containerSize.width.toFloat() / displayedWidth.coerceAtLeast(1f),
                                         containerSize.height.toFloat() / displayedHeight.coerceAtLeast(1f)
-                                    ).coerceIn(1f, 8f)
-                                    val originalScale = if (image.isSvg) 2.5f else (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 8f)
-                                    val candidateStages = listOf(fillScale, originalScale, doubleTapZoomLevel)
-                                        .filter { it > 1.15f }
-                                        .sorted()
-                                    val distinctStages = mutableListOf<Float>()
-                                    for (stage in candidateStages) {
-                                        if (distinctStages.none { kotlin.math.abs(it - stage) < 0.2f }) {
-                                            distinctStages.add(stage)
+                                    ).coerceIn(1f, 50f)
+                                    val defaultTapZoomLevel = if (doubleTapZoomLevel == -1.0f) 2.5f else doubleTapZoomLevel
+                                    val originalScale = if (image.isSvg) defaultTapZoomLevel else (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(0.1f, 50f)
+                                    val stages = mutableListOf(1f)
+                                    var fillIndex = 0
+                                    var originalIndex = 0
+                                    for ((stageIndex, stage) in listOf(fillScale, originalScale).withIndex()) {
+                                        val existingIndex = stages.indexOf(stage)
+                                        val index = if (existingIndex >= 0) {
+                                            existingIndex
+                                        } else {
+                                            stages.add(stage)
+                                            stages.lastIndex
                                         }
+                                        if (stageIndex == 0) fillIndex = index else originalIndex = index
                                     }
-                                    if (distinctStages.isEmpty()) {
-                                        distinctStages.add(doubleTapZoomLevel.coerceIn(1.5f, 4f))
+                                    if (stages.size == 1 && stages[0] == 1f && defaultTapZoomLevel != 1f) {
+                                        stages.add(defaultTapZoomLevel)
+                                        originalIndex = stages.lastIndex
                                     }
-                                    val stages = listOf(1f) + distinctStages
-                                    // Use the animation's target value (the end of the current
-                                    // tween) instead of the live value so that rapid double-taps
-                                    // while a previous zoom is still animating advance to the
-                                    // next stage instead of stalling on the same one.
-                                    val referenceScale = scaleAnim.targetValue
-                                    val nextScale = if (kotlin.math.abs(rotationAnim.value) > 1f) {
-                                        1f
-                                    } else {
-                                        stages.firstOrNull { it > referenceScale + 0.15f } ?: 1f
+                                    val referenceScale = currentScale.coerceAtLeast(0.001f)
+                                    val nextStage = when {
+                                        referenceScale < stages[0] * 0.95f -> 0
+                                        fillIndex > 0 && referenceScale < stages[fillIndex] * 0.95f -> fillIndex
+                                        originalIndex > 0 && referenceScale < stages[originalIndex] * 0.95f -> originalIndex
+                                        else -> 0
                                     }
-
-                                    if (nextScale <= 1.05f) {
+                                    val nextScale = stages[nextStage]
+                                    if (nextStage == 0) {
                                         launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
                                         launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
                                         launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
                                         onZoomChanged(false)
                                     } else {
                                         val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                        val z = nextScale / currentScale
+                                        val z = nextScale / currentScale.coerceAtLeast(0.001f)
                                         val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), nextScale)
                                         launch { scaleAnim.animateTo(nextScale, tween(260, easing = FastOutSlowInEasing)) }
                                         launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
-                                        if (rotationAnim.value != 0f) {
-                                            launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
-                                        }
+                                        launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
                                         onZoomChanged(true)
                                     }
                                 }
@@ -352,7 +362,7 @@ internal fun ZoomablePhoto(
                                 val validZoom = if (!zoomChange.isNaN() && zoomChange > 0f) zoomChange else 1f
                                 val validPan = if (panChange.isSpecified && !panChange.x.isNaN() && !panChange.y.isNaN()) panChange else Offset.Zero
 
-                                val calculatedScale = (scale * validZoom).coerceIn(1f, 7f)
+                                val calculatedScale = (scale * validZoom).coerceIn(1f, 50f)
                                 val nextScale = if (calculatedScale < 1.02f) 1f else calculatedScale
                                 val nextOffset = if (pointersDown >= 2 && containerSize != IntSize.Zero) {
                                     val centroid = event.calculateCentroid(useCurrent = true)

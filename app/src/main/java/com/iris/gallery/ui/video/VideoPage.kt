@@ -340,7 +340,7 @@ fun VideoPage(
                                             offset = Offset.Zero
                                             onZoomChanged(false)
                                         } else {
-                                            val targetZoom = doubleTapZoomLevel
+                                            val targetZoom = if(doubleTapZoomLevel == -1.0f) 2.5f else doubleTapZoomLevel
                                             scale = targetZoom
                                             offset = clamp(Offset.Zero, targetZoom)
                                             onZoomChanged(true)

@@ -455,8 +455,6 @@ fun SettingsScreen(
                         density = density
                     )
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
                     val colorScheme = MaterialTheme.colorScheme
                     val materialYouTiles = listOf(
                         Triple(
@@ -820,7 +818,7 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable { showDateFormatDialog = true }
-                                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                                    .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -1035,29 +1033,43 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                    Text(stringResource(R.string.settings_zoom_scale_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(2.0f, 2.5f, 3.0f, 4.0f).forEach { zoom ->
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.doubleTapZoomLevel == zoom,
-                                onClick = { preferences.setDoubleTapZoomLevel(zoom) },
-                                label = { Text("${zoom}×", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
                     SettingsSwitchRow(
                         title = stringResource(R.string.settings_multi_stage_zoom_title),
                         subtitle = stringResource(R.string.settings_multi_stage_zoom_desc),
                         checked = settings.multiStageZoom,
                         onCheckedChange = { preferences.setMultiStageZoom(it) }
                     )
+
+                    AnimatedVisibility(
+                        visible = !settings.multiStageZoom,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            
+                            Text(stringResource(R.string.settings_zoom_scale_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(2.0f, 2.5f, 3.0f, 4.0f).forEach { zoom ->
+                                    FilterChip(
+                                        modifier = Modifier.weight(1f),
+                                        selected = settings.doubleTapZoomLevel == zoom,
+                                        onClick = { preferences.setDoubleTapZoomLevel(zoom) },
+                                        label = { Text("${zoom}×", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                    )
+                                }
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.doubleTapZoomLevel == -1.0f,
+                                    onClick = { preferences.setDoubleTapZoomLevel(-1.0f) },
+                                    label = { Text("1:1", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
