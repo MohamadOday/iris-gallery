@@ -791,7 +791,6 @@
     <string name="dialog_add_excluded_folder_hint">e.g. Music or /Music</string>
     <string name="dialog_excluded_folder_suggestions">Suggestions:</string>
     <string name="dialog_folder_already_excluded">Folder is already excluded</string>
-    <string name="settings_photos_only_desc">Show only photos and hide videos from the main timeline</string>
     <string name="exclude_option_choose_album">Choose album to exclude</string>
     <string name="exclude_option_choose_album_desc">Pick an album to hide its folder from the gallery</string>
     <string name="exclude_option_system_picker">Use system folder picker</string>

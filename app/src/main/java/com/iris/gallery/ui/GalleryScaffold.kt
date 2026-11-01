@@ -448,7 +448,7 @@ internal fun GalleryScaffold(
     var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
     var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
     var compactGrid by remember { mutableStateOf(settings.photoGridSize < 95f) }
-    var mediaFilter by remember { mutableStateOf(0) }
+    val mediaFilter = settings.mediaFilter
 
     LaunchedEffect(settings.photoGridSize) {
         customCellSize = settings.photoGridSize.dp
@@ -726,11 +726,14 @@ internal fun GalleryScaffold(
                             placeholder = {
                                 Text(
                                     text = stringResource(
-                                        when (mediaFilter) {
-                                            0 -> R.string.search_files_placeholder
-                                            1 -> R.string.search_photos_placeholder
-                                            2 -> R.string.search_videos_placeholder
-                                            else -> R.string.search_files_placeholder
+                                        if (destination == 0) {
+                                            when (mediaFilter) {
+                                                1 -> R.string.search_photos_placeholder
+                                                2 -> R.string.search_videos_placeholder
+                                                else -> R.string.search_files_placeholder
+                                            }
+                                        } else {
+                                            R.string.search_files_placeholder
                                         }
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -1001,7 +1004,7 @@ internal fun GalleryScaffold(
                                         } else null,
                                         onClick = {
                                             mediaFilterMenuExpanded = false
-                                            mediaFilter = index
+                                            settingsPreferences.setMediaFilter(index)
                                         }
                                     )
                                 }
@@ -1270,7 +1273,15 @@ internal fun GalleryScaffold(
                     onInvalidMedia = onInvalidMedia,
                   ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedItems; selectedId = it.id } }
                   else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
-                  else EmptyState(stringResource(R.string.empty_photos), padding)
+                  else EmptyState(
+                      stringResource(
+                          when (mediaFilter) {
+                              2 -> R.string.empty_videos
+                              else -> R.string.empty_photos
+                          }
+                      ),
+                      padding
+                  )
                 }
               }
             }

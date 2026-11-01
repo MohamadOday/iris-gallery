@@ -789,8 +789,6 @@
     <string name="dialog_add_excluded_folder_hint">ex.: Music ou /Music</string>
     <string name="dialog_excluded_folder_suggestions">Sugestões:</string>
     <string name="dialog_folder_already_excluded">A pasta já está excluída</string>
-    <string name="settings_photos_only_title">Somente fotos</string>
-    <string name="settings_photos_only_desc">Mostrar apenas fotos e ocultar vídeos da linha do tempo principal</string>
     <string name="exclude_option_choose_album">Escolher álbum para excluir</string>
     <string name="exclude_option_choose_album_desc">Selecione um álbum para ocultar sua pasta da galeria</string>
     <string name="exclude_option_system_picker">Usar seletor de pastas do sistema</string>
@@ -798,8 +796,6 @@
     <string name="dialog_choose_album_to_exclude_title">Selecionar álbum para excluir</string>
     <string name="no_albums_to_exclude">Nenhum álbum encontrado</string>
 
-    <string name="section_videos">Vídeos</string>
-    <string name="section_videos_desc">%1$d vídeos na sua biblioteca</string>
     <string name="filter_videos">Vídeos</string>
     <string name="empty_videos">Nenhum vídeo encontrado</string>
     <string name="filter_videos_count">%1$d vídeos</string>

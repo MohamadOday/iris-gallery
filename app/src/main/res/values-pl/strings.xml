@@ -789,8 +789,6 @@
     <string name="dialog_add_excluded_folder_hint">Ścieżka folderu</string>
     <string name="dialog_excluded_folder_suggestions">Częste sugestie:</string>
     <string name="dialog_folder_already_excluded">Ten folder jest już wykluczony</string>
-    <string name="settings_photos_only_title">Tylko zdjęcia</string>
-    <string name="settings_photos_only_desc">Pokazuj tylko zdjęcia i ukrywaj filmy na głównej osi czasu</string>
     <string name="exclude_option_choose_album">Wybierz album do wykluczenia</string>
     <string name="exclude_option_choose_album_desc">Wybierz album, aby ukryć jego folder w galerii</string>
     <string name="exclude_option_system_picker">Użyj systemowego wyboru folderu</string>

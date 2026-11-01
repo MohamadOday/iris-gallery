@@ -157,6 +157,7 @@ data class SettingsState(
     val doubleTapZoomLevel: Float = 2.5f,
     val multiStageZoom: Boolean = true,
     val startupTab: StartupTab = StartupTab.MEDIA,
+    val mediaFilter: Int = 0,
     val showMediaTab: Boolean = true,
     val showAlbumsTab: Boolean = true,
     val showFavoritesTab: Boolean = true,
@@ -234,6 +235,7 @@ class SettingsPreferences(context: Context) {
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setMultiStageZoom(enabled: Boolean) = update { copy(multiStageZoom = enabled) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
+    fun setMediaFilter(filter: Int) = update { copy(mediaFilter = filter) }
     fun setShowMediaTab(show: Boolean) = update {
         if (!show && !showAlbumsTab && !showFavoritesTab && !showLibraryTab) this
         else copy(showMediaTab = show)
@@ -428,7 +430,8 @@ class SettingsPreferences(context: Context) {
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             multiStageZoom = prefs.getBoolean("multi_stage_zoom_v2", true),
             startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.MEDIA),
-            showMediaTab = prefs.getBoolean("show_media_tab", true),
+            mediaFilter = prefs.getInt("media_filter", if (prefs.getBoolean("photos_only", false)) 1 else 0),
+            showMediaTab = prefs.getBoolean("show_media_tab", prefs.getBoolean("show_photos_tab", true)),
             showAlbumsTab = prefs.getBoolean("show_albums_tab", true),
             showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
             showLibraryTab = prefs.getBoolean("show_library_tab", true),
@@ -491,6 +494,7 @@ class SettingsPreferences(context: Context) {
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putBoolean("multi_stage_zoom_v2", state.multiStageZoom)
             .putString("startup_tab", state.startupTab.name)
+            .putInt("media_filter", state.mediaFilter)
             .putBoolean("show_media_tab", state.showMediaTab)
             .putBoolean("show_albums_tab", state.showAlbumsTab)
             .putBoolean("show_favorites_tab", state.showFavoritesTab)
