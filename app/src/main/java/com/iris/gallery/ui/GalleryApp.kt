@@ -194,7 +194,7 @@ internal fun GalleryApp(
                 viewModel.markMediaDeleted(delIds, delPaths)
                 trashFeedback = TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, pending.size)
             }
-            viewModel.refresh(showLoading = false)
+            viewModel.checkForChanges()
             cb?.invoke()
         }
     }
@@ -250,7 +250,7 @@ internal fun GalleryApp(
                 lastBackgroundTimestamp = System.currentTimeMillis()
             } else if (event == Lifecycle.Event.ON_RESUME) {
                 if (permitted) {
-                    viewModel.refresh(showLoading = false)
+                    viewModel.checkForChanges()
                 }
                 if (lastBackgroundTimestamp > 0L && System.currentTimeMillis() - lastBackgroundTimestamp > 300_000L) {
                     lockedAuthorized = false
@@ -316,7 +316,7 @@ internal fun GalleryApp(
                 val delPaths = pending.originalMedia.map { it.path }.toSet()
                 viewModel.markMediaDeleted(delIds, delPaths)
             }
-            viewModel.refresh(showLoading = false)
+            viewModel.checkForChanges()
             val count = pending?.vaultedMedia?.size ?: 0
             Toast.makeText(context, context.getString(R.string.toast_items_vaulted, count), Toast.LENGTH_SHORT).show()
         } else {
@@ -342,7 +342,7 @@ internal fun GalleryApp(
                 val delPaths = pending.originalMedia.map { it.path }.toSet()
                 viewModel.markMediaDeleted(delIds, delPaths)
             }
-            viewModel.refresh(showLoading = false)
+            viewModel.checkForChanges()
             val count = pending?.trashedMedia?.size ?: 0
             trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, count)
             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, count), Toast.LENGTH_SHORT).show()
@@ -351,7 +351,7 @@ internal fun GalleryApp(
             pending?.let { moveResult ->
                 coroutineScope.launch {
                     viewModel.rollbackTrashMove(moveResult.trashedMedia)
-                    viewModel.refresh(showLoading = false)
+                    viewModel.checkForChanges()
                 }
             }
         }
@@ -371,7 +371,7 @@ internal fun GalleryApp(
             val delIds = items.map { it.id }.toSet()
             val delPaths = items.map { it.path }.toSet()
             viewModel.markMediaDeleted(delIds, delPaths)
-            viewModel.refresh(showLoading = false)
+            viewModel.checkForChanges()
             trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, items.size)
             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, items.size), Toast.LENGTH_SHORT).show()
             if (internalItems.isNullOrEmpty()) {
@@ -379,7 +379,7 @@ internal fun GalleryApp(
             } else {
                 coroutineScope.launch {
                     viewModel.moveToTrash(internalItems)
-                    viewModel.refresh(showLoading = false)
+                    viewModel.checkForChanges()
                     cb?.invoke()
                 }
             }
@@ -424,7 +424,7 @@ internal fun GalleryApp(
 
     LaunchedEffect(permitted) {
         if (permitted) {
-            viewModel.refresh()
+            viewModel.checkForChanges()
             viewModel.registerObserver()
         }
     }
@@ -528,6 +528,10 @@ internal fun GalleryApp(
                     biometricsEnabled = settings.appLockBiometricsEnabled,
                     onVerifyPin = { pin -> settingsPreferences.verifyPin(pin) },
                     pinLockoutRemainingMs = { settingsPreferences.pinLockoutRemainingMs() },
+                    onResetLock = {
+                        settingsPreferences.removePin()
+                        Toast.makeText(context, R.string.app_lock_reset_success, Toast.LENGTH_LONG).show()
+                    },
                     onUnlocked = {
                         isSessionAppUnlocked = true
                         isAppUnlocked = true
@@ -656,7 +660,7 @@ internal fun GalleryApp(
                                 val delPaths = vaultItems.map { it.path }.toSet()
                                 viewModel.markMediaDeleted(delIds, delPaths)
                                 viewModel.deletePermanentlyFromVault(vaultItems)
-                                viewModel.refresh(showLoading = false)
+                                viewModel.checkForChanges()
                                 Toast.makeText(context, "${vaultItems.size} item(s) permanently deleted", Toast.LENGTH_SHORT).show()
                                 onPartConfirmed()
                             }
@@ -678,7 +682,7 @@ internal fun GalleryApp(
                                 val delPaths = galleryLockedItems.map { it.path }.toSet()
                                 viewModel.markMediaDeleted(delIds, delPaths)
                                 galleryLockedItems.forEach { context.contentResolver.delete(canonicalMediaUri(it), null, null) }
-                                viewModel.refresh(showLoading = false)
+                                viewModel.checkForChanges()
                                 onPartConfirmed()
                             }
                         }
@@ -765,7 +769,7 @@ internal fun GalleryApp(
                                                     val delIds = moveResult.originalMedia.map { it.id }.toSet()
                                                     val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                     viewModel.markMediaDeleted(delIds, delPaths)
-                                                    viewModel.refresh(showLoading = false)
+                                                    viewModel.checkForChanges()
                                                     trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                     onConfirmed?.invoke()
                                                     Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
@@ -789,7 +793,7 @@ internal fun GalleryApp(
                                                             val delIds = moveResult.originalMedia.map { it.id }.toSet()
                                                             val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                             viewModel.markMediaDeleted(delIds, delPaths)
-                                                            viewModel.refresh(showLoading = false)
+                                                            viewModel.checkForChanges()
                                                             trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                             onConfirmed?.invoke()
                                                             Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
@@ -812,7 +816,7 @@ internal fun GalleryApp(
                                                 val delIds = moveResult.originalMedia.map { it.id }.toSet()
                                                 val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                 viewModel.markMediaDeleted(delIds, delPaths)
-                                                viewModel.refresh(showLoading = false)
+                                                viewModel.checkForChanges()
                                                 trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                 onConfirmed?.invoke()
                                                 Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
@@ -836,7 +840,7 @@ internal fun GalleryApp(
                                                         val delIds = moveResult.originalMedia.map { it.id }.toSet()
                                                         val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                         viewModel.markMediaDeleted(delIds, delPaths)
-                                                        viewModel.refresh(showLoading = false)
+                                                        viewModel.checkForChanges()
                                                         trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                         onConfirmed?.invoke()
                                                         Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
@@ -858,7 +862,7 @@ internal fun GalleryApp(
                                                     val delIds = moveResult.originalMedia.map { it.id }.toSet()
                                                     val delPaths = moveResult.originalMedia.map { it.path }.toSet()
                                                     viewModel.markMediaDeleted(delIds, delPaths)
-                                                    viewModel.refresh(showLoading = false)
+                                                    viewModel.checkForChanges()
                                                     trashFeedback = TrashFeedback(TrashFeedbackType.MOVED_TO_TRASH, moveResult.trashedMedia.size)
                                                     onConfirmed?.invoke()
                                                     Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()

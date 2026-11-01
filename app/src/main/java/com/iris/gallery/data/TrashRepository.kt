@@ -109,7 +109,7 @@ class TrashRepository(private val context: Context) {
 
     fun loadTrashItems(): List<MediaImage> = synchronized(indexLock) {
         autoPurgeOldItems()
-        val items = readIndex()
+        val items = readIndex().sortedByDescending { it.dateTrashed }
         val mediaList = items.mapNotNull { item ->
             val file = File(trashDir, item.trashFileName)
             if (file.exists()) {
@@ -493,6 +493,12 @@ class TrashRepository(private val context: Context) {
                 outputStream.use { output ->
                     trashFile.inputStream().use { input -> input.copyTo(output) }
                 }
+                // The MediaStore copy gives the file a fresh mtime. Push it back to
+                // the original one so a later scan cannot move the item to "today".
+                val pendingPath = mediaStorePath(newUri)
+                if (effectiveModMs > 0L && pendingPath.isNotBlank()) {
+                    runCatching { File(pendingPath).setLastModified(effectiveModMs) }
+                }
                 values.clear()
                 values.put(MediaStore.MediaColumns.IS_PENDING, 0)
                 values.put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveModSec)
@@ -502,7 +508,7 @@ class TrashRepository(private val context: Context) {
                     context.contentResolver.delete(newUri, null, null)
                     return null
                 }
-                TrashRestoreTarget(newUri, mediaStorePath(newUri))
+                TrashRestoreTarget(newUri, mediaStorePath(newUri).ifBlank { pendingPath })
             } else {
                 @Suppress("DEPRECATION")
                 val publicDir = if (item.originalPath.isNotBlank()) {

@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import android.os.Bundle
+import android.os.Build
 import android.os.Environment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,6 +17,7 @@ import java.io.File
 class MediaRepository(private val context: Context) {
     private val snapshot = AtomicFile(File(context.filesDir, "media_snapshot.bin"))
     private val libraryPreferences = LibraryPreferences(context)
+    private val generationPrefs = context.getSharedPreferences("media_generation", Context.MODE_PRIVATE)
 
     companion object {
         private const val VERIFIED_PATH_TTL_MS = 60 * 1_000L // 1 minute
@@ -302,7 +304,7 @@ class MediaRepository(private val context: Context) {
         scannedCount
     }
 
-    suspend fun loadImages(trashed: Boolean = false): List<MediaImage> = withContext(Dispatchers.IO) {
+    suspend fun loadImages(trashed: Boolean = false, ids: Collection<Long>? = null): List<MediaImage> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         recentMovedOrDeletedIds.entries.removeIf { now - it.value > TOMBSTONE_TTL_MS }
         recentMovedOrDeletedPaths.entries.removeIf { now - it.value > TOMBSTONE_TTL_MS }
@@ -357,10 +359,16 @@ class MediaRepository(private val context: Context) {
                 } else if (android.os.Build.VERSION.SDK_INT >= 29) {
                     append(" AND ${MediaStore.MediaColumns.IS_PENDING} = 0")
                 }
+                if (!ids.isNullOrEmpty()) {
+                    append(" AND ${MediaStore.MediaColumns._ID} IN (${ids.joinToString(",") { "?" }})")
+                }
             }
             val selectionArgs = buildList {
                 add(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString())
                 add(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())
+                if (!ids.isNullOrEmpty()) {
+                    ids.forEach { add(it.toString()) }
+                }
             }.toTypedArray()
             val order = "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
 
@@ -429,6 +437,8 @@ class MediaRepository(private val context: Context) {
                         val cursorDateTaken = cursor.getLong(taken)
                         val cursorDateModified = cursor.getLong(modified) * 1_000L
                         val cursorDateAdded = cursor.getLong(added) * 1_000L
+                        val newestRowMs = maxOf(cursorDateModified, cursorDateAdded)
+                        val isFreshRow = newestRowMs > 0L && now - newestRowMs < 2 * 60 * 1000L
                         val itemWidth = cursor.getInt(width)
                         val itemHeight = cursor.getInt(height)
                         val itemDuration = cursor.getLong(duration)
@@ -436,9 +446,39 @@ class MediaRepository(private val context: Context) {
                         val itemOrientation = cursor.getInt(orientation)
                         val itemTitle = libraryPreferences.getCustomTitle(mediaId) ?: cursor.getString(title).orEmpty()
 
+                        // Snapshot entries land in the cache, so an unchanged row can
+                        // skip the disk stat and the EXIF read entirely. This is what
+                        // keeps a 13k-item refresh from turning into a multi-minute scan.
+                        val existing = if (!trashed) inMemoryCache[mediaId] else null
+                        if (existing != null &&
+                            existing.name == displayName &&
+                            existing.path == filePath &&
+                            existing.dateModified == cursorDateModified &&
+                            existing.dateAdded == cursorDateAdded &&
+                            existing.sizeBytes == itemSize &&
+                            existing.orientation == itemOrientation &&
+                            existing.width == itemWidth &&
+                            existing.height == itemHeight &&
+                            existing.title == itemTitle &&
+                            existing.isVideo == isVid
+                        ) {
+                            add(existing)
+                            continue
+                        }
+
+                        // Old rows with a real size can skip the per-file stat and the
+                        // EXIF read. MediaStore already has the values, and this keeps
+                        // a cold 13k-item refresh from taking minutes.
+                        val trustCursor = !trashed &&
+                            !isFreshRow &&
+                            filePath.isNotBlank() &&
+                            itemSize > 0L &&
+                            cursorDateModified > 0L &&
+                            now - cursorDateModified > 2L * 24L * 60L * 60L * 1000L
+
                         var diskModifiedMs = 0L
                         var diskSizeBytes = -1L
-                        if (!trashed && filePath.isNotBlank()) {
+                        if (!trashed && filePath.isNotBlank() && !trustCursor) {
                             val file = File(filePath)
                             var exists = file.exists()
                             if (exists) {
@@ -450,27 +490,17 @@ class MediaRepository(private val context: Context) {
                                 }.getOrDefault(false)
                             }
                             if (!exists) {
+                                if (isFreshRow) {
+                                    // MediaStore already has the row but the file is still
+                                    // being written. Keep the row, the next observer tick
+                                    // will pick it up once the camera/download finishes.
+                                    continue
+                                }
                                 inMemoryCache.remove(mediaId)
-                                recentMovedOrDeletedIds[mediaId] = now
-                                recentMovedOrDeletedPaths[filePath] = now
+                                // Let the platform scanner do the pruning. Deleting the
+                                // row from a read path is how freshly captured photos
+                                // were disappearing before the file was written.
                                 android.media.MediaScannerConnection.scanFile(context, arrayOf(filePath), null, null)
-                                runCatching { context.contentResolver.delete(mediaUri, null, null) }
-                                runCatching {
-                                    context.contentResolver.delete(
-                                        MediaStore.Files.getContentUri("external"),
-                                        "${MediaStore.MediaColumns._ID}=?",
-                                        arrayOf(mediaId.toString())
-                                    )
-                                }
-                                if (android.os.Build.VERSION.SDK_INT >= 29 && volName.isNotBlank() && volName != "external") {
-                                    runCatching {
-                                        context.contentResolver.delete(
-                                            MediaStore.Files.getContentUri(volName),
-                                            "${MediaStore.MediaColumns._ID}=?",
-                                            arrayOf(mediaId.toString())
-                                        )
-                                    }
-                                }
                                 continue
                             }
                         }
@@ -486,11 +516,9 @@ class MediaRepository(private val context: Context) {
                             }
                         }
 
-                        val existing = inMemoryCache[mediaId]
                         if (!trashed && existing != null &&
                             existing.name == displayName &&
                             existing.path == filePath &&
-                            existing.dateTaken == cursorDateTaken &&
                             existing.dateModified == effectiveModified &&
                             existing.dateAdded == cursorDateAdded &&
                             existing.sizeBytes == itemSize &&
@@ -505,7 +533,7 @@ class MediaRepository(private val context: Context) {
                         }
 
                         var takenTime = cursorDateTaken
-                        if (!isVid) {
+                        if (!isVid && !trustCursor) {
                             val exifTaken = extractExifDateTaken(context, mediaUri, filePath)
                             if (exifTaken != null && exifTaken > 0L) takenTime = exifTaken
                         }
@@ -557,6 +585,198 @@ class MediaRepository(private val context: Context) {
         }
         sorted
     }
+
+    suspend fun loadImageByUri(uri: Uri): MediaImage? = withContext(Dispatchers.IO) {
+        val segments = uri.pathSegments
+        val isImageCollection = segments.contains("images")
+        val isVideoCollection = segments.contains("video")
+        val projection = buildList {
+            add(MediaStore.MediaColumns._ID)
+            add(MediaStore.MediaColumns.DISPLAY_NAME)
+            add(MediaStore.MediaColumns.DATE_TAKEN)
+            add(MediaStore.MediaColumns.DATE_ADDED)
+            add(MediaStore.MediaColumns.DATE_MODIFIED)
+            add(MediaStore.MediaColumns.SIZE)
+            add(MediaStore.MediaColumns.MIME_TYPE)
+            add(MediaStore.Files.FileColumns.MEDIA_TYPE)
+            add(MediaStore.MediaColumns.TITLE)
+            add(MediaStore.MediaColumns.DATA)
+            add(MediaStore.MediaColumns.WIDTH)
+            add(MediaStore.MediaColumns.HEIGHT)
+            if (Build.VERSION.SDK_INT >= 29) {
+                add(MediaStore.MediaColumns.RELATIVE_PATH)
+                add(MediaStore.MediaColumns.VOLUME_NAME)
+                add(MediaStore.MediaColumns.IS_PENDING)
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                add(MediaStore.MediaColumns.IS_TRASHED)
+            }
+            if (isImageCollection) {
+                add(MediaStore.Images.Media.BUCKET_ID)
+                add(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                add(MediaStore.Images.Media.ORIENTATION)
+            } else if (isVideoCollection) {
+                add(MediaStore.Video.VideoColumns.BUCKET_ID)
+                add(MediaStore.Video.VideoColumns.BUCKET_DISPLAY_NAME)
+                add(MediaStore.Video.VideoColumns.DURATION)
+                if (Build.VERSION.SDK_INT >= 29) {
+                    add(MediaStore.MediaColumns.ORIENTATION)
+                }
+            }
+        }.toTypedArray()
+
+        runCatching {
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+
+                fun index(column: String) = cursor.getColumnIndex(column)
+                fun text(column: String): String = index(column).takeIf { it >= 0 }?.let { cursor.getString(it) }.orEmpty()
+                fun number(column: String): Long = index(column).takeIf { it >= 0 }?.let { cursor.getLong(it) } ?: 0L
+                fun integer(column: String): Int = index(column).takeIf { it >= 0 }?.let { cursor.getInt(it) } ?: 0
+
+                val id = number(MediaStore.MediaColumns._ID)
+                if (id <= 0L) return@use null
+                if (Build.VERSION.SDK_INT >= 29 && integer(MediaStore.MediaColumns.IS_PENDING) != 0) return@use null
+                if (Build.VERSION.SDK_INT >= 30 && integer(MediaStore.MediaColumns.IS_TRASHED) != 0) return@use null
+                val displayName = text(MediaStore.MediaColumns.DISPLAY_NAME)
+                    .ifBlank { text(MediaStore.MediaColumns.TITLE) }
+                val rawData = text(MediaStore.MediaColumns.DATA)
+                val relativePath = text(MediaStore.MediaColumns.RELATIVE_PATH)
+                val volumeName = text(MediaStore.MediaColumns.VOLUME_NAME)
+                val filePath = when {
+                    rawData.isNotBlank() -> rawData
+                    relativePath.isNotBlank() && volumeName.isNotBlank() && volumeName != "external_primary" ->
+                        "/storage/$volumeName/$relativePath$displayName"
+                    relativePath.isNotBlank() -> "/storage/emulated/0/$relativePath$displayName"
+                    else -> ""
+                }
+                val mimeType = text(MediaStore.MediaColumns.MIME_TYPE)
+                val mediaType = integer(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ||
+                    mimeType.startsWith("video/", ignoreCase = true)
+                val dateModified = number(MediaStore.MediaColumns.DATE_MODIFIED) * 1_000L
+                val dateAdded = number(MediaStore.MediaColumns.DATE_ADDED) * 1_000L
+                var dateTaken = number(MediaStore.Images.Media.DATE_TAKEN)
+                if (!isVideo && dateTaken <= 0L && filePath.isNotBlank()) {
+                    extractExifDateTaken(context, uri, filePath)?.let { if (it > 0L) dateTaken = it }
+                }
+                if (dateTaken <= 0L) dateTaken = dateModified
+                if (dateTaken <= 0L) dateTaken = dateAdded
+
+                val bucketName = text(MediaStore.Images.Media.BUCKET_DISPLAY_NAME).ifBlank {
+                    File(filePath).parentFile?.name.orEmpty().ifBlank { "Other" }
+                }
+                val bucketId = number(MediaStore.Images.Media.BUCKET_ID).takeIf { it != 0L }
+                    ?: (filePath.hashCode().toLong() and 0xFFFFFFFFL)
+                val title = text(MediaStore.MediaColumns.TITLE).ifBlank { displayName }
+
+                MediaImage(
+                    id = id,
+                    uri = uri,
+                    name = displayName,
+                    dateTaken = dateTaken,
+                    width = integer(MediaStore.Images.Media.WIDTH),
+                    height = integer(MediaStore.Images.Media.HEIGHT),
+                    path = filePath,
+                    bucketId = bucketId,
+                    bucketName = bucketName,
+                    isVideo = isVideo,
+                    durationMs = number(MediaStore.Video.VideoColumns.DURATION),
+                    mimeType = mimeType,
+                    sizeBytes = number(MediaStore.MediaColumns.SIZE),
+                    orientation = integer(MediaStore.Images.Media.ORIENTATION),
+                    title = title,
+                    dateModified = dateModified,
+                    dateAdded = dateAdded,
+                ).also { inMemoryCache[it.id] = it }
+            }
+        }.getOrNull()
+    }
+
+    suspend fun getGenerationByVolume(): Map<String, Long>? = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < 30) return@withContext null
+        runCatching {
+            MediaStore.getExternalVolumeNames(context).mapNotNull { volume ->
+                runCatching { MediaStore.getGeneration(context, volume) }
+                    .getOrNull()
+                    ?.let { volume to it }
+            }.toMap()
+        }.getOrNull()
+    }
+
+    suspend fun getChangedUrisSince(since: Map<String, Long>): List<Uri> = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < 30) return@withContext emptyList()
+        val changed = LinkedHashSet<Uri>()
+        for ((volume, generation) in since) {
+            for (base in listOf(
+                MediaStore.Images.Media.getContentUri(volume),
+                MediaStore.Video.Media.getContentUri(volume)
+            )) {
+                runCatching {
+                    context.contentResolver.query(
+                        base,
+                        arrayOf(MediaStore.MediaColumns._ID),
+                        "${MediaStore.MediaColumns.GENERATION_MODIFIED} > ?",
+                        arrayOf(generation.toString()),
+                        null
+                    )?.use { cursor ->
+                        while (cursor.moveToNext()) {
+                            changed.add(ContentUris.withAppendedId(base, cursor.getLong(0)))
+                        }
+                    }
+                }
+            }
+        }
+        changed.toList()
+    }
+
+    suspend fun checkObsoleteContentIds(knownIds: Collection<Long>): Set<Long> = withContext(Dispatchers.IO) {
+        if (knownIds.isEmpty()) return@withContext emptySet()
+        val found = HashSet<Long>()
+        val bases = if (Build.VERSION.SDK_INT >= 29) {
+            MediaStore.getExternalVolumeNames(context).flatMap { volume ->
+                listOf(
+                    MediaStore.Images.Media.getContentUri(volume),
+                    MediaStore.Video.Media.getContentUri(volume)
+                )
+            }
+        } else {
+            listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        }
+        for (base in bases) {
+            runCatching {
+                context.contentResolver.query(base, arrayOf(MediaStore.MediaColumns._ID), null, null, null)?.use { cursor ->
+                    while (cursor.moveToNext()) found.add(cursor.getLong(0))
+                }
+            }
+        }
+        knownIds.toSet() - found
+    }
+
+    fun loadGenerationByVolume(): Map<String, Long>? {
+        val raw = generationPrefs.getString("generations", null) ?: return null
+        return runCatching {
+            raw.split('|').mapNotNull { entry ->
+                val parts = entry.split(':')
+                val value = parts.getOrNull(1)?.toLongOrNull() ?: return@mapNotNull null
+                parts[0] to value
+            }.toMap()
+        }.getOrNull()
+    }
+
+    fun saveGenerationByVolume(generations: Map<String, Long>) {
+        generationPrefs.edit()
+            .putString("generations", generations.entries.joinToString("|") { "${it.key}:${it.value}" })
+            .apply()
+    }
+
+    fun isSnapshotComplete(): Boolean = generationPrefs.getBoolean("snapshot_complete", false)
+
+    fun setSnapshotComplete(complete: Boolean) {
+        generationPrefs.edit().putBoolean("snapshot_complete", complete).apply()
+    }
+
+    fun persistSnapshot(media: List<MediaImage>) = saveSnapshot(media)
 
     suspend fun renameMedia(item: MediaImage, newName: String): MediaImage? = withContext(Dispatchers.IO) {
         val trimmedName = newName.trim()

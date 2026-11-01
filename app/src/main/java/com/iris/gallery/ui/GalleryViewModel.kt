@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import com.iris.gallery.data.SettingsPreferences
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import com.iris.gallery.data.DuplicateDetector
 import com.iris.gallery.data.DuplicateGroup
 import com.iris.gallery.data.ExifEditRequest
@@ -76,7 +77,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         viewModelScope.launch {
-            settingsPreferences.state.map { it.useSystemTrash }.distinctUntilChanged().collect {
+            settingsPreferences.state.map { it.useSystemTrash }.distinctUntilChanged().drop(1).collect {
                 refresh(showLoading = false)
             }
         }
@@ -201,6 +202,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private var contentObserver: ContentObserver? = null
     private var liveReloadJob: Job? = null
+    private var lastGenerationByVolume: Map<String, Long>? = null
+    private var hasCheckedObsolete = false
+    private val pendingChangedUris = mutableSetOf<Uri>()
 
     fun registerObserver() {
         if (contentObserver != null) return
@@ -208,16 +212,47 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean, uri: Uri?) {
                     super.onChange(selfChange, uri)
+                    if (uri != null) {
+                        synchronized(pendingChangedUris) { pendingChangedUris.add(uri) }
+                    }
                     liveReloadJob?.cancel()
                     liveReloadJob = viewModelScope.launch {
-                        delay(350)
-                        refresh(showLoading = false)
+                        delay(250)
+                        val batch = synchronized(pendingChangedUris) {
+                            pendingChangedUris.toSet().also { pendingChangedUris.clear() }
+                        }
+                        val itemUris = batch.filter { it.lastPathSegment?.toLongOrNull() != null }
+                        if (batch.isNotEmpty() && itemUris.size == batch.size && itemUris.size <= 200) {
+                            applyIncrementalMediaChanges(itemUris)
+                        } else {
+                            checkForChanges()
+                        }
                     }
                 }
             }
             val resolver = getApplication<Application>().contentResolver
-            resolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
-            resolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer)
+            val volumes = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                runCatching { MediaStore.getExternalVolumeNames(getApplication()) }
+                    .getOrNull()
+                    ?.filter { it.isNotBlank() }
+                    ?.toMutableSet()
+                    ?: mutableSetOf(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                mutableSetOf(MediaStore.VOLUME_EXTERNAL)
+            }
+            volumes.add(MediaStore.VOLUME_EXTERNAL)
+            for (volume in volumes) {
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    resolver.registerContentObserver(MediaStore.Images.Media.getContentUri(volume), true, observer)
+                    resolver.registerContentObserver(MediaStore.Video.Media.getContentUri(volume), true, observer)
+                } else {
+                    resolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
+                    resolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer)
+                }
+                // The files table carries the per-volume row notifications on newer
+                // Android versions, so watch it too.
+                resolver.registerContentObserver(MediaStore.Files.getContentUri(volume), true, observer)
+            }
             contentObserver = observer
         }
     }
@@ -313,6 +348,124 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         com.iris.gallery.ui.ThumbnailCache.remove(image.id)
     }
 
+    private fun mergeChangedMedia(idSet: Set<Long>, changed: List<MediaImage>) {
+        var merged: List<MediaImage> = emptyList()
+        _uiState.update { state ->
+            merged = (state.images.filterNot { it.id in idSet } + changed)
+                .distinctBy { it.id }
+                .sortedWith(
+                    compareByDescending<MediaImage> { it.dateTaken }
+                        .thenByDescending { it.dateModified }
+                        .thenByDescending { it.dateAdded }
+                        .thenByDescending { it.id }
+                )
+            state.copy(images = merged)
+        }
+        if (merged.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) { repository.persistSnapshot(merged) }
+        }
+    }
+
+    private fun isOnKnownStoragePath(path: String): Boolean {
+        if (path.isBlank()) return false
+        if (path.startsWith("/storage/")) return true
+        return path.startsWith(getApplication<Application>().filesDir.absolutePath)
+    }
+
+    private suspend fun refreshTrashOnly() {
+        val trashList = withContext(Dispatchers.IO) {
+            (vaultRepository.loadVaultItems() + trashRepository.loadTrashItems()).distinctBy { it.id }
+        }
+        _uiState.update { it.copy(trashed = trashList) }
+    }
+
+    private suspend fun applyIncrementalMediaChanges(uris: List<Uri>) {
+        if (uris.size > 200) {
+            refresh(showLoading = false)
+            return
+        }
+        val ids = uris.mapNotNull { it.lastPathSegment?.toLongOrNull() }.toSet()
+        val loaded = mutableListOf<MediaImage>()
+        val pending = mutableListOf<Uri>()
+        for (uri in uris) {
+            val item = runCatching { repository.loadImageByUri(uri) }.getOrNull()
+            if (item == null) {
+                // Could be pending, still being written, or deleted. Retry it,
+                // a deleted row simply keeps returning null and is ignored.
+                pending.add(uri)
+                continue
+            }
+            val ready = item.path.isNotBlank() &&
+                isOnKnownStoragePath(item.path) &&
+                java.io.File(item.path).exists()
+            if (ready) loaded.add(item) else pending.add(uri)
+        }
+        mergeChangedMedia(ids, loaded)
+        if (loaded.size < ids.size) refreshTrashOnly()
+        if (pending.isNotEmpty()) retryPendingUris(pending)
+    }
+
+    private fun retryPendingUris(uris: List<Uri>) {
+        viewModelScope.launch {
+            val pending = uris.toMutableList()
+            var delayMs = 1000L
+            repeat(10) {
+                delay(delayMs)
+                delayMs = (delayMs * 2).coerceAtMost(8000L)
+                val loaded = mutableListOf<MediaImage>()
+                val stillPending = mutableListOf<Uri>()
+                for (uri in pending) {
+                    val item = runCatching { repository.loadImageByUri(uri) }.getOrNull()
+                    val ready = item != null &&
+                        item.path.isNotBlank() &&
+                        isOnKnownStoragePath(item.path) &&
+                        java.io.File(item.path).exists()
+                    if (ready) loaded.add(item!!) else stillPending.add(uri)
+                }
+                if (loaded.isNotEmpty()) {
+                    mergeChangedMedia(loaded.mapTo(HashSet()) { it.id }, loaded)
+                }
+                pending.clear()
+                pending.addAll(stillPending)
+                if (pending.isEmpty()) return@launch
+            }
+        }
+    }
+
+    fun checkForChanges() {
+        viewModelScope.launch {
+            if (refreshJob?.isActive == true) return@launch
+            if (_uiState.value.images.isEmpty()) {
+                refresh(showLoading = false)
+                return@launch
+            }
+            val previous = lastGenerationByVolume ?: repository.loadGenerationByVolume()
+            val current = runCatching { repository.getGenerationByVolume() }.getOrNull()
+            if (previous != null && current != null && repository.isSnapshotComplete()) {
+                val changed = runCatching { repository.getChangedUrisSince(previous) }.getOrDefault(emptyList())
+                lastGenerationByVolume = current
+                repository.saveGenerationByVolume(current)
+
+                if (!hasCheckedObsolete) {
+                    val knownIds = _uiState.value.images.mapTo(HashSet()) { it.id }
+                    val obsolete = runCatching { repository.checkObsoleteContentIds(knownIds) }.getOrDefault(emptySet())
+                    hasCheckedObsolete = true
+                    if (obsolete.isNotEmpty()) {
+                        _uiState.update { state -> state.copy(images = state.images.filterNot { it.id in obsolete }) }
+                    }
+                }
+
+                if (changed.isNotEmpty()) {
+                    applyIncrementalMediaChanges(changed)
+                } else {
+                    refreshTrashOnly()
+                }
+            } else {
+                refresh(showLoading = false)
+            }
+        }
+    }
+
     private var refreshJob: Job? = null
 
     fun refresh(showLoading: Boolean = true, forceClearCache: Boolean = false) {
@@ -325,7 +478,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
         refreshJob = viewModelScope.launch {
             try {
-                kotlinx.coroutines.withTimeout(20_000) {
+                kotlinx.coroutines.withTimeout(120_000) {
                     // Index loads touch storage and take the repo index lock, so keep them off the main thread.
                     val internalTrash = withContext(Dispatchers.IO) {
                         vaultRepository.loadVaultItems()
@@ -340,10 +493,15 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         }
                     } else emptyList()
                     val trashList = (internalTrash + systemTrash).distinctBy { it.id }
-                    if (showLoading) {
-                        _uiState.update { it.copy(loading = true, trashed = trashList, error = null) }
+                    _uiState.update {
+                        it.copy(
+                            loading = if (showLoading) true else it.loading,
+                            trashed = trashList,
+                            error = null
+                        )
                     }
                     try {
+                        repository.setSnapshotComplete(false)
                         val loaded = repository.loadImages()
                         val loadedPaths = loaded.mapTo(HashSet(loaded.size)) { it.path }
                         val loadedIds = loaded.mapTo(HashSet(loaded.size)) { it.id }
@@ -365,6 +523,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             loaded
                         }
                         _uiState.update { it.copy(images = combined, loading = false, trashed = trashList, error = null) }
+                        repository.setSnapshotComplete(true)
+                        val generations = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
+                        if (generations != null) {
+                            lastGenerationByVolume = generations
+                            repository.saveGenerationByVolume(generations)
+                        }
                         if (_duplicateState.value.hasScanned) _duplicateState.value = DuplicateScanState()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e

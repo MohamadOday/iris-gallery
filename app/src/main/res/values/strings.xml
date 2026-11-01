@@ -503,6 +503,11 @@
     <string name="app_lock_biometric_negative">Use PIN</string>
     <string name="app_lock_auth_cancelled">Authentication cancelled</string>
     <string name="app_lock_biometrics_unavailable">Biometrics unavailable</string>
+    <string name="app_lock_forgot_pin">Forgot PIN?</string>
+    <string name="app_lock_reset_title">Reset Iris lock</string>
+    <string name="app_lock_reset_subtitle">Confirm your phone screen lock to reset the Gallery PIN</string>
+    <string name="app_lock_reset_unavailable">No phone screen lock is set up, so the Gallery PIN cannot be reset this way.</string>
+    <string name="app_lock_reset_success">Gallery PIN reset. App lock is now off.</string>
     <string name="pin_keypad_use_pin">Use PIN</string>
     <string name="pin_setup_create_title">Create Gallery PIN</string>
     <string name="pin_setup_create_subtitle">Enter a 4 to 6 digit PIN</string>
@@ -693,6 +698,9 @@
     <string name="toast_folder_excluded">Folder excluded from gallery</string>
     <string name="toast_folder_unexcluded">Folder restored to gallery</string>
     <string name="toast_share_failed">Could not prepare media for sharing</string>
+    <string name="action_copy_image">Copy image</string>
+    <string name="toast_image_copied">Image copied to clipboard</string>
+    <string name="toast_copy_image_failed">Could not copy image</string>
     <string name="no_excluded_folders">No excluded folders</string>
     <string name="filter_all_albums">All</string>
     <string name="filter_camera_system">Camera &amp; System</string>

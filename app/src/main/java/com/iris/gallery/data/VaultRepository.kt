@@ -91,7 +91,12 @@ class VaultRepository(private val context: Context) {
     }
 
     fun loadVaultItems(): List<MediaImage> = synchronized(indexLock) {
-        val items = readIndex()
+        val items = readIndexStrict()
+        if (items == null) {
+            // The index exists but cannot be parsed right now. Keep the last known
+            // list instead of flashing the vault as empty while recovery runs.
+            return@synchronized _vaultMedia.value
+        }
         val mediaList = items.mapNotNull { item ->
             val file = File(vaultDir, item.vaultFileName)
             if (file.exists()) {

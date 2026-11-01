@@ -447,12 +447,10 @@ internal fun GalleryScaffold(
     }
     var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
     var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
-    var compactGrid by remember { mutableStateOf(settings.photoGridSize < 95f) }
     val mediaFilter = settings.mediaFilter
 
     LaunchedEffect(settings.photoGridSize) {
         customCellSize = settings.photoGridSize.dp
-        compactGrid = settings.photoGridSize < 95f
     }
     LaunchedEffect(settings.albumGridSize) {
         customAlbumCellSize = settings.albumGridSize.dp
@@ -482,7 +480,6 @@ internal fun GalleryScaffold(
     val photoCellSize = customCellSize
     val onCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
         customCellSize = newSize
-        compactGrid = newSize < 95.dp
         settingsPreferences.setPhotoGridSize(newSize.value)
     }
     val onAlbumCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
@@ -937,19 +934,6 @@ internal fun GalleryScaffold(
                                 Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
-                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "memories" || librarySection == "formats" || librarySection == "editor"))
-                        if (canToggleGrid) {
-                            IconButton(onClick = {
-                                compactGrid = !compactGrid
-                                customCellSize = if (compactGrid) 80.dp else 112.dp
-                                settingsPreferences.setPhotoGridSize(customCellSize.value)
-                            }) {
-                                Icon(
-                                    if (compactGrid) Icons.Outlined.GridView else Icons.Outlined.Dashboard,
-                                    if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid)
-                                )
-                            }
-                        }
                         if (destination == 0) {
                             var mediaFilterMenuExpanded by remember { mutableStateOf(false) }
                             IconButton(onClick = { mediaFilterMenuExpanded = true }) {
@@ -1209,6 +1193,16 @@ internal fun GalleryScaffold(
       } else {
           scaffoldPadding
       }
+      // The pager starts under the transparent top bar. Pull-to-refresh lives at
+      // the top of the content, so move it down by the top bar inset and drop the
+      // duplicate top inset from the grids inside it.
+      val topBarInset = padding.calculateTopPadding()
+      val gridPadding = PaddingValues(
+          start = padding.calculateStartPadding(layoutDirection),
+          top = 0.dp,
+          end = padding.calculateEndPadding(layoutDirection),
+          bottom = padding.calculateBottomPadding()
+      )
       when {
         loading && images.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         error != null && images.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(error) }
@@ -1222,18 +1216,6 @@ internal fun GalleryScaffold(
           when (activeTab) {
             GalleryTab.MEDIA -> {
               val pullRefreshState0 = rememberPullToRefreshState()
-              val fastRefreshConnection0 = remember(pullRefreshState0, loading, onRefresh) {
-                object : NestedScrollConnection {
-                  override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (available.y > 400f && pullRefreshState0.distanceFraction in 0.01f..0.999f && !loading) {
-                      pullRefreshState0.animateToThreshold()
-                      onRefresh()
-                      return Velocity(0f, available.y)
-                    }
-                    return Velocity.Zero
-                  }
-                }
-              }
               LaunchedEffect(loading) {
                 if (!loading) {
                   pullRefreshState0.animateToHidden()
@@ -1243,7 +1225,7 @@ internal fun GalleryScaffold(
                 state = pullRefreshState0,
                 isRefreshing = loading,
                 onRefresh = onRefresh,
-                modifier = Modifier.fillMaxSize().nestedScroll(fastRefreshConnection0),
+                modifier = Modifier.fillMaxSize().padding(top = topBarInset),
                 indicator = {
                   IrisPullToRefreshIndicator(
                     state = pullRefreshState0,
@@ -1253,7 +1235,7 @@ internal fun GalleryScaffold(
               ) {
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                   if (displayedItems.isNotEmpty()) PhotoGrid(
-                    displayedItems, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                    displayedItems, gridPadding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1272,7 +1254,7 @@ internal fun GalleryScaffold(
                     onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                     onInvalidMedia = onInvalidMedia,
                   ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedItems; selectedId = it.id } }
-                  else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
+                  else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), gridPadding)
                   else EmptyState(
                       stringResource(
                           when (mediaFilter) {
@@ -1280,25 +1262,13 @@ internal fun GalleryScaffold(
                               else -> R.string.empty_photos
                           }
                       ),
-                      padding
+                      gridPadding
                   )
                 }
               }
             }
             GalleryTab.ALBUMS -> {
               val pullRefreshState1 = rememberPullToRefreshState()
-              val fastRefreshConnection1 = remember(pullRefreshState1, loading, onRefresh) {
-                object : NestedScrollConnection {
-                  override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (available.y > 400f && pullRefreshState1.distanceFraction in 0.01f..0.999f && !loading) {
-                      pullRefreshState1.animateToThreshold()
-                      onRefresh()
-                      return Velocity(0f, available.y)
-                    }
-                    return Velocity.Zero
-                  }
-                }
-              }
               LaunchedEffect(loading) {
                 if (!loading) {
                   pullRefreshState1.animateToHidden()
@@ -1308,7 +1278,7 @@ internal fun GalleryScaffold(
                 state = pullRefreshState1,
                 isRefreshing = loading,
                 onRefresh = onRefresh,
-                modifier = Modifier.fillMaxSize().nestedScroll(fastRefreshConnection1),
+                modifier = Modifier.fillMaxSize().padding(top = topBarInset),
                 indicator = {
                   IrisPullToRefreshIndicator(
                     state = pullRefreshState1,
@@ -1319,7 +1289,7 @@ internal fun GalleryScaffold(
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                   if (selectedAlbum != null) {
                     if (displayedAlbumPhotos.isNotEmpty()) PhotoGrid(
-                      displayedAlbumPhotos, padding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                      displayedAlbumPhotos, gridPadding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
                       showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                       timelineDateFormat = settings.timelineDateFormat,
                       customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1337,11 +1307,11 @@ internal fun GalleryScaffold(
                       onSetSelection = if (onPick == null) ::setSelection else null,
                       onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                     ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedAlbumPhotos; selectedId = it.id } }
-                    else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
-                    else EmptyState(stringResource(R.string.empty_photos), padding)
+                    else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), gridPadding)
+                    else EmptyState(stringResource(R.string.empty_photos), gridPadding)
                   } else AlbumsGrid(
                     images = images,
-                    padding = padding,
+                    padding = gridPadding,
                     state = albumGridState,
                     cellSize = customAlbumCellSize,
                     onCellSizeChange = onAlbumCellSizeChange,

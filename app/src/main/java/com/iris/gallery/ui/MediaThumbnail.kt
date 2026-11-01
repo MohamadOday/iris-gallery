@@ -160,14 +160,21 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
                 }
             }
         } else if (Build.VERSION.SDK_INT >= 29) {
-            context.contentResolver.loadThumbnail(image.uri, size, null)
+            // The system thumbnail cache is fine for dense grids, but it often
+            // hands back a 320px image. For one to four columns decode the file
+            // at the requested size instead, otherwise the grid looks soft.
+            if (targetSizePx >= 384) null
+            else context.contentResolver.loadThumbnail(image.uri, size, null)
         } else {
-            @Suppress("DEPRECATION")
-            if (image.isVideo) {
+            if (targetSizePx >= 384) {
+                null
+            } else if (image.isVideo) {
+                @Suppress("DEPRECATION")
                 MediaStore.Video.Thumbnails.getThumbnail(
                     context.contentResolver, image.id, MediaStore.Video.Thumbnails.MINI_KIND, null,
                 )
             } else {
+                @Suppress("DEPRECATION")
                 MediaStore.Images.Thumbnails.getThumbnail(
                     context.contentResolver, image.id, MediaStore.Images.Thumbnails.MINI_KIND, null,
                 )

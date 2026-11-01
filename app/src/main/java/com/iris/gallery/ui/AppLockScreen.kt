@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.os.CancellationSignal
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -52,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -144,6 +147,7 @@ fun AppLockScreen(
     biometricsEnabled: Boolean = true,
     onVerifyPin: (String) -> Boolean,
     pinLockoutRemainingMs: () -> Long = { 0L },
+    onResetLock: (() -> Unit)? = null,
     onUnlocked: () -> Unit
 ) {
     val context = LocalContext.current
@@ -163,6 +167,34 @@ fun AppLockScreen(
             delay(160) // Visual celebration with green dots pop
             onUnlocked()
         }
+    }
+
+    val deviceCredentialLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onResetLock?.invoke()
+            performUnlock()
+        } else {
+            errorMessage = context.getString(R.string.app_lock_auth_cancelled)
+        }
+    }
+
+    fun triggerDeviceCredential() {
+        if (isUnlockedSuccess) return
+        val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
+        val intent = runCatching {
+            keyguard?.createConfirmDeviceCredentialIntent(
+                context.getString(R.string.app_lock_reset_title),
+                context.getString(R.string.app_lock_reset_subtitle)
+            )
+        }.getOrNull()
+        if (intent == null) {
+            errorMessage = context.getString(R.string.app_lock_reset_unavailable)
+            return
+        }
+        runCatching { deviceCredentialLauncher.launch(intent) }
+            .onFailure { errorMessage = context.getString(R.string.app_lock_reset_unavailable) }
     }
 
     fun triggerBiometrics() {
@@ -331,6 +363,15 @@ fun AppLockScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                if (onResetLock != null) {
+                    TextButton(onClick = ::triggerDeviceCredential) {
+                        Text(
+                            text = stringResource(R.string.app_lock_forgot_pin),
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }

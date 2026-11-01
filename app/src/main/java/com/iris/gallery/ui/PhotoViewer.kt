@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.Intent
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.provider.MediaStore
@@ -624,7 +625,7 @@ internal fun PhotoViewer(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { if (it.height > 0) viewerHeightPx = it.height.toFloat() },
-        color = Color(0xFF080808).copy(alpha = bgAlpha)
+        color = Color.Black.copy(alpha = bgAlpha)
     ) {
       Box(Modifier.fillMaxSize()) {
         Box(
@@ -847,6 +848,14 @@ internal fun PhotoViewer(
                             }
                         )
                         if (!current.isVideo) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_copy_image)) },
+                                leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                                onClick = {
+                                    viewerMenuExpanded = false
+                                    copyImageToClipboard(context, current)
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_set_as_wallpaper)) },
                                 leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
@@ -1851,6 +1860,24 @@ internal fun PhotoViewer(
                 }
             }
         )
+    }
+}
+
+private fun copyImageToClipboard(context: android.content.Context, image: MediaImage) {
+    val uri = if (image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)) {
+        getShareUri(context, image)
+    } else {
+        image.uri
+    }
+    runCatching {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(
+            ClipData.newUri(context.contentResolver, context.getString(R.string.action_copy_image), uri)
+        )
+    }.onSuccess {
+        Toast.makeText(context, R.string.toast_image_copied, Toast.LENGTH_SHORT).show()
+    }.onFailure {
+        Toast.makeText(context, R.string.toast_copy_image_failed, Toast.LENGTH_SHORT).show()
     }
 }
 

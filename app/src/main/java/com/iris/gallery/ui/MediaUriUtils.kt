@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.Mp4MetadataStripper
 import com.iris.gallery.data.SecureSharingMode
 import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
@@ -180,6 +181,7 @@ private val ALL_METADATA_TAGS = GPS_METADATA_TAGS + listOf(
     ExifInterface.TAG_OFFSET_TIME_DIGITIZED,
     ExifInterface.TAG_CAMERA_OWNER_NAME,
     ExifInterface.TAG_BODY_SERIAL_NUMBER,
+    ExifInterface.TAG_IMAGE_UNIQUE_ID,
     ExifInterface.TAG_LENS_MAKE,
     ExifInterface.TAG_LENS_MODEL,
     ExifInterface.TAG_LENS_SERIAL_NUMBER,
@@ -227,7 +229,7 @@ internal suspend fun prepareShareUris(
 
     items.mapNotNull { item ->
         if (item.isVideo) {
-            getShareUri(context, item)
+            shareVideo(context, item, mode, cacheDir)
         } else {
             val extension = item.name.substringAfterLast('.', "").ifBlank {
                 when {
@@ -280,5 +282,57 @@ internal suspend fun prepareShareUris(
                 null
             }
         }
+    }
+}
+
+private fun shareVideo(
+    context: android.content.Context,
+    item: MediaImage,
+    mode: SecureSharingMode,
+    cacheDir: File
+): Uri? {
+    val extension = item.name.substringAfterLast('.', "").lowercase().ifBlank {
+        when {
+            item.mimeType.contains("quicktime", ignoreCase = true) -> "mov"
+            item.mimeType.contains("3gpp", ignoreCase = true) -> "3gp"
+            else -> "mp4"
+        }
+    }
+    val isMp4 = item.mimeType.contains("mp4", ignoreCase = true) ||
+        item.mimeType.contains("quicktime", ignoreCase = true) ||
+        extension in setOf("mp4", "m4v", "mov", "3gp", "3g2")
+    if (!isMp4) return getShareUri(context, item)
+
+    val tempFile = runCatching {
+        File.createTempFile("share_${item.id}_", ".$extension", cacheDir)
+    }.getOrNull() ?: return null
+
+    val stripped = runCatching {
+        val source = if (item.path.startsWith(context.filesDir.absolutePath)) {
+            File(item.path).inputStream()
+        } else {
+            context.contentResolver.openInputStream(item.uri)
+        } ?: return@runCatching false
+
+        source.use { input ->
+            tempFile.outputStream().use { output ->
+                Mp4MetadataStripper.strip(
+                    input = input,
+                    output = output,
+                    stripAll = mode == SecureSharingMode.STRIP_ALL
+                )
+            }
+        }
+    }.getOrDefault(false)
+
+    return if (stripped && tempFile.length() > 0) {
+        androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            tempFile
+        )
+    } else {
+        tempFile.delete()
+        null
     }
 }
