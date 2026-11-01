@@ -736,8 +736,6 @@
     <string name="dialog_excluded_folder_suggestions">اقتراحات:</string>
     <string name="dialog_folder_already_excluded">المجلد مستبعد بالفعل</string>
 
-    <string name="section_videos">الفيديوهات</string>
-    <string name="section_videos_desc">%1$d فيديو في مكتبتك</string>
     <string name="filter_videos">الفيديوهات</string>
     <string name="empty_videos">لم يتم العثور على أي فيديوهات</string>
     <string name="filter_videos_count">%1$d فيديو</string>

@@ -798,8 +798,6 @@
     <string name="dialog_choose_album_to_exclude_title">Wybierz album do wykluczenia</string>
     <string name="no_albums_to_exclude">Nie znaleziono żadnych albumów</string>
     
-    <string name="section_videos">Filmy</string>
-    <string name="section_videos_desc">Wszystkie pliki wideo w Twojej bibliotece</string>
     <string name="empty_videos">Nie znaleziono filmów</string>
     <string name="filter_videos">Wideo</string>
     <string name="filter_videos_count">Wideo (%1$d)</string>

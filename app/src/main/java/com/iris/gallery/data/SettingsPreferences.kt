@@ -12,7 +12,7 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_AMBER, ROSE, MONOCHROME }
 enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCLE(18) }
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
-enum class StartupTab(val pageIndex: Int) { PHOTOS(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
+enum class StartupTab(val pageIndex: Int) { MEDIA(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
 enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
 enum class DeleteMode { TRASH, PERMANENT, ALWAYS_ASK }
 
@@ -156,9 +156,8 @@ data class SettingsState(
     val dismissedRotateTip: Boolean = false,
     val doubleTapZoomLevel: Float = 2.5f,
     val multiStageZoom: Boolean = true,
-    val photosOnly: Boolean = false,
-    val startupTab: StartupTab = StartupTab.PHOTOS,
-    val showPhotosTab: Boolean = true,
+    val startupTab: StartupTab = StartupTab.MEDIA,
+    val showMediaTab: Boolean = true,
     val showAlbumsTab: Boolean = true,
     val showFavoritesTab: Boolean = true,
     val showLibraryTab: Boolean = true,
@@ -234,22 +233,21 @@ class SettingsPreferences(context: Context) {
     fun setDismissedRotateTip(dismissed: Boolean) = update { copy(dismissedRotateTip = dismissed) }
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setMultiStageZoom(enabled: Boolean) = update { copy(multiStageZoom = enabled) }
-    fun setPhotosOnly(enabled: Boolean) = update { copy(photosOnly = enabled) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
-    fun setShowPhotosTab(show: Boolean) = update {
+    fun setShowMediaTab(show: Boolean) = update {
         if (!show && !showAlbumsTab && !showFavoritesTab && !showLibraryTab) this
-        else copy(showPhotosTab = show)
+        else copy(showMediaTab = show)
     }
     fun setShowAlbumsTab(show: Boolean) = update {
-        if (!show && !showPhotosTab && !showFavoritesTab && !showLibraryTab) this
+        if (!show && !showMediaTab && !showFavoritesTab && !showLibraryTab) this
         else copy(showAlbumsTab = show)
     }
     fun setShowFavoritesTab(show: Boolean) = update {
-        if (!show && !showPhotosTab && !showAlbumsTab && !showLibraryTab) this
+        if (!show && !showMediaTab && !showAlbumsTab && !showLibraryTab) this
         else copy(showFavoritesTab = show)
     }
     fun setShowLibraryTab(show: Boolean) = update {
-        if (!show && !showPhotosTab && !showAlbumsTab && !showFavoritesTab) this
+        if (!show && !showMediaTab && !showAlbumsTab && !showFavoritesTab) this
         else copy(showLibraryTab = show)
     }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
@@ -429,9 +427,8 @@ class SettingsPreferences(context: Context) {
             dismissedRotateTip = prefs.getBoolean("dismissed_rotate_tip", false),
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             multiStageZoom = prefs.getBoolean("multi_stage_zoom_v2", true),
-            photosOnly = prefs.getBoolean("photos_only", false),
-            startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.PHOTOS),
-            showPhotosTab = prefs.getBoolean("show_photos_tab", true),
+            startupTab = runCatching { StartupTab.valueOf(startupStr.orEmpty()) }.getOrDefault(StartupTab.MEDIA),
+            showMediaTab = prefs.getBoolean("show_media_tab", true),
             showAlbumsTab = prefs.getBoolean("show_albums_tab", true),
             showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
             showLibraryTab = prefs.getBoolean("show_library_tab", true),
@@ -493,9 +490,8 @@ class SettingsPreferences(context: Context) {
             .putBoolean("dismissed_rotate_tip", state.dismissedRotateTip)
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putBoolean("multi_stage_zoom_v2", state.multiStageZoom)
-            .putBoolean("photos_only", state.photosOnly)
             .putString("startup_tab", state.startupTab.name)
-            .putBoolean("show_photos_tab", state.showPhotosTab)
+            .putBoolean("show_media_tab", state.showMediaTab)
             .putBoolean("show_albums_tab", state.showAlbumsTab)
             .putBoolean("show_favorites_tab", state.showFavoritesTab)
             .putBoolean("show_library_tab", state.showLibraryTab)

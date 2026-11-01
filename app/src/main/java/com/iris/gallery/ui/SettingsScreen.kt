@@ -1175,21 +1175,21 @@ fun SettingsScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
                                 modifier = Modifier.weight(1f),
-                                selected = settings.showPhotosTab,
+                                selected = settings.showMediaTab,
                                 onClick = {
-                                    val next = !settings.showPhotosTab
-                                    preferences.setShowPhotosTab(next)
-                                    if (!next && settings.startupTab == StartupTab.PHOTOS) {
+                                    val next = !settings.showMediaTab
+                                    preferences.setShowMediaTab(next)
+                                    if (!next && settings.startupTab == StartupTab.MEDIA) {
                                         val fallback = when {
                                             settings.showAlbumsTab -> StartupTab.ALBUMS
                                             settings.showFavoritesTab -> StartupTab.FAVORITES
                                             settings.showLibraryTab -> StartupTab.LIBRARY
-                                            else -> StartupTab.PHOTOS
+                                            else -> StartupTab.MEDIA
                                         }
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
-                                label = { Text(stringResource(if (settings.photosOnly) R.string.tab_photos else R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(stringResource(R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
@@ -1199,10 +1199,10 @@ fun SettingsScreen(
                                     preferences.setShowAlbumsTab(next)
                                     if (!next && settings.startupTab == StartupTab.ALBUMS) {
                                         val fallback = when {
-                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showMediaTab -> StartupTab.MEDIA
                                             settings.showFavoritesTab -> StartupTab.FAVORITES
                                             settings.showLibraryTab -> StartupTab.LIBRARY
-                                            else -> StartupTab.PHOTOS
+                                            else -> StartupTab.MEDIA
                                         }
                                         preferences.setStartupTab(fallback)
                                     }
@@ -1219,10 +1219,10 @@ fun SettingsScreen(
                                     preferences.setShowFavoritesTab(next)
                                     if (!next && settings.startupTab == StartupTab.FAVORITES) {
                                         val fallback = when {
-                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showMediaTab -> StartupTab.MEDIA
                                             settings.showAlbumsTab -> StartupTab.ALBUMS
                                             settings.showLibraryTab -> StartupTab.LIBRARY
-                                            else -> StartupTab.PHOTOS
+                                            else -> StartupTab.MEDIA
                                         }
                                         preferences.setStartupTab(fallback)
                                     }
@@ -1237,10 +1237,10 @@ fun SettingsScreen(
                                     preferences.setShowLibraryTab(next)
                                     if (!next && settings.startupTab == StartupTab.LIBRARY) {
                                         val fallback = when {
-                                            settings.showPhotosTab -> StartupTab.PHOTOS
+                                            settings.showMediaTab -> StartupTab.MEDIA
                                             settings.showAlbumsTab -> StartupTab.ALBUMS
                                             settings.showFavoritesTab -> StartupTab.FAVORITES
-                                            else -> StartupTab.PHOTOS
+                                            else -> StartupTab.MEDIA
                                         }
                                         preferences.setStartupTab(fallback)
                                     }
@@ -1259,10 +1259,10 @@ fun SettingsScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
                                 modifier = Modifier.weight(1f),
-                                selected = settings.startupTab == StartupTab.PHOTOS,
-                                enabled = settings.showPhotosTab,
-                                onClick = { preferences.setStartupTab(StartupTab.PHOTOS) },
-                                label = { Text(stringResource(if (settings.photosOnly) R.string.tab_photos else R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                selected = settings.startupTab == StartupTab.MEDIA,
+                                enabled = settings.showMediaTab,
+                                onClick = { preferences.setStartupTab(StartupTab.MEDIA) },
+                                label = { Text(stringResource(R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
@@ -1289,15 +1289,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_photos_only_title),
-                        subtitle = stringResource(R.string.settings_photos_only_desc),
-                        checked = settings.photosOnly,
-                        onCheckedChange = { preferences.setPhotosOnly(it) }
-                    )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 

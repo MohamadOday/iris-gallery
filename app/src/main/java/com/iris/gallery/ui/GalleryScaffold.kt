@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -74,10 +75,13 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.PermMedia
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -139,8 +143,10 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Checkbox
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -285,7 +291,7 @@ private enum class GalleryTab(
     val labelRes: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    PHOTOS(0, R.string.tab_photos, Icons.Outlined.PhotoLibrary),
+    MEDIA(0, R.string.tab_media, Icons.Outlined.PermMedia),
     ALBUMS(1, R.string.tab_albums, Icons.Outlined.PhotoAlbum),
     FAVORITES(2, R.string.tab_favorites, Icons.Outlined.FavoriteBorder),
     LIBRARY(3, R.string.tab_library, Icons.Outlined.Dashboard),
@@ -350,19 +356,19 @@ internal fun GalleryScaffold(
     onInvalidMedia: ((MediaImage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val visibleTabs = remember(settings.showPhotosTab, settings.showAlbumsTab, settings.showFavoritesTab, settings.showLibraryTab) {
+    val visibleTabs = remember(settings.showMediaTab, settings.showAlbumsTab, settings.showFavoritesTab, settings.showLibraryTab) {
         val list = mutableListOf<GalleryTab>()
-        if (settings.showPhotosTab) list.add(GalleryTab.PHOTOS)
+        if (settings.showMediaTab) list.add(GalleryTab.MEDIA)
         if (settings.showAlbumsTab) list.add(GalleryTab.ALBUMS)
         if (settings.showFavoritesTab) list.add(GalleryTab.FAVORITES)
         if (settings.showLibraryTab) list.add(GalleryTab.LIBRARY)
-        if (list.isEmpty()) listOf(GalleryTab.PHOTOS) else list
+        if (list.isEmpty()) listOf(GalleryTab.MEDIA) else list
     }
     val initialTargetTab = if (initialMemories) {
         GalleryTab.LIBRARY
     } else {
         when (settings.startupTab) {
-            StartupTab.PHOTOS -> GalleryTab.PHOTOS
+            StartupTab.MEDIA -> GalleryTab.MEDIA
             StartupTab.ALBUMS -> GalleryTab.ALBUMS
             StartupTab.FAVORITES -> GalleryTab.FAVORITES
             StartupTab.LIBRARY -> GalleryTab.LIBRARY
@@ -442,6 +448,7 @@ internal fun GalleryScaffold(
     var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
     var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
     var compactGrid by remember { mutableStateOf(settings.photoGridSize < 95f) }
+    var mediaFilter by remember { mutableStateOf(0) }
 
     LaunchedEffect(settings.photoGridSize) {
         customCellSize = settings.photoGridSize.dp
@@ -456,12 +463,19 @@ internal fun GalleryScaffold(
     var pendingRestoreAlbum by remember { mutableStateOf<MediaAlbum?>(null) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var selectionMenuExpanded by remember { mutableStateOf(false) }
-    val photoGridState = rememberLazyGridState()
+    val photoGridState = androidx.compose.runtime.key(mediaFilter) { rememberLazyGridState() }
     val albumGridState = rememberLazyGridState()
     val albumPhotoGridState = rememberLazyGridState()
     val favoriteGridState = rememberLazyGridState()
     val libraryGridState = rememberLazyGridState()
-    val photoTabLabel = stringResource(if (settings.photosOnly) R.string.tab_photos else R.string.tab_media)
+    val mediaTabLabel = stringResource(
+        when (mediaFilter) {
+            0 -> R.string.tab_media
+            1 -> R.string.tab_photos
+            2 -> R.string.tab_videos
+            else -> R.string.tab_media
+        }
+    )
     val albumsTabLabel = stringResource(R.string.tab_albums)
     val favoritesTabLabel = stringResource(R.string.tab_favorites)
     val libraryTabLabel = stringResource(R.string.tab_library)
@@ -500,7 +514,7 @@ internal fun GalleryScaffold(
     var isFileSearching by remember { mutableStateOf(false) }
 
     LaunchedEffect(destination, librarySection, selectedAlbumId) {
-        val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbumId != null) || (destination == 3 && librarySection == "videos")
+        val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbumId != null)
         if (!canSearch && isFileSearching) {
             isFileSearching = false
             fileSearchQuery = ""
@@ -525,14 +539,23 @@ internal fun GalleryScaffold(
         }
     }
 
-    val displayedPhotos = remember(images, fileSearchQuery, settings.photosOnly) {
-        val base = if (settings.photosOnly) images.filterNot { it.isVideo } else images
-        filterMediaList(base, fileSearchQuery)
-    }
     val displayedFavoritePhotos = remember(favoriteImages, fileSearchQuery) { filterMediaList(favoriteImages, fileSearchQuery) }
+    val displayedMedia = remember(images, fileSearchQuery) { filterMediaList(images, fileSearchQuery) }
+    val displayedPhotos = remember(images, fileSearchQuery) {
+        val allPhotos = images.filterNot { it.isVideo }
+        filterMediaList(allPhotos, fileSearchQuery)
+    }
     val displayedVideos = remember(images, fileSearchQuery) {
         val allVideos = images.filter { it.isVideo }
         filterMediaList(allVideos, fileSearchQuery)
+    }
+    val displayedItems = remember(mediaFilter, displayedMedia, displayedPhotos, displayedVideos) {
+        when (mediaFilter) {
+            0 -> displayedMedia
+            1 -> displayedPhotos
+            2 -> displayedVideos
+            else -> displayedMedia
+        }
     }
     val effectiveAlbumMediaSort = selectedAlbum?.id?.let { albumMediaSortOverrides[it] } ?: albumMediaSort
     val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery, effectiveAlbumMediaSort) {
@@ -551,10 +574,9 @@ internal fun GalleryScaffold(
     val activeMedia = when {
         destination == 3 && librarySection == "trash" -> trashed
         destination == 3 && librarySection == "locked" -> lockedMedia
-        destination == 3 && librarySection == "videos" -> displayedVideos
         destination == 1 && selectedAlbum != null -> displayedAlbumPhotos
         destination == 2 -> displayedFavoritePhotos
-        else -> displayedPhotos
+        else -> displayedItems
     }
     val isLockedActive = destination == 3 && librarySection == "locked"
     DisposableEffect(isLockedActive) {
@@ -690,7 +712,7 @@ internal fun GalleryScaffold(
         Scaffold(
         topBar = {
           if (!(destination == 3 && librarySection == "folder_view")) {
-            val canSearchOnScreen = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && librarySection == "videos")
+            val canSearchOnScreen = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null)
             TopAppBar(
                 title = {
                     if (isFileSearching && canSearchOnScreen) {
@@ -704,8 +726,12 @@ internal fun GalleryScaffold(
                             placeholder = {
                                 Text(
                                     text = stringResource(
-                                        if (destination == 3 && librarySection == "videos") R.string.search_videos_placeholder
-                                        else R.string.search_files_placeholder
+                                        when (mediaFilter) {
+                                            0 -> R.string.search_files_placeholder
+                                            1 -> R.string.search_photos_placeholder
+                                            2 -> R.string.search_videos_placeholder
+                                            else -> R.string.search_files_placeholder
+                                        }
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
@@ -734,7 +760,6 @@ internal fun GalleryScaffold(
                         val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
                             else when {
                                 destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
-                                destination == 3 && librarySection == "videos" -> stringResource(R.string.section_videos)
                                 destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
                                 destination == 3 && librarySection == "locked" -> if (selectedLockedAlbum != null) selectedLockedAlbum!! else stringResource(R.string.section_locked)
                                 destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
@@ -746,7 +771,7 @@ internal fun GalleryScaffold(
                                 destination == 2 -> favoritesTabLabel
                                 destination == 1 -> albumsTabLabel
                                 destination == 3 -> libraryTabLabel
-                                else -> photoTabLabel
+                                else -> mediaTabLabel
                             }
                         if (selectedIds.isNotEmpty()) {
                             AnimatedContent(count, label = "selection count") { text ->
@@ -896,10 +921,90 @@ internal fun GalleryScaffold(
                             }
                         }
                     } else if (!isFileSearching || !canSearchOnScreen) {
-                        val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && librarySection == "videos")
+                        val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null)
                         if (canSearch && !isFileSearching) {
                             IconButton(onClick = { isFileSearching = true }) {
                                 Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                            }
+                        }
+                        if (destination == 3 && librarySection == "trash" && trashed.isNotEmpty()) {
+                            TextButton(onClick = { confirmEmptyTrash = true }) {
+                                Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "memories" || librarySection == "formats" || librarySection == "editor"))
+                        if (canToggleGrid) {
+                            IconButton(onClick = {
+                                compactGrid = !compactGrid
+                                customCellSize = if (compactGrid) 80.dp else 112.dp
+                                settingsPreferences.setPhotoGridSize(customCellSize.value)
+                            }) {
+                                Icon(
+                                    if (compactGrid) Icons.Outlined.GridView else Icons.Outlined.Dashboard,
+                                    if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid)
+                                )
+                            }
+                        }
+                        if (destination == 0) {
+                            var mediaFilterMenuExpanded by remember { mutableStateOf(false) }
+                            IconButton(onClick = { mediaFilterMenuExpanded = true }) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.FilterList,
+                                        contentDescription = stringResource(R.string.action_filter),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        modifier = Modifier.offset(y = (-4).dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        shape = MaterialTheme.shapes.small
+                                    ) {
+                                        Text(
+                                            text = when (mediaFilter) {
+                                                0 -> stringResource(R.string.tab_media)
+                                                1 -> stringResource(R.string.tab_photos)
+                                                2 -> stringResource(R.string.tab_videos)
+                                                else -> stringResource(R.string.tab_media)
+                                            },
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 6.sp,
+                                                lineHeight = 7.sp,
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            maxLines = 1,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 2.dp, vertical = 0.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = mediaFilterMenuExpanded,
+                                onDismissRequest = { mediaFilterMenuExpanded = false }
+                            ) {
+                                listOf(
+                                    stringResource(R.string.tab_media) to images.size,
+                                    stringResource(R.string.tab_photos) to images.count { !it.isVideo },
+                                    stringResource(R.string.tab_videos) to images.count { it.isVideo }
+                                ).forEachIndexed { index, (title, count) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.filters, title, count)) },
+                                        trailingIcon = if (mediaFilter == index) {
+                                            { Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
+                                        } else null,
+                                        onClick = {
+                                            mediaFilterMenuExpanded = false
+                                            mediaFilter = index
+                                        }
+                                    )
+                                }
                             }
                         }
                         if (destination == 1 && selectedAlbum != null) {
@@ -1021,26 +1126,6 @@ internal fun GalleryScaffold(
                                 }
                             }
                         }
-                        if (destination == 3 && librarySection == "trash" && trashed.isNotEmpty()) {
-                            TextButton(onClick = { confirmEmptyTrash = true }) {
-                                Icon(Icons.Outlined.DeleteForever, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                                Spacer(Modifier.width(4.dp))
-                                Text(stringResource(R.string.action_empty_trash), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        val canToggleGrid = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null) || (destination == 3 && (librarySection == "trash" || librarySection == "locked" || librarySection == "memories" || librarySection == "formats" || librarySection == "editor"))
-                        if (canToggleGrid) {
-                            IconButton(onClick = {
-                                compactGrid = !compactGrid
-                                customCellSize = if (compactGrid) 80.dp else 112.dp
-                                settingsPreferences.setPhotoGridSize(customCellSize.value)
-                            }) {
-                                Icon(
-                                    if (compactGrid) Icons.Outlined.GridView else Icons.Outlined.Dashboard,
-                                    if (compactGrid) stringResource(R.string.action_comfortable_grid) else stringResource(R.string.action_compact_grid)
-                                )
-                            }
-                        }
                         val inSubpage = (destination == 1 && selectedAlbum != null) || (destination == 3 && librarySection != null)
                         if (destination == 1 && selectedAlbum == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM) {
                             IconButton(onClick = { isEditingAlbumOrder = !isEditingAlbumOrder }) {
@@ -1085,11 +1170,19 @@ internal fun GalleryScaffold(
                     ) {
                         visibleTabs.forEachIndexed { index, tab ->
                             val isSelected = navVisibleTab == tab
-                            val label = if (tab == GalleryTab.PHOTOS) photoTabLabel else stringResource(tab.labelRes)
+                            val icon = if (tab == GalleryTab.MEDIA) {
+                                when (mediaFilter) {
+                                    0 -> Icons.Outlined.PermMedia
+                                    1 -> Icons.Outlined.PhotoLibrary
+                                    2 -> Icons.Outlined.VideoLibrary
+                                    else -> Icons.Outlined.PermMedia
+                                }
+                            } else tab.icon
+                            val label = if (tab == GalleryTab.MEDIA) mediaTabLabel else stringResource(tab.labelRes)
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = { handleTabSelected(index) },
-                                icon = { AnimatedNavigationIcon(tab.icon, isSelected, label) },
+                                icon = { AnimatedNavigationIcon(icon, isSelected, label) },
                                 label = { Text(label) },
                                 alwaysShowLabel = true,
                             )
@@ -1122,9 +1215,9 @@ internal fun GalleryScaffold(
           userScrollEnabled = selectedIds.isEmpty() && selectedAlbum == null && (destination != 3 || librarySection == null),
           modifier = Modifier.fillMaxSize(),
         ) { page ->
-          val activeTab = visibleTabs.getOrElse(page) { GalleryTab.PHOTOS }
+          val activeTab = visibleTabs.getOrElse(page) { GalleryTab.MEDIA }
           when (activeTab) {
-            GalleryTab.PHOTOS -> {
+            GalleryTab.MEDIA -> {
               val pullRefreshState0 = rememberPullToRefreshState()
               val fastRefreshConnection0 = remember(pullRefreshState0, loading, onRefresh) {
                 object : NestedScrollConnection {
@@ -1156,8 +1249,8 @@ internal fun GalleryScaffold(
                 }
               ) {
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-                  if (displayedPhotos.isNotEmpty()) PhotoGrid(
-                    displayedPhotos, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                  if (displayedItems.isNotEmpty()) PhotoGrid(
+                    displayedItems, padding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1175,7 +1268,7 @@ internal fun GalleryScaffold(
                     onSetSelection = if (onPick == null) ::setSelection else null,
                     onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                     onInvalidMedia = onInvalidMedia,
-                  ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedPhotos; selectedId = it.id } }
+                  ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedItems; selectedId = it.id } }
                   else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
                   else EmptyState(stringResource(R.string.empty_photos), padding)
                 }
@@ -1667,41 +1760,7 @@ internal fun GalleryScaffold(
                             },
                             onBack = { librarySection = null }
                         )
-                        "videos" -> {
-                            val videos = displayedVideos
-                            if (videos.isEmpty()) {
-                                if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), padding)
-                                else EmptyState(stringResource(R.string.empty_videos), padding)
-                            } else {
-                                PhotoGrid(
-                                    images = videos,
-                                    padding = padding,
-                                    gridState = libraryGridState,
-                                    cellSize = photoCellSize,
-                                    onCellSizeChange = onCellSizeChange,
-                                    showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
-                                    timelineDateFormat = settings.timelineDateFormat,
-                                    customTimelineDateFormat = settings.customTimelineDateFormat,
-                                    useRelativeDates = settings.useRelativeDates,
-                                    showDayOfWeek = settings.showDayOfWeek,
-                                    abbreviateDayOfWeek = settings.abbreviateDayOfWeek,
-                                    cornerStyle = settings.cornerStyle,
-                                    gridSpacing = settings.gridSpacing,
-                                    showVideoDuration = settings.showVideoDurationBadge,
-                                    showFormatBadge = settings.showMediaFormatBadge,
-                                    selectedIds = selectedIds,
-                                    favorites = favorites,
-                                    onToggleSelection = if (onPick == null) ::toggleSelection else null,
-                                    onSetSelection = if (onPick == null) ::setSelection else null,
-                                    onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-                                ) {
-                                    if (selectedIds.isNotEmpty()) toggleSelection(it.id)
-                                    else if (onPick != null) onPick(it)
-                                    else { viewerImages = videos; selectedId = it.id }
-                                }
-                            }
-                        }
-                        else -> LibraryScreen(padding, trashed.size, lockedMedia.size, images.count { it.isVideo }) {
+                        else -> LibraryScreen(padding, trashed.size, lockedMedia.size) {
                             if (it == "rescan") {
                                 onRescanMedia()
                             } else if (it == "excluded_folders") {
@@ -1780,11 +1839,19 @@ internal fun GalleryScaffold(
             ) {
                 visibleTabs.forEachIndexed { index, tab ->
                     val isSelected = navVisibleTab == tab
-                    val label = if (tab == GalleryTab.PHOTOS) photoTabLabel else stringResource(tab.labelRes)
+                    val icon = if (tab == GalleryTab.MEDIA) {
+                        when (mediaFilter) {
+                            0 -> Icons.Outlined.PermMedia
+                            1 -> Icons.Outlined.PhotoLibrary
+                            2 -> Icons.Outlined.VideoLibrary
+                            else -> Icons.Outlined.PermMedia
+                        }
+                    } else tab.icon
+                    val label = if (tab == GalleryTab.MEDIA) mediaTabLabel else stringResource(tab.labelRes)
                     NavigationBarItem(
                         selected = isSelected,
                         onClick = { handleTabSelected(index) },
-                        icon = { AnimatedNavigationIcon(tab.icon, isSelected, label) },
+                        icon = { AnimatedNavigationIcon(icon, isSelected, label) },
                         label = null,
                         alwaysShowLabel = false,
                     )
