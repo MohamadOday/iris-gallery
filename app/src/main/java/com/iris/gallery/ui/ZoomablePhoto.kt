@@ -166,8 +166,8 @@ internal fun ZoomablePhoto(
             reqBuilder.size(targetDim, targetDim)
                 .precision(Precision.INEXACT)
         } else {
-            reqBuilder.size(coil3.size.Size.ORIGINAL)
-                .precision(Precision.EXACT)
+            reqBuilder.size(viewerImageSize(context, image))
+                .precision(Precision.INEXACT)
         }
         reqBuilder.build()
     }

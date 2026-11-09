@@ -69,7 +69,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     init {
         viewModelScope.launch {
             trashRepository.trashedMedia.collect { trashedList ->
-                val systemTrash = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                val systemTrash = if (android.os.Build.VERSION.SDK_INT >= 30 &&
+                    settingsPreferences.state.value.useSystemTrash) {
                     runCatching { repository.loadImages(trashed = true) }.getOrDefault(emptyList())
                 } else emptyList()
                 val combined = (trashedList + systemTrash).distinctBy { it.id }
@@ -117,10 +118,10 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     suspend fun moveToTrash(mediaList: List<MediaImage>): com.iris.gallery.data.TrashMoveResult = trashRepository.moveToTrash(mediaList)
     suspend fun rollbackTrashMove(trashedMedia: List<MediaImage>) = trashRepository.rollbackTrash(trashedMedia)
 
-    suspend fun restoreFromTrash(mediaList: List<MediaImage>): List<MediaImage> {
+    suspend fun restoreFromTrash(mediaList: List<MediaImage>): com.iris.gallery.data.TrashRestoreResult {
         val result = trashRepository.restoreFromTrash(mediaList)
-        val restoredIds = result.map { it.id }.toSet()
-        val restoredPaths = result.map { it.path }.filter { it.isNotBlank() }.toSet()
+        val restoredIds = result.restored.map { it.id }.toSet()
+        val restoredPaths = result.restored.map { it.path }.filter { it.isNotBlank() }.toSet()
         repository.clearRecentMovedOrDeleted(restoredIds, restoredPaths)
         refresh()
         return result
@@ -373,9 +374,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun refreshTrashOnly() {
-        val trashList = withContext(Dispatchers.IO) {
-            (vaultRepository.loadVaultItems() + trashRepository.loadTrashItems()).distinctBy { it.id }
-        }
+        val internalTrash = withContext(Dispatchers.IO) { trashRepository.loadTrashItems() }
+        val systemTrash = if (android.os.Build.VERSION.SDK_INT >= 30 &&
+            settingsPreferences.state.value.useSystemTrash) {
+            withContext(Dispatchers.IO) {
+                runCatching { repository.loadImages(trashed = true) }.getOrDefault(emptyList())
+            }
+        } else emptyList()
+        // Keep the same internal + system merge as a full refresh. Dropping the
+        // system half here made the trash look almost empty until the next restart.
+        val trashList = (internalTrash + systemTrash).distinctBy { it.id }
         _uiState.update { it.copy(trashed = trashList) }
     }
 
@@ -522,7 +530,10 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         } else {
                             loaded
                         }
-                        _uiState.update { it.copy(images = combined, loading = false, trashed = trashList, error = null) }
+                        // Don't write the trash list captured before loadImages() back here.
+                        // The image scan can take a while and a newer trash refresh may have
+                        // landed in the meantime; this stale write made the trash look short.
+                        _uiState.update { it.copy(images = combined, loading = false, error = null) }
                         repository.setSnapshotComplete(true)
                         val generations = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
                         if (generations != null) {

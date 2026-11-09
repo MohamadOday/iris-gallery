@@ -42,6 +42,9 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -123,6 +126,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -509,12 +513,48 @@ internal fun GalleryScaffold(
     var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
     var fileSearchQuery by remember { mutableStateOf("") }
     var isFileSearching by remember { mutableStateOf(false) }
+    var albumSearchQuery by remember { mutableStateOf("") }
+    var isAlbumSearching by remember { mutableStateOf(false) }
+    var albumSortMenuExpanded by remember { mutableStateOf(false) }
+    val fileSearchFocus = remember { FocusRequester() }
+    val albumSearchFocus = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val albumCount = remember(images) { images.mapTo(HashSet(images.size)) { it.bucketId }.size }
+    val isAlbumsRoot = destination == 1 && selectedAlbumId == null
+
+    LaunchedEffect(isFileSearching) {
+        if (isFileSearching) {
+            // The field is added to the top bar in the same recomposition. Give the
+            // focus node a frame plus a short beat to attach before raising the keyboard.
+            withFrameNanos { }
+            kotlinx.coroutines.delay(80)
+            runCatching { fileSearchFocus.requestFocus() }
+            keyboardController?.show()
+        }
+    }
+
+    LaunchedEffect(isAlbumSearching) {
+        if (isAlbumSearching) {
+            albumSortMenuExpanded = false
+            withFrameNanos { }
+            kotlinx.coroutines.delay(80)
+            runCatching { albumSearchFocus.requestFocus() }
+            keyboardController?.show()
+        }
+    }
 
     LaunchedEffect(destination, librarySection, selectedAlbumId) {
         val canSearch = destination == 0 || destination == 2 || (destination == 1 && selectedAlbumId != null)
         if (!canSearch && isFileSearching) {
             isFileSearching = false
             fileSearchQuery = ""
+        }
+        if (!(destination == 1 && selectedAlbumId == null) && isAlbumSearching) {
+            isAlbumSearching = false
+            albumSearchQuery = ""
+        }
+        if (!(destination == 1 && selectedAlbumId == null)) {
+            albumSortMenuExpanded = false
         }
     }
 
@@ -712,11 +752,45 @@ internal fun GalleryScaffold(
             val canSearchOnScreen = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null)
             TopAppBar(
                 title = {
-                    if (isFileSearching && canSearchOnScreen) {
+                    if (isAlbumSearching && isAlbumsRoot) {
+                        OutlinedTextField(
+                            value = albumSearchQuery,
+                            onValueChange = { albumSearchQuery = it },
+                            modifier = Modifier.fillMaxWidth().focusRequester(albumSearchFocus),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.search_albums_placeholder, albumCount),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            trailingIcon = {
+                                if (albumSearchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { albumSearchQuery = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.clear_search))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    } else if (isFileSearching && canSearchOnScreen) {
                         OutlinedTextField(
                             value = fileSearchQuery,
                             onValueChange = { fileSearchQuery = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().focusRequester(fileSearchFocus),
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
                             ),
@@ -783,7 +857,15 @@ internal fun GalleryScaffold(
                     }
                 },
                 navigationIcon = {
-                    if (isFileSearching && canSearchOnScreen) {
+                    if (isAlbumSearching && isAlbumsRoot) {
+                        IconButton(onClick = {
+                            keyboardController?.hide()
+                            isAlbumSearching = false
+                            albumSearchQuery = ""
+                        }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.clear_search))
+                        }
+                    } else if (isFileSearching && canSearchOnScreen) {
                         IconButton(onClick = { isFileSearching = false; fileSearchQuery = "" }) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.clear_search))
                         }
@@ -1114,6 +1196,21 @@ internal fun GalleryScaffold(
                             }
                         }
                         val inSubpage = (destination == 1 && selectedAlbum != null) || (destination == 3 && librarySection != null)
+                        if (isAlbumsRoot && !isAlbumSearching) {
+                            IconButton(onClick = { isAlbumSearching = true }) {
+                                Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                            }
+                            AlbumSortChip(
+                                sort = albumSort,
+                                expanded = albumSortMenuExpanded,
+                                onExpandedChange = { albumSortMenuExpanded = it },
+                                onSortChanged = { value ->
+                                    albumSortMenuExpanded = false
+                                    onSetAlbumSort(value)
+                                },
+                                compact = true
+                            )
+                        }
                         if (destination == 1 && selectedAlbum == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM) {
                             IconButton(onClick = { isEditingAlbumOrder = !isEditingAlbumOrder }) {
                                 Icon(
@@ -1311,9 +1408,12 @@ internal fun GalleryScaffold(
                     else EmptyState(stringResource(R.string.empty_photos), gridPadding)
                   } else AlbumsGrid(
                     images = images,
+                    searchQuery = albumSearchQuery,
+                    onClearSearch = { albumSearchQuery = "" },
                     padding = gridPadding,
                     state = albumGridState,
                     cellSize = customAlbumCellSize,
+                    showFilterChips = settings.showAlbumFilterChips,
                     onCellSizeChange = onAlbumCellSizeChange,
                     cornerStyle = settings.cornerStyle,
                     gridSpacing = settings.gridSpacing,
@@ -1324,7 +1424,6 @@ internal fun GalleryScaffold(
                     customOrder = albumOrder,
                     isEditingOrder = isEditingAlbumOrder && destination == 1 && selectedAlbumId == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM,
                     onTogglePinned = onTogglePinnedAlbum,
-                    onSortChanged = onSetAlbumSort,
                     onOrderChanged = onSetAlbumOrder,
                     onLockAlbum = { album -> onLockMedia(album.images) },
                     onExcludeFolder = { album ->

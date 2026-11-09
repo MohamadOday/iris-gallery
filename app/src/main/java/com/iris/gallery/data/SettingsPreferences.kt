@@ -162,6 +162,7 @@ data class SettingsState(
     val showAlbumsTab: Boolean = true,
     val showFavoritesTab: Boolean = true,
     val showLibraryTab: Boolean = true,
+    val showAlbumFilterChips: Boolean = true,
     val biometricLockEnabled: Boolean = true,
     val vaultHideFromStorage: Boolean = true,
     val appLockEnabled: Boolean = false,
@@ -252,6 +253,7 @@ class SettingsPreferences(context: Context) {
         if (!show && !showMediaTab && !showAlbumsTab && !showFavoritesTab) this
         else copy(showLibraryTab = show)
     }
+    fun setShowAlbumFilterChips(show: Boolean) = update { copy(showAlbumFilterChips = show) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
     fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
@@ -435,6 +437,7 @@ class SettingsPreferences(context: Context) {
             showAlbumsTab = prefs.getBoolean("show_albums_tab", true),
             showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
             showLibraryTab = prefs.getBoolean("show_library_tab", true),
+            showAlbumFilterChips = prefs.getBoolean("show_album_filter_chips", true),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
             vaultHideFromStorage = prefs.getBoolean("vault_hide_from_storage", true),
             appLockEnabled = prefs.getBoolean("app_lock_enabled", false),
@@ -499,6 +502,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_albums_tab", state.showAlbumsTab)
             .putBoolean("show_favorites_tab", state.showFavoritesTab)
             .putBoolean("show_library_tab", state.showLibraryTab)
+            .putBoolean("show_album_filter_chips", state.showAlbumFilterChips)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)
             .putBoolean("vault_hide_from_storage", state.vaultHideFromStorage)
             .putBoolean("app_lock_enabled", state.appLockEnabled)

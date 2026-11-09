@@ -82,13 +82,7 @@ class VaultRepository(private val context: Context) {
         loadVaultItems()
     }
 
-    fun hasAllFilesAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            true
-        }
-    }
+    fun hasAllFilesAccess(): Boolean = StorageAccess.hasWriteAccess(context)
 
     fun loadVaultItems(): List<MediaImage> = synchronized(indexLock) {
         val items = readIndexStrict()

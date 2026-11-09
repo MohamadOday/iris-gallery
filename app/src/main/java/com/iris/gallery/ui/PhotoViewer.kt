@@ -607,8 +607,8 @@ internal fun PhotoViewer(
                 if (!media.isVideo) {
                     val req = ImageRequest.Builder(context)
                         .data(media.uri)
-                        .size(coil3.size.Size.ORIGINAL)
-                        .precision(Precision.EXACT)
+                        .size(viewerPreloadSize(context, media))
+                        .precision(Precision.INEXACT)
                         .build()
                     imageLoader.enqueue(req)
                 }
@@ -1413,7 +1413,7 @@ internal fun PhotoViewer(
                             val popupImageReq = remember(popupItem.id, popupItem.uri) {
                                 coil3.request.ImageRequest.Builder(context)
                                     .data(popupItem.uri)
-                                    .size(coil3.size.Size.ORIGINAL)
+                                    .size(coil3.size.Size(640, 640))
                                     .crossfade(120)
                                     .build()
                             }

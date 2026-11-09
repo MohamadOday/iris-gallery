@@ -114,7 +114,7 @@ data class TrashFeedback(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-private fun requiredPermissions(): Array<String> = when {
+private fun mediaPermissions(): Array<String> = when {
     Build.VERSION.SDK_INT >= 34 -> arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
         Manifest.permission.READ_MEDIA_VIDEO,
@@ -132,8 +132,12 @@ private fun requiredPermissions(): Array<String> = when {
     )
     else -> arrayOf(
         Manifest.permission.READ_EXTERNAL_STORAGE,
-        Manifest.permission.WRITE_EXTERNAL_STORAGE,
     )
+}
+
+private fun requiredPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT <= 29 -> mediaPermissions() + Manifest.permission.WRITE_EXTERNAL_STORAGE
+    else -> mediaPermissions()
 }
 
 private fun hasMediaPermission(context: android.content.Context): Boolean {
@@ -145,7 +149,26 @@ private fun hasMediaPermission(context: android.content.Context): Boolean {
             (granted(Manifest.permission.READ_MEDIA_IMAGES) && granted(Manifest.permission.READ_MEDIA_VIDEO)) ||
             granted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
         }
-        else -> requiredPermissions().all { granted(it) }
+        else -> mediaPermissions().all { granted(it) }
+    }
+}
+
+private fun hasStorageWritePermission(context: android.content.Context): Boolean {
+    if (Build.VERSION.SDK_INT >= 30) return true
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    ) == PermissionChecker.PERMISSION_GRANTED
+}
+
+/**
+ * When only some originals could be deleted, keep the trash copies for the ones
+ * that are already gone. Rolling all of them back would delete the only copy.
+ */
+private fun trashRollbackItems(moveResult: com.iris.gallery.data.TrashMoveResult): List<MediaImage> {
+    val alreadyDeleted = moveResult.deletedOriginalIds
+    return moveResult.trashedMedia.filterIndexed { index, _ ->
+        moveResult.originalMedia.getOrNull(index)?.id !in alreadyDeleted
     }
 }
 
@@ -175,8 +198,25 @@ internal fun GalleryApp(
     var permitted by remember {
         mutableStateOf(hasMediaPermission(context))
     }
+    var pendingWriteRequest by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         permitted = hasMediaPermission(context)
+        if (pendingWriteRequest) {
+            pendingWriteRequest = false
+            val message = if (hasStorageWritePermission(context)) {
+                R.string.toast_storage_permission_granted
+            } else {
+                R.string.toast_storage_permission_needed
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun ensureStorageWrite(): Boolean {
+        if (hasStorageWritePermission(context)) return true
+        pendingWriteRequest = true
+        permissionLauncher.launch(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+        return false
     }
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     var trashFeedback by remember { mutableStateOf<TrashFeedback?>(null) }
@@ -350,7 +390,7 @@ internal fun GalleryApp(
         } else {
             pending?.let { moveResult ->
                 coroutineScope.launch {
-                    viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                    viewModel.rollbackTrashMove(trashRollbackItems(moveResult))
                     viewModel.checkForChanges()
                 }
             }
@@ -397,12 +437,18 @@ internal fun GalleryApp(
             val ids = items.map { it.id }.toSet()
             val paths = items.map { it.path }.toSet()
             viewModel.restoreSystemTrash(ids, paths)
-            val totalRestored = items.size + (internalItems?.size ?: 0)
-            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, totalRestored)
-            Toast.makeText(context, "$totalRestored item(s) restored", Toast.LENGTH_SHORT).show()
-            if (!internalItems.isNullOrEmpty()) {
+            if (internalItems.isNullOrEmpty()) {
+                trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, items.size)
+                Toast.makeText(context, context.getString(R.string.toast_items_restored_from_trash, items.size), Toast.LENGTH_SHORT).show()
+            } else {
                 coroutineScope.launch {
-                    viewModel.restoreFromTrash(internalItems)
+                    val internalResult = viewModel.restoreFromTrash(internalItems)
+                    val totalRestored = items.size + internalResult.restored.size
+                    trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, totalRestored)
+                    Toast.makeText(context, context.getString(R.string.toast_items_restored_from_trash, totalRestored), Toast.LENGTH_SHORT).show()
+                    if (internalResult.failed > 0) {
+                        Toast.makeText(context, context.getString(R.string.toast_restore_failed_count, internalResult.failed), Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -599,12 +645,15 @@ internal fun GalleryApp(
                 val onLockMedia: (List<MediaImage>) -> Unit = { mediaList ->
                     if (mediaList.isNotEmpty()) {
                         if (settings.vaultHideFromStorage) {
-                            val hasAccess = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
-                            if (hasAccess) {
+                            if (Build.VERSION.SDK_INT >= 30) {
+                                if (Environment.isExternalStorageManager()) {
+                                    executeVaultMove(mediaList)
+                                } else {
+                                    pendingVaultItems = mediaList
+                                    showAllFilesAccessPromptDialog = true
+                                }
+                            } else if (ensureStorageWrite()) {
                                 executeVaultMove(mediaList)
-                            } else {
-                                pendingVaultItems = mediaList
-                                showAllFilesAccessPromptDialog = true
                             }
                         } else {
                             viewModel.setLocked(mediaList.map { it.id }, true)
@@ -643,6 +692,8 @@ internal fun GalleryApp(
                 }
                 val onDeleteFromLocked: (List<MediaImage>, () -> Unit) -> Unit = { mediaList, onDone ->
                     if (mediaList.isEmpty()) {
+                        onDone()
+                    } else if (mediaList.any { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) } && !ensureStorageWrite()) {
                         onDone()
                     } else {
                         val vaultItems = mediaList.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
@@ -743,7 +794,9 @@ internal fun GalleryApp(
                             }
                         },
                         onPick = onPick,
-                        onTrash = { media, onConfirmed ->
+                        onTrash = trash@{ media, onConfirmed ->
+                            val needsWrite = media.any { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }
+                            if (needsWrite && !ensureStorageWrite()) return@trash
                             if (media.isNotEmpty()) {
                                 val systemMedia = media.filter { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }
                                 val internalMedia = media.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
@@ -800,7 +853,7 @@ internal fun GalleryApp(
                                                         } else {
                                                             pendingTrashMove = null
                                                             pendingTrashCallback = null
-                                                            viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                                                            viewModel.rollbackTrashMove(trashRollbackItems(moveResult))
                                                             Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
                                                         }
                                                     }
@@ -847,7 +900,7 @@ internal fun GalleryApp(
                                                     } else {
                                                         pendingTrashMove = null
                                                         pendingTrashCallback = null
-                                                        viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                                                        viewModel.rollbackTrashMove(trashRollbackItems(moveResult))
                                                         Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
@@ -867,7 +920,7 @@ internal fun GalleryApp(
                                                     onConfirmed?.invoke()
                                                     Toast.makeText(context, context.getString(R.string.toast_items_moved_to_trash, moveResult.trashedMedia.size), Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    viewModel.rollbackTrashMove(moveResult.trashedMedia)
+                                                    viewModel.rollbackTrashMove(trashRollbackItems(moveResult))
                                                     Toast.makeText(context, context.getString(R.string.toast_could_not_request_removal), Toast.LENGTH_SHORT).show()
                                                 }
                                             }
@@ -896,16 +949,21 @@ internal fun GalleryApp(
                                     }
                                 } else {
                                     coroutineScope.launch {
-                                        val restored = viewModel.restoreFromTrash(media)
-                                        if (restored.isNotEmpty()) {
-                                            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, restored.size)
-                                            Toast.makeText(context, "${restored.size} item(s) restored", Toast.LENGTH_SHORT).show()
+                                        val result = viewModel.restoreFromTrash(media)
+                                        if (result.restored.isNotEmpty()) {
+                                            trashFeedback = TrashFeedback(TrashFeedbackType.RESTORED, result.restored.size)
+                                            Toast.makeText(context, context.getString(R.string.toast_items_restored_from_trash, result.restored.size), Toast.LENGTH_SHORT).show()
+                                        }
+                                        if (result.failed > 0) {
+                                            Toast.makeText(context, context.getString(R.string.toast_restore_failed_count, result.failed), Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 }
                             }
                         },
-                        onDeletePermanently = { media, onConfirmed ->
+                        onDeletePermanently = deletePermanently@{ media, onConfirmed ->
+                            val needsWrite = media.any { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }
+                            if (needsWrite && !ensureStorageWrite()) return@deletePermanently
                             if (media.isNotEmpty()) {
                                 val internalItems = media.filter { it.id < 0 || it.path.startsWith(context.filesDir.absolutePath) }
                                 val externalItems = media.filter { it.id > 0 && !it.path.startsWith(context.filesDir.absolutePath) }

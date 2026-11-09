@@ -34,13 +34,7 @@ data class AlbumOperationResult(
 
 class AlbumRepository(private val context: Context) {
 
-    fun hasAllFilesAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            true
-        }
-    }
+    fun hasAllFilesAccess(): Boolean = StorageAccess.hasWriteAccess(context)
 
     private fun resolveVolumeName(path: String): String {
         if (path.startsWith("/storage/")) {

@@ -1252,6 +1252,17 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
+                    Text(stringResource(R.string.settings_album_top_section_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_album_filters_title),
+                        subtitle = stringResource(R.string.settings_album_filters_desc),
+                        checked = settings.showAlbumFilterChips,
+                        onCheckedChange = { preferences.setShowAlbumFilterChips(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
                     Text(stringResource(R.string.settings_startup_tab), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     
                     // 2x2 grid for symmetrical, perfect alignment
@@ -1341,6 +1352,57 @@ fun SettingsScreen(
                         checked = settings.vaultHideFromStorage,
                         onCheckedChange = { preferences.setVaultHideFromStorage(it) }
                     )
+
+                    if (Build.VERSION.SDK_INT <= 29) {
+                        val hasStorage = remember(context) { com.iris.gallery.data.StorageAccess.hasWriteAccess(context) }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text(
+                                    stringResource(R.string.settings_storage_access_title),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    if (hasStorage) stringResource(R.string.settings_storage_access_desc_granted)
+                                    else stringResource(R.string.settings_storage_access_desc_prompt),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (hasStorage) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                        runCatching { context.startActivity(intent) }
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.settings_storage_access_button))
+                                }
+                            }
+                        }
+                    }
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && settings.vaultHideFromStorage) {
                         val hasAllFiles = remember(context) { Environment.isExternalStorageManager() }

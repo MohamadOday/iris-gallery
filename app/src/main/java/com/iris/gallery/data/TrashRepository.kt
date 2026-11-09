@@ -24,9 +24,17 @@ data class TrashMoveResult(
     val trashedMedia: List<MediaImage>,
     val originalMedia: List<MediaImage>,
     val silentSuccess: Boolean = false,
+    val deletedOriginalIds: Set<Long> = emptySet(),
+)
+
+data class TrashRestoreResult(
+    val restored: List<MediaImage>,
+    val failed: Int,
 )
 
 private data class TrashRestoreTarget(val uri: Uri, val path: String)
+
+private data class RestoreDestination(val volume: String, val relativePath: String)
 
 data class TrashItem(
     val id: Long,
@@ -79,13 +87,7 @@ class TrashRepository(private val context: Context) {
         loadTrashItems()
     }
 
-    fun hasAllFilesAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            true
-        }
-    }
+    fun hasAllFilesAccess(): Boolean = StorageAccess.hasWriteAccess(context)
 
     fun autoPurgeOldItems(): Int = synchronized(indexLock) {
         val items = readIndex().toMutableList()
@@ -150,6 +152,9 @@ class TrashRepository(private val context: Context) {
                 val fDel = runCatching { file.delete() }.getOrDefault(false)
                 val cDel = if (!fDel && file.exists()) runCatching { file.canonicalFile.delete() }.getOrDefault(false) else false
                 deleted = fDel || cDel
+            } else {
+                // The original is already gone, so the trash copy is the only one left.
+                deleted = true
             }
         }
         val mediaVolume = if (item.uri.authority == "media") {
@@ -315,15 +320,23 @@ class TrashRepository(private val context: Context) {
         writeIndex(currentItems)
 
         var silentSuccess = false
+        val deletedOriginalIds = mutableSetOf<Long>()
         if (hasManagerAccess && trashedList.isNotEmpty()) {
-            val deleteResults = originalList.map { item -> deleteFromStorage(item) }
-            if (deleteResults.all { it }) {
-                silentSuccess = true
+            for (item in originalList) {
+                if (deleteFromStorage(item)) {
+                    deletedOriginalIds.add(item.id)
+                }
             }
+            silentSuccess = deletedOriginalIds.size == originalList.size
         }
 
         loadTrashItems()
-        TrashMoveResult(trashedMedia = trashedList, originalMedia = originalList, silentSuccess = silentSuccess)
+        TrashMoveResult(
+            trashedMedia = trashedList,
+            originalMedia = originalList,
+            silentSuccess = silentSuccess,
+            deletedOriginalIds = deletedOriginalIds
+        )
     }
 
     suspend fun rollbackTrash(trashedItems: List<MediaImage>) = indexLocked {
@@ -343,10 +356,11 @@ class TrashRepository(private val context: Context) {
         loadTrashItems()
     }
 
-    suspend fun restoreFromTrash(mediaList: List<MediaImage>): List<MediaImage> = indexLocked {
+    suspend fun restoreFromTrash(mediaList: List<MediaImage>): TrashRestoreResult = indexLocked {
         val currentItems = readIndex().toMutableList()
         val restoredList = mutableListOf<MediaImage>()
         val idsToRemove = mediaList.map { abs(it.id) }.toSet()
+        var failedCount = 0
 
         val itemsToRestore = currentItems.filter { it.id in idsToRemove }
         for (item in itemsToRestore) {
@@ -356,7 +370,9 @@ class TrashRepository(private val context: Context) {
                 continue
             }
 
-            val restored = restoreFileToStorage(item, trashFile)
+            val restored = runCatching { restoreFileToStorage(item, trashFile) }
+                .onFailure { android.util.Log.e("IrisTrash", "Restore failed for ${item.originalName}", it) }
+                .getOrNull()
             if (restored != null) {
                 runCatching { trashFile.delete() }
                 currentItems.remove(item)
@@ -382,12 +398,16 @@ class TrashRepository(private val context: Context) {
                         dateAdded = item.dateAdded,
                     )
                 )
+            } else {
+                // Keep the item in the trash index. The UI reports the failure and the
+                // user can retry after fixing permissions or storage state.
+                failedCount++
             }
         }
 
         writeIndex(currentItems)
         loadTrashItems()
-        restoredList
+        TrashRestoreResult(restoredList, failedCount)
     }
 
     suspend fun deletePermanently(mediaList: List<MediaImage>) = indexLocked {
@@ -426,116 +446,161 @@ class TrashRepository(private val context: Context) {
     }
 
     private fun restoreFileToStorage(item: TrashItem, trashFile: File): TrashRestoreTarget? {
-        return try {
-            val effectiveModMs = when {
-                item.dateModified > 0L -> item.dateModified
-                item.dateTaken > 0L -> item.dateTaken
-                else -> trashFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
-            }
-            val effectiveTakenMs = if (item.dateTaken > 0L) item.dateTaken else effectiveModMs
-            val effectiveModSec = effectiveModMs / 1000L
-            val effectiveAddedSec = if (item.dateAdded > 0L) item.dateAdded / 1000L else effectiveModSec
-
-            if (hasAllFilesAccess()) {
-                val destFile = if (item.originalPath.isNotBlank()) {
-                    val file = File(item.originalPath)
-                    file.parentFile?.mkdirs()
-                    file
-                } else {
-                    val fallbackDir = Environment.getExternalStoragePublicDirectory(
-                        if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
-                    ).resolve("Iris").apply { mkdirs() }
-                    File(fallbackDir, item.originalName)
-                }
-                trashFile.copyTo(destFile, overwrite = true)
-                if (effectiveModMs > 0L) {
-                    destFile.setLastModified(effectiveModMs)
-                }
-                MediaScannerConnection.scanFile(
-                    context,
-                    arrayOf(destFile.absolutePath),
-                    arrayOf(item.mimeType.ifBlank { null }),
-                    null
-                )
-                TrashRestoreTarget(Uri.fromFile(destFile), destFile.absolutePath)
-            } else if (Build.VERSION.SDK_INT >= 29) {
-                val relativePath = computeRelativePath(item.originalPath, item.isVideo)
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, item.originalName)
-                    put(
-                        MediaStore.MediaColumns.MIME_TYPE,
-                        item.mimeType.ifBlank { if (item.isVideo) "video/mp4" else "image/jpeg" }
-                    )
-                    put(MediaStore.MediaColumns.DATE_ADDED, effectiveAddedSec)
-                    put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveModSec)
-                    put(MediaStore.MediaColumns.DATE_TAKEN, effectiveTakenMs)
-                    if (!item.isVideo) {
-                        put(MediaStore.Images.Media.ORIENTATION, item.orientation)
-                    }
-                    if (item.title.isNotBlank()) put(MediaStore.MediaColumns.TITLE, item.title)
-                    if (item.isVideo) {
-                        put(MediaStore.Video.VideoColumns.DURATION, item.durationMs)
-                    }
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val collection = if (item.isVideo) {
-                    MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                } else {
-                    MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                }
-                val newUri = context.contentResolver.insert(collection, values) ?: return null
-                val outputStream = context.contentResolver.openOutputStream(newUri)
-                if (outputStream == null) {
-                    context.contentResolver.delete(newUri, null, null)
-                    return null
-                }
-                outputStream.use { output ->
-                    trashFile.inputStream().use { input -> input.copyTo(output) }
-                }
-                // The MediaStore copy gives the file a fresh mtime. Push it back to
-                // the original one so a later scan cannot move the item to "today".
-                val pendingPath = mediaStorePath(newUri)
-                if (effectiveModMs > 0L && pendingPath.isNotBlank()) {
-                    runCatching { File(pendingPath).setLastModified(effectiveModMs) }
-                }
-                values.clear()
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                values.put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveModSec)
-                values.put(MediaStore.MediaColumns.DATE_TAKEN, effectiveTakenMs)
-                values.put(MediaStore.MediaColumns.DATE_ADDED, effectiveAddedSec)
-                if (context.contentResolver.update(newUri, values, null, null) <= 0) {
-                    context.contentResolver.delete(newUri, null, null)
-                    return null
-                }
-                TrashRestoreTarget(newUri, mediaStorePath(newUri).ifBlank { pendingPath })
-            } else {
-                @Suppress("DEPRECATION")
-                val publicDir = if (item.originalPath.isNotBlank()) {
-                    File(item.originalPath).parentFile ?: Environment.getExternalStoragePublicDirectory(
-                        if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
-                    ).resolve("Iris")
-                } else {
-                    Environment.getExternalStoragePublicDirectory(
-                        if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
-                    ).resolve("Iris")
-                }.apply { mkdirs() }
-                val destFile = uniqueDestinationFile(publicDir, item.originalName)
-                trashFile.copyTo(destFile, overwrite = false)
-                if (effectiveModMs > 0L) {
-                    destFile.setLastModified(effectiveModMs)
-                }
-                MediaScannerConnection.scanFile(
-                    context,
-                    arrayOf(destFile.absolutePath),
-                    arrayOf(item.mimeType.ifBlank { null }),
-                    null
-                )
-                TrashRestoreTarget(Uri.fromFile(destFile), destFile.absolutePath)
-            }
-        } catch (e: Exception) {
-            null
+        val effectiveModMs = when {
+            item.dateModified > 0L -> item.dateModified
+            item.dateTaken > 0L -> item.dateTaken
+            else -> trashFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
         }
+        val effectiveTakenMs = if (item.dateTaken > 0L) item.dateTaken else effectiveModMs
+        val effectiveModSec = effectiveModMs / 1000L
+        val effectiveAddedSec = if (item.dateAdded > 0L) item.dateAdded / 1000L else effectiveModSec
+
+        // Prefer a real file copy when the app has broad storage access. It keeps the
+        // original folder and filename, including on an SD card.
+        if (hasAllFilesAccess()) {
+            restoreDirect(item, trashFile, effectiveModMs, includeFallback = false)?.let { return it }
+        }
+
+        // Scoped storage: insert into the same volume the file came from. The old
+        // code inserted into VOLUME_EXTERNAL, which is a read-only aggregate and
+        // fails on every Android 10+ device that has not been granted all files access.
+        if (Build.VERSION.SDK_INT >= 29) {
+            restoreViaMediaStore(
+                item, trashFile, effectiveModMs, effectiveTakenMs, effectiveModSec, effectiveAddedSec
+            )?.let { return it }
+        }
+
+        // Last resort for an old device, or when MediaStore refused the insert.
+        if (hasAllFilesAccess()) {
+            restoreDirect(item, trashFile, effectiveModMs, includeFallback = true)?.let { return it }
+        }
+        android.util.Log.e("IrisTrash", "Could not restore ${item.originalName} from trash")
+        return null
+    }
+
+    private fun restoreDirect(
+        item: TrashItem,
+        trashFile: File,
+        effectiveModMs: Long,
+        includeFallback: Boolean,
+    ): TrashRestoreTarget? {
+        val preferredParent = if (item.originalPath.isNotBlank()) File(item.originalPath).parentFile else null
+        val fallbackParent = Environment.getExternalStoragePublicDirectory(
+            if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+        ).resolve("Iris")
+        val parents = buildList {
+            if (preferredParent != null) add(preferredParent)
+            if (includeFallback) add(fallbackParent)
+        }.distinctBy { it.absolutePath }
+        if (parents.isEmpty()) return null
+        for (parent in parents) {
+            if (!parent.isDirectory && !runCatching { parent.mkdirs() }.getOrDefault(false)) continue
+            val destFile = uniqueDestinationFile(parent, item.originalName)
+            val copied = runCatching {
+                trashFile.copyTo(destFile, overwrite = false)
+                destFile.exists() && destFile.length() > 0
+            }.getOrDefault(false)
+            if (!copied) {
+                runCatching { destFile.delete() }
+                continue
+            }
+            if (effectiveModMs > 0L) {
+                runCatching { destFile.setLastModified(effectiveModMs) }
+            }
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(destFile.absolutePath),
+                arrayOf(item.mimeType.ifBlank { null }),
+                null
+            )
+            return TrashRestoreTarget(Uri.fromFile(destFile), destFile.absolutePath)
+        }
+        return null
+    }
+
+    private fun restoreViaMediaStore(
+        item: TrashItem,
+        trashFile: File,
+        effectiveModMs: Long,
+        effectiveTakenMs: Long,
+        effectiveModSec: Long,
+        effectiveAddedSec: Long,
+    ): TrashRestoreTarget? {
+        val defaultDir = if (item.isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+        val preferred = resolveRestoreDestination(item.originalPath, item.isVideo)
+        val fallback = RestoreDestination(MediaStore.VOLUME_EXTERNAL_PRIMARY, "$defaultDir/Iris/")
+        val destinations = if (preferred == fallback) listOf(preferred) else listOf(preferred, fallback)
+        for (destination in destinations) {
+            val target = tryRestoreViaMediaStore(
+                item, trashFile, destination,
+                effectiveModMs, effectiveTakenMs, effectiveModSec, effectiveAddedSec
+            )
+            if (target != null) return target
+        }
+        return null
+    }
+
+    private fun tryRestoreViaMediaStore(
+        item: TrashItem,
+        trashFile: File,
+        destination: RestoreDestination,
+        effectiveModMs: Long,
+        effectiveTakenMs: Long,
+        effectiveModSec: Long,
+        effectiveAddedSec: Long,
+    ): TrashRestoreTarget? {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, item.originalName)
+            put(
+                MediaStore.MediaColumns.MIME_TYPE,
+                item.mimeType.ifBlank { if (item.isVideo) "video/mp4" else "image/jpeg" }
+            )
+            put(MediaStore.MediaColumns.DATE_ADDED, effectiveAddedSec)
+            put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveModSec)
+            put(MediaStore.MediaColumns.DATE_TAKEN, effectiveTakenMs)
+            if (!item.isVideo) {
+                put(MediaStore.Images.Media.ORIENTATION, item.orientation)
+            }
+            if (item.title.isNotBlank()) put(MediaStore.MediaColumns.TITLE, item.title)
+            if (item.isVideo) {
+                put(MediaStore.Video.VideoColumns.DURATION, item.durationMs)
+            }
+            put(MediaStore.MediaColumns.RELATIVE_PATH, destination.relativePath)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val collection = if (item.isVideo) {
+            MediaStore.Video.Media.getContentUri(destination.volume)
+        } else {
+            MediaStore.Images.Media.getContentUri(destination.volume)
+        }
+        val newUri = runCatching { context.contentResolver.insert(collection, values) }.getOrNull() ?: return null
+        val written = runCatching {
+            context.contentResolver.openOutputStream(newUri)?.use { output ->
+                trashFile.inputStream().use { input -> input.copyTo(output) }
+            } ?: error("Could not open restore output")
+            true
+        }.getOrDefault(false)
+        if (!written) {
+            runCatching { context.contentResolver.delete(newUri, null, null) }
+            return null
+        }
+        // The MediaStore copy gives the file a fresh mtime. Push it back to the
+        // original one so a later scan cannot move the item to "today".
+        val pendingPath = mediaStorePath(newUri)
+        if (effectiveModMs > 0L && pendingPath.isNotBlank()) {
+            runCatching { File(pendingPath).setLastModified(effectiveModMs) }
+        }
+        val updateValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.IS_PENDING, 0)
+            put(MediaStore.MediaColumns.DATE_MODIFIED, effectiveModSec)
+            put(MediaStore.MediaColumns.DATE_TAKEN, effectiveTakenMs)
+            put(MediaStore.MediaColumns.DATE_ADDED, effectiveAddedSec)
+        }
+        if (runCatching { context.contentResolver.update(newUri, updateValues, null, null) }.getOrDefault(0) <= 0) {
+            runCatching { context.contentResolver.delete(newUri, null, null) }
+            return null
+        }
+        return TrashRestoreTarget(newUri, mediaStorePath(newUri).ifBlank { pendingPath })
     }
 
     /** Where a restore through MediaStore actually landed. */
@@ -545,29 +610,42 @@ class TrashRepository(private val context: Context) {
         }
     }.getOrNull().orEmpty()
 
-    private fun computeRelativePath(originalPath: String, isVideo: Boolean): String {
+    private fun resolveRestoreDestination(originalPath: String, isVideo: Boolean): RestoreDestination {
         val defaultDir = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
-        if (originalPath.isNotBlank()) {
-            val parent = File(originalPath).parentFile?.absolutePath.orEmpty()
-            val emulatedPrefix = "/storage/emulated/0/"
-            if (parent.startsWith(emulatedPrefix)) {
-                val rel = parent.removePrefix(emulatedPrefix).trim('/')
-                if (rel.isNotBlank()) {
-                    val root = rel.substringBefore('/')
-                    val allowed = if (isVideo) {
-                        root.equals(Environment.DIRECTORY_DCIM, ignoreCase = true) ||
-                                root.equals(Environment.DIRECTORY_MOVIES, ignoreCase = true)
-                    } else {
-                        root.equals(Environment.DIRECTORY_DCIM, ignoreCase = true) ||
-                                root.equals(Environment.DIRECTORY_PICTURES, ignoreCase = true)
-                    }
-                    if (allowed) {
-                        return "$rel/"
-                    }
+        val fallback = RestoreDestination(MediaStore.VOLUME_EXTERNAL_PRIMARY, "$defaultDir/Iris/")
+        if (originalPath.isBlank()) return fallback
+
+        val parent = File(originalPath).parentFile?.absolutePath.orEmpty()
+        if (parent.isBlank()) return fallback
+        var volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
+        var relativeParent = ""
+        when {
+            parent.startsWith("/storage/emulated/0/") -> {
+                relativeParent = parent.removePrefix("/storage/emulated/0/")
+            }
+            parent.startsWith("/storage/self/primary/") -> {
+                relativeParent = parent.removePrefix("/storage/self/primary/")
+            }
+            parent.startsWith("/storage/") -> {
+                val rest = parent.removePrefix("/storage/")
+                val candidateVolume = rest.substringBefore('/', "")
+                val afterVolume = rest.substringAfter('/', "")
+                val knownVolumes = runCatching { MediaStore.getExternalVolumeNames(context) }.getOrDefault(emptySet())
+                if (candidateVolume.isNotBlank() && afterVolume.isNotBlank() && candidateVolume in knownVolumes) {
+                    volume = candidateVolume
+                    relativeParent = afterVolume
                 }
             }
         }
-        return "$defaultDir/Iris/"
+        relativeParent = relativeParent.trim('/')
+        if (relativeParent.isBlank()) return fallback
+        // MediaStore cannot write inside Android/data or Android/obb.
+        if (relativeParent.startsWith("Android/data", ignoreCase = true) ||
+            relativeParent.startsWith("Android/obb", ignoreCase = true)
+        ) {
+            return fallback
+        }
+        return RestoreDestination(volume, "$relativeParent/")
     }
 
     private fun generateUniqueId(existing: List<TrashItem>): Long {

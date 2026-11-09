@@ -631,6 +631,9 @@
     <string name="toast_vault_items_deleted">%1$d item(s) permanently deleted</string>
     <string name="toast_lock_cancelled">Lock cancelled</string>
     <string name="toast_could_not_request_removal">Could not request storage removal</string>
+    <string name="toast_storage_permission_needed">Grant Storage permission to delete or restore files, then try again</string>
+    <string name="toast_storage_permission_granted">Storage permission granted. Try the action again.</string>
+    <string name="toast_restore_failed_count">%1$d item(s) could not be restored</string>
     <string name="toast_could_not_request_metadata">Could not request metadata access</string>
     <string name="toast_error_storage_removal">Could not request storage removal</string>
     <string name="toast_error_original_removal">Could not remove original file from storage</string>
@@ -823,6 +826,13 @@
 
     <string name="settings_navigation_tabs_title">Navigation tabs</string>
     <string name="settings_navigation_tabs_desc">Choose which tabs appear in the bottom navigation bar</string>
+    <string name="settings_storage_access_title">Storage access</string>
+    <string name="settings_storage_access_desc_granted">Delete, restore and move operations can write to shared storage.</string>
+    <string name="settings_storage_access_desc_prompt">Grant Storage permission so delete, restore and move operations work.</string>
+    <string name="settings_storage_access_button">Open settings</string>
+    <string name="settings_album_top_section_title">Album filters</string>
+    <string name="settings_album_filters_title">Show album filter chips</string>
+    <string name="settings_album_filters_desc">Show the All, Camera &amp; System, Apps and Videos filters above the album grid.</string>
     <string name="settings_multi_stage_zoom_title">Multi-stage zoom</string>
     <string name="settings_multi_stage_zoom_desc">Double-tap cycles between Fit, Fill, and 1:1 original pixel size</string>
     <string name="format_svg">SVG</string>
