@@ -44,6 +44,12 @@ data class GalleryUiState(
     val error: String? = null,
 )
 
+data class VaultOperationProgress(
+    val isRestoring: Boolean,
+    val done: Int,
+    val total: Int,
+)
+
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaRepository(application)
     private val libraryPreferences = LibraryPreferences(application)
@@ -61,6 +67,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val libraryState: StateFlow<LibraryPreferencesState> = libraryPreferences.state
     val vaultMedia: StateFlow<List<MediaImage>> = vaultRepository.vaultMedia
     val trashedMedia: StateFlow<List<MediaImage>> = trashRepository.trashedMedia
+    private val _vaultProgress = MutableStateFlow<VaultOperationProgress?>(null)
+    val vaultProgress: StateFlow<VaultOperationProgress?> = _vaultProgress.asStateFlow()
     private val duplicateDetector = DuplicateDetector(application)
     private var duplicateJob: Job? = null
     private val _duplicateState = MutableStateFlow(DuplicateScanState())
@@ -110,9 +118,51 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun setLocked(ids: Collection<Long>, locked: Boolean) = libraryPreferences.setLocked(ids, locked)
     fun hasAllFilesAccess(): Boolean = vaultRepository.hasAllFilesAccess()
-    suspend fun moveToVault(mediaList: List<MediaImage>): com.iris.gallery.data.VaultMoveResult = vaultRepository.moveToVault(mediaList)
+
+    fun recoverVaultOrphans() {
+        viewModelScope.launch {
+            vaultRepository.recoverOrphanedItems()
+        }
+    }
+
+    suspend fun moveToVault(mediaList: List<MediaImage>): com.iris.gallery.data.VaultMoveResult {
+        _vaultProgress.value = VaultOperationProgress(isRestoring = false, done = 0, total = mediaList.size)
+        return try {
+            vaultRepository.moveToVault(mediaList) { done, total ->
+                _vaultProgress.value = VaultOperationProgress(isRestoring = false, done = done, total = total)
+            }
+        } finally {
+            _vaultProgress.value = null
+        }
+    }
+
     suspend fun rollbackVaultMove(vaultedMedia: List<MediaImage>) = vaultRepository.rollbackVault(vaultedMedia)
-    suspend fun restoreFromVault(mediaList: List<MediaImage>): List<MediaImage> = vaultRepository.restoreFromVault(mediaList)
+
+    suspend fun restoreFromVault(mediaList: List<MediaImage>): com.iris.gallery.data.VaultRestoreResult {
+        _vaultProgress.value = VaultOperationProgress(isRestoring = true, done = 0, total = mediaList.size)
+        return try {
+            val result = vaultRepository.restoreFromVault(mediaList) { done, total ->
+                _vaultProgress.value = VaultOperationProgress(isRestoring = true, done = done, total = total)
+            }
+            val restoredIds = buildSet {
+                result.restored.forEach {
+                    add(it.id)
+                    add(kotlin.math.abs(it.id))
+                }
+                mediaList.forEach {
+                    add(it.id)
+                    add(kotlin.math.abs(it.id))
+                }
+            }
+            val restoredPaths = result.restored.map { it.path }.filter { it.isNotBlank() }.toSet() + result.restoredOriginalPaths
+            repository.clearRecentMovedOrDeleted(restoredIds, restoredPaths)
+            libraryPreferences.setLocked(restoredIds, false)
+            result
+        } finally {
+            _vaultProgress.value = null
+        }
+    }
+
     suspend fun deletePermanentlyFromVault(mediaList: List<MediaImage>) = vaultRepository.deletePermanently(mediaList)
 
     suspend fun moveToTrash(mediaList: List<MediaImage>): com.iris.gallery.data.TrashMoveResult = trashRepository.moveToTrash(mediaList)
@@ -300,6 +350,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         if (media.orientation != request.orientation) {
             ThumbnailCache.remove(media.id)
         }
+        if (media.id < 0 || media.path.startsWith(getApplication<Application>().filesDir.absolutePath)) {
+            viewModelScope.launch {
+                vaultRepository.updateItemMetadata(media.id, request)
+            }
+        }
         _uiState.update { state ->
             state.copy(
                 images = state.images.map { if (it.id == media.id) updated else it },
@@ -333,6 +388,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun rescanMedia(onComplete: (Int) -> Unit = {}) {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true) }
+            vaultRepository.recoverOrphanedItems()
             val count = repository.rescanStorage()
             refresh(showLoading = false)
             onComplete(count)
@@ -489,6 +545,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 kotlinx.coroutines.withTimeout(120_000) {
                     // Index loads touch storage and take the repo index lock, so keep them off the main thread.
                     val internalTrash = withContext(Dispatchers.IO) {
+                        vaultRepository.recoverOrphanedItems()
                         vaultRepository.loadVaultItems()
                         trashRepository.loadTrashItems()
                     }

@@ -324,8 +324,8 @@ internal fun GalleryScaffold(
     error: String?,
     favorites: Set<Long>,
     onToggleFavorite: (Long) -> Unit,
-    onLockMedia: (List<MediaImage>) -> Unit,
-    onUnlockMedia: (List<MediaImage>) -> Unit,
+    onLockMedia: (List<MediaImage>, onConfirmed: (() -> Unit)?) -> Unit,
+    onUnlockMedia: (List<MediaImage>, onConfirmed: (() -> Unit)?) -> Unit,
     onDeleteFromLocked: (List<MediaImage>, () -> Unit) -> Unit,
     onTogglePinnedAlbum: (Long) -> Unit,
     onSetAlbumCover: (Long, Long) -> Unit,
@@ -357,6 +357,7 @@ internal fun GalleryScaffold(
     initialEditMode: Boolean = false,
     initialOpenLatest: Boolean = false,
     initialIntentGeneration: Long = 0L,
+    onEnterVault: () -> Unit = {},
     onInvalidMedia: ((MediaImage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -405,7 +406,9 @@ internal fun GalleryScaffold(
     var isEditingAlbumOrder by remember { mutableStateOf(false) }
 
     LaunchedEffect(destination, librarySection) {
-        if (destination != 3 || librarySection != "locked") {
+        if (destination == 3 && librarySection == "locked") {
+            onEnterVault()
+        } else {
             onLockVault()
         }
     }
@@ -894,7 +897,7 @@ internal fun GalleryScaffold(
                             }
                         }
                         if (destination == 3 && librarySection == "locked") {
-                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onUnlockMedia(selected) }) {
+                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onUnlockMedia(selected, null) }) {
                                 Icon(Icons.Outlined.LockOpen, stringResource(R.string.action_remove_from_locked))
                             }
                         }
@@ -965,7 +968,7 @@ internal fun GalleryScaffold(
                                             selectionMenuExpanded = false
                                             val selected = activeMedia.filter { it.id in selectedIds }
                                             clearSelection()
-                                            onUnlockMedia(selected)
+                                            onUnlockMedia(selected, null)
                                         })
                                 } else if (!(destination == 3 && librarySection == "trash")) {
                                     DropdownMenuItem(text = { Text(stringResource(R.string.action_move_to_locked)) }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
@@ -973,7 +976,7 @@ internal fun GalleryScaffold(
                                             selectionMenuExpanded = false
                                             val selected = activeMedia.filter { it.id in selectedIds }
                                             clearSelection()
-                                            onLockMedia(selected)
+                                            onLockMedia(selected, null)
                                         })
                                 }
                                  val allSelectedAreFavorites = selectedIds.isNotEmpty() && selectedIds.all { it in favorites }
@@ -1163,7 +1166,9 @@ internal fun GalleryScaffold(
                                             // vault prompt and the system delete dialog can still be
                                             // cancelled, and the album drops out below by itself once
                                             // its images are filtered out.
-                                            onLockMedia(selectedAlbum!!.images)
+                                            onLockMedia(selectedAlbum!!.images) {
+                                                selectedAlbumId = null
+                                            }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -1425,7 +1430,7 @@ internal fun GalleryScaffold(
                     isEditingOrder = isEditingAlbumOrder && destination == 1 && selectedAlbumId == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM,
                     onTogglePinned = onTogglePinnedAlbum,
                     onOrderChanged = onSetAlbumOrder,
-                    onLockAlbum = { album -> onLockMedia(album.images) },
+                    onLockAlbum = { album -> onLockMedia(album.images, null) },
                     onExcludeFolder = { album ->
                         val samplePath = album.images.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
                         val folderPath = if (samplePath.contains('/')) samplePath.substringBeforeLast('/') else ""
@@ -1464,7 +1469,27 @@ internal fun GalleryScaffold(
                         }
                         "locked" -> if (!lockedAuthorized) {
                             LaunchedEffect(Unit) { onRequestUnlock() }
-                            EmptyState(stringResource(R.string.empty_locked_locked_state), padding)
+                            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Lock,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        stringResource(R.string.empty_locked_locked_state),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Button(onClick = onRequestUnlock) {
+                                        Text(stringResource(R.string.action_unlock))
+                                    }
+                                }
+                            }
                         } else {
                             val locked = lockedMedia
                             val lockedAlbumList = remember(locked) {
@@ -1480,10 +1505,16 @@ internal fun GalleryScaffold(
                                     }.sortedWith(compareByDescending<MediaAlbum> { it.images.size }.thenBy { it.name.lowercase() })
                             }
                             if (locked.isEmpty()) {
+                                LaunchedEffect(Unit) { selectedLockedAlbum = null }
                                 EmptyState(stringResource(R.string.empty_locked), padding)
                             } else if (selectedLockedAlbum != null) {
                                 val albumImages = remember(locked, selectedLockedAlbum) {
                                     locked.filter { it.bucketName.ifBlank { "Locked" } == selectedLockedAlbum }
+                                }
+                                LaunchedEffect(albumImages.isEmpty()) {
+                                    if (albumImages.isEmpty()) {
+                                        selectedLockedAlbum = null
+                                    }
                                 }
                                 PhotoGrid(
                                     images = albumImages,
@@ -1978,7 +2009,7 @@ internal fun GalleryScaffold(
                 Button(onClick = {
                     val imagesToRestore = album.images
                     pendingRestoreAlbum = null
-                    onUnlockMedia(imagesToRestore)
+                    onUnlockMedia(imagesToRestore, null)
                 }) {
                     Text(stringResource(R.string.action_restore))
                 }
@@ -2365,8 +2396,30 @@ internal fun GalleryScaffold(
                 }
             },
             onEdit = { editorImage = it; selectedId = null },
-            onLock = { onLockMedia(listOf(it)); selectedId = null },
-            onUnlock = { onUnlockMedia(listOf(it)); selectedId = null },
+            onLock = { media ->
+                onLockMedia(listOf(media)) {
+                    val activeList = viewerImages ?: images
+                    val currentIndex = activeList.indexOfFirst { it.id == media.id }
+                    val nextImage = if (activeList.size > 1 && currentIndex >= 0) {
+                        if (currentIndex < activeList.size - 1) activeList[currentIndex + 1]
+                        else activeList[currentIndex - 1]
+                    } else null
+                    selectedId = nextImage?.id
+                    viewerImages = viewerImages?.filterNot { it.id == media.id }
+                }
+            },
+            onUnlock = { media ->
+                onUnlockMedia(listOf(media)) {
+                    val activeList = viewerImages ?: images
+                    val currentIndex = activeList.indexOfFirst { it.id == media.id }
+                    val nextImage = if (activeList.size > 1 && currentIndex >= 0) {
+                        if (currentIndex < activeList.size - 1) activeList[currentIndex + 1]
+                        else activeList[currentIndex - 1]
+                    } else null
+                    selectedId = nextImage?.id
+                    viewerImages = viewerImages?.filterNot { it.id == media.id }
+                }
+            },
             onMoveToAlbum = { mediaList, dir, name, onDone ->
                 onMoveToAlbum(mediaList, dir, name) { result ->
                     if (result.successCount > 0) {

@@ -2545,7 +2545,7 @@ private suspend fun performOverwriteWrite(
         }
     }
 
-    if (image.path.isNotBlank()) {
+    if (image.path.isNotBlank() && !image.path.startsWith(context.filesDir.absolutePath)) {
         MediaScannerConnection.scanFile(
             context.applicationContext,
             arrayOf(image.path),

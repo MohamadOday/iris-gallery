@@ -345,9 +345,16 @@ class TrashRepository(private val context: Context) {
 
         currentItems.removeAll { item ->
             if (item.id in idsToRemove) {
-                val file = File(trashDir, item.trashFileName)
-                runCatching { file.delete() }
-                true
+                val originalIntact = item.originalPath.isBlank() ||
+                    File(item.originalPath).let { it.exists() && it.length() > 0L }
+                if (originalIntact) {
+                    val file = File(trashDir, item.trashFileName)
+                    runCatching { file.delete() }
+                    true
+                } else {
+                    // Never delete the trash copy if the original file on storage is already gone.
+                    false
+                }
             } else {
                 false
             }
@@ -714,7 +721,7 @@ class TrashRepository(private val context: Context) {
         val usedIds = mutableSetOf<Long>()
         val videoExtensions = setOf("mp4", "mkv", "webm", "avi", "mov", "m4v", "3gp", "ts")
         for (file in files) {
-            if (!file.isFile || file.length() <= 0L) continue
+            if (!file.isFile || file.name.startsWith(".") || file.name.endsWith(".iris_tmp") || file.name.endsWith(".tmp") || file.length() <= 0L) continue
             val separator = file.name.indexOf('_')
             val parsedId = if (separator > 0) file.name.substring(0, separator).toLongOrNull() else null
             val uniqueId = parsedId?.takeIf { it > 0 && usedIds.add(it) }
