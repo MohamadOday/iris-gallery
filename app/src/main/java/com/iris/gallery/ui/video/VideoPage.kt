@@ -106,6 +106,7 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.ui.MediaThumbnail
+import com.iris.gallery.ui.nextDoubleTapScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -334,64 +335,53 @@ fun VideoPage(
                             }
                             else -> {
                                 if (doubleTapToZoom) {
-                                    if (!multiStageZoom) {
-                                        if (scale > 1.05f) {
-                                            scale = 1f
-                                            offset = Offset.Zero
-                                            onZoomChanged(false)
-                                        } else {
-                                            val targetZoom = if(doubleTapZoomLevel == -1.0f) 2.5f else doubleTapZoomLevel
-                                            scale = targetZoom
-                                            offset = clamp(Offset.Zero, targetZoom)
-                                            onZoomChanged(true)
-                                        }
+                                    val containerWidth = size.width.toFloat()
+                                    val containerHeight = size.height.toFloat()
+                                    val containerAspect = containerWidth / containerHeight.coerceAtLeast(1f)
+                                    val displayedWidth = if (displayAspect > containerAspect) {
+                                        containerWidth
                                     } else {
-                                        // Multi-stage zoom: cycle through Fit(1f) -> Fill -> 1:1 -> Fit
-                                        val containerAspect = size.width.toFloat() / size.height.coerceAtLeast(1)
-                                        val fillScale = if (displayAspect > containerAspect) {
-                                            (size.height.toFloat() * displayAspect) / size.width.toFloat()
-                                        } else {
-                                            (size.width.toFloat() / displayAspect) / size.height.toFloat()
-                                        }.coerceIn(1f, 5f)
-                                        // "1:1" stage: scale so source pixels match display pixels.
-                                        val displayedWidth = if (displayAspect > containerAspect) {
-                                            size.width.toFloat()
-                                        } else {
-                                            size.height.toFloat() * displayAspect
-                                        }
-                                        val quarterTurn = ((media.orientation % 360) + 360) % 360 in setOf(90, 270)
-                                        val sourceWidth = (if (quarterTurn) media.height else media.width).coerceAtLeast(1).toFloat()
-                                        val originalScale = (sourceWidth / displayedWidth).coerceIn(1f, 5f)
-                                        val candidateStages = listOf(fillScale, originalScale, doubleTapZoomLevel)
-                                            .filter { it > 1.15f }
-                                            .sorted()
-                                        val distinctStages = mutableListOf<Float>()
-                                        for (stage in candidateStages) {
-                                            if (distinctStages.none { kotlin.math.abs(it - stage) < 0.2f }) {
-                                                distinctStages.add(stage)
-                                            }
-                                        }
-                                        if (distinctStages.isEmpty()) {
-                                            distinctStages.add(doubleTapZoomLevel.coerceIn(1.5f, 4f))
-                                        }
-                                        val stages = listOf(1f) + distinctStages
-                                        val referenceScale = scale
-                                        val nextScale = stages.firstOrNull { it > referenceScale + 0.15f } ?: 1f
-                                        if (nextScale <= 1.05f) {
-                                            scale = 1f
-                                            offset = Offset.Zero
-                                            onZoomChanged(false)
-                                        } else {
-                                            val center = Offset(size.width / 2f, size.height / 2f)
-                                            val z = nextScale / scale
-                                            val targetOffset = clamp(
-                                                offset + (position - center - offset) * (1f - z),
-                                                nextScale
-                                            )
-                                            scale = nextScale
-                                            offset = targetOffset
-                                            onZoomChanged(true)
-                                        }
+                                        containerHeight * displayAspect
+                                    }
+                                    val displayedHeight = if (displayAspect > containerAspect) {
+                                        containerWidth / displayAspect
+                                    } else {
+                                        containerHeight
+                                    }
+                                    val fillScale = maxOf(
+                                        containerWidth / displayedWidth.coerceAtLeast(1f),
+                                        containerHeight / displayedHeight.coerceAtLeast(1f)
+                                    ).coerceIn(1f, 5f)
+                                    // "1:1" stage: scale so source pixels match display pixels.
+                                    val quarterTurn = ((media.orientation % 360) + 360) % 360 in setOf(90, 270)
+                                    val sourceWidth = (if (quarterTurn) media.height else media.width).coerceAtLeast(1).toFloat()
+                                    val oneToOneScale = (sourceWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 5f)
+                                    val configuredScale = when {
+                                        doubleTapZoomLevel == -1.0f -> oneToOneScale
+                                        doubleTapZoomLevel > 1f -> doubleTapZoomLevel
+                                        else -> oneToOneScale
+                                    }
+                                    val nextScale = nextDoubleTapScale(
+                                        currentScale = scale,
+                                        fillScale = fillScale,
+                                        oneToOneScale = oneToOneScale,
+                                        configuredScale = configuredScale,
+                                        multiStage = multiStageZoom,
+                                    )
+                                    if (nextScale <= 1.001f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                        onZoomChanged(false)
+                                    } else {
+                                        val center = Offset(containerWidth / 2f, containerHeight / 2f)
+                                        val z = nextScale / scale.coerceAtLeast(0.01f)
+                                        val targetOffset = clamp(
+                                            offset + (position - center - offset) * (1f - z),
+                                            nextScale
+                                        )
+                                        scale = nextScale
+                                        offset = targetOffset
+                                        onZoomChanged(true)
                                     }
                                 } else {
                                     val nextPlaying = !engine.player.isPlaying

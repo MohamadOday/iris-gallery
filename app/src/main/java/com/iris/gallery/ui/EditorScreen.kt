@@ -2517,13 +2517,28 @@ private suspend fun performOverwriteWrite(
         }
     }
 
-    if (image.id > 0) {
-        val targetUri = canonicalMediaUri(context, image)
-        val nowSec = System.currentTimeMillis() / 1000L
+    // Overwriting must not move the photo in the timeline. Pin the date it had
+    // before the edit, otherwise MediaStore derives DATE_TAKEN from the fresh
+    // file mtime and the photo jumps to the top of the Media tab.
+    val preservedTakenMs = image.dateTaken.takeIf { it > 0L }
+    val preservedAddedSec = when {
+        image.dateAdded > 0L -> image.dateAdded / 1000L
+        preservedTakenMs != null -> preservedTakenMs / 1000L
+        else -> System.currentTimeMillis() / 1000L
+    }
+    val nowSec = System.currentTimeMillis() / 1000L
+    val timestampValues = ContentValues().apply {
+        preservedTakenMs?.let { put(MediaStore.Images.Media.DATE_TAKEN, it) }
+        put(MediaStore.Images.Media.DATE_ADDED, preservedAddedSec)
+    }
+    val targetUri = if (image.id > 0) canonicalMediaUri(context, image) else null
+    if (targetUri != null) {
         val updateValues = ContentValues().apply {
             put(MediaStore.Images.Media.DATE_MODIFIED, nowSec)
             put(MediaStore.Images.Media.SIZE, bytes.size.toLong())
             put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
+            preservedTakenMs?.let { put(MediaStore.Images.Media.DATE_TAKEN, it) }
+            put(MediaStore.Images.Media.DATE_ADDED, preservedAddedSec)
         }
         runCatching {
             context.contentResolver.update(targetUri, updateValues, null, null)
@@ -2534,9 +2549,18 @@ private suspend fun performOverwriteWrite(
         MediaScannerConnection.scanFile(
             context.applicationContext,
             arrayOf(image.path),
-            arrayOf(format.mimeType),
-            null
-        )
+            arrayOf(format.mimeType)
+        ) { _, scannedUri ->
+            // A rescan rebuilds metadata from the file, so put the capture date
+            // back once the scanner is done with the row. Prefer the URI the
+            // scanner reports in case it had to rebuild the MediaStore row.
+            val rowUri = scannedUri ?: targetUri
+            if (rowUri != null) {
+                runCatching {
+                    context.contentResolver.update(rowUri, timestampValues, null, null)
+                }
+            }
+        }
     }
 
     runCatching {

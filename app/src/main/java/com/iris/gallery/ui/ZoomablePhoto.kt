@@ -242,80 +242,52 @@ internal fun ZoomablePhoto(
                         onTap = { onTap() },
                         onDoubleTap = { tapPos ->
                             coroutineScope.launch {
-                                val currentScale = scaleAnim.value
-                                val currentOffset = offsetAnim.value
-                                if (!multiStageZoom) {
-                                    if (currentScale > 1.05f || kotlin.math.abs(rotationAnim.value) > 1f) {
-                                        launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
-                                        onZoomChanged(false)
-                                    } else {
-                                        val targetScale = if (doubleTapZoomLevel == -1.0f) {
-                                            val (displayedWidth, _, imgWidth) = computeImageMetrics()
-                                            if (image.isSvg) {
-                                                2.5f
-                                            } else {
-                                                val originalScale = (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(0.1f, 50f)
-                                                if (currentScale >= originalScale) 2.5f else originalScale
-                                            }
-                                        } else {
-                                            doubleTapZoomLevel
-                                        }
-                                        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                        val z = targetScale / currentScale
-                                        val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), targetScale)
-                                        launch { scaleAnim.animateTo(targetScale, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
-                                        onZoomChanged(true)
-                                    }
+                                val (displayedWidth, displayedHeight, imgWidth) = computeImageMetrics()
+                                val containerWidth = containerSize.width.toFloat()
+                                val containerHeight = containerSize.height.toFloat()
+                                val fillScale = maxOf(
+                                    containerWidth / displayedWidth.coerceAtLeast(1f),
+                                    containerHeight / displayedHeight.coerceAtLeast(1f)
+                                ).coerceIn(1f, 50f)
+                                val oneToOneScale = if (image.isSvg) {
+                                    2.5f
                                 } else {
-                                    val (displayedWidth, displayedHeight, imgWidth) = computeImageMetrics()
-                                    val fillScale = maxOf(
-                                        containerSize.width.toFloat() / displayedWidth.coerceAtLeast(1f),
-                                        containerSize.height.toFloat() / displayedHeight.coerceAtLeast(1f)
-                                    ).coerceIn(1f, 50f)
-                                    val defaultTapZoomLevel = if (doubleTapZoomLevel == -1.0f) 2.5f else doubleTapZoomLevel
-                                    val originalScale = if (image.isSvg) defaultTapZoomLevel else (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(0.1f, 50f)
-                                    val stages = mutableListOf(1f)
-                                    var fillIndex = 0
-                                    var originalIndex = 0
-                                    for ((stageIndex, stage) in listOf(fillScale, originalScale).withIndex()) {
-                                        val existingIndex = stages.indexOf(stage)
-                                        val index = if (existingIndex >= 0) {
-                                            existingIndex
-                                        } else {
-                                            stages.add(stage)
-                                            stages.lastIndex
-                                        }
-                                        if (stageIndex == 0) fillIndex = index else originalIndex = index
-                                    }
-                                    val referenceScale = currentScale.coerceAtLeast(0.001f)
-                                    if (stages.size == 1 && stages[0] == 1f && referenceScale <= 1.05f && defaultTapZoomLevel != 1f) {
-                                        stages.add(defaultTapZoomLevel)
-                                        originalIndex = stages.lastIndex
-                                    }
-                                    val nextStage = when {
-                                        referenceScale < stages[0] * 0.95f -> 0
-                                        fillIndex > 0 && referenceScale < stages[fillIndex] * 0.95f -> fillIndex
-                                        originalIndex > 0 && referenceScale < stages[originalIndex] * 0.95f -> originalIndex
-                                        else -> 0
-                                    }
-                                    val nextScale = stages[nextStage]
-                                    if (nextStage == 0) {
-                                        launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                    (imgWidth / displayedWidth.coerceAtLeast(1f)).coerceIn(1f, 50f)
+                                }
+                                val configuredScale = when {
+                                    doubleTapZoomLevel == -1.0f -> oneToOneScale
+                                    doubleTapZoomLevel > 1f -> doubleTapZoomLevel
+                                    else -> oneToOneScale
+                                }
+                                // Use the animation target so quick repeated taps advance
+                                // through the stages instead of re-triggering the same one.
+                                val targetScale = nextDoubleTapScale(
+                                    currentScale = scaleAnim.targetValue,
+                                    fillScale = fillScale,
+                                    oneToOneScale = oneToOneScale,
+                                    configuredScale = configuredScale,
+                                    multiStage = multiStageZoom,
+                                )
+                                val currentScale = scaleAnim.value.coerceAtLeast(0.01f)
+                                val currentOffset = offsetAnim.value
+                                if (targetScale <= 1.001f) {
+                                    launch { scaleAnim.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { offsetAnim.animateTo(Offset.Zero, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
+                                    onZoomChanged(false)
+                                } else {
+                                    val center = Offset(containerWidth / 2f, containerHeight / 2f)
+                                    val z = targetScale / currentScale
+                                    val targetOffset = clampOffset(
+                                        currentOffset + (tapPos - center - currentOffset) * (1f - z),
+                                        targetScale
+                                    )
+                                    launch { scaleAnim.animateTo(targetScale, tween(260, easing = FastOutSlowInEasing)) }
+                                    launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
+                                    if (kotlin.math.abs(rotationAnim.value) > 1f) {
                                         launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
-                                        onZoomChanged(false)
-                                    } else {
-                                        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
-                                        val z = nextScale / currentScale.coerceAtLeast(0.001f)
-                                        val targetOffset = clampOffset(currentOffset + (tapPos - center - currentOffset) * (1f - z), nextScale)
-                                        launch { scaleAnim.animateTo(nextScale, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { offsetAnim.animateTo(targetOffset, tween(260, easing = FastOutSlowInEasing)) }
-                                        launch { rotationAnim.animateTo(0f, tween(260, easing = FastOutSlowInEasing)) }
-                                        onZoomChanged(true)
                                     }
+                                    onZoomChanged(true)
                                 }
                             }
                         },
