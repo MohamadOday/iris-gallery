@@ -1,0 +1,8 @@
+• Vault & Trash Overhaul: Fixed partial-delete rollback wiping vault copies (#226), added automatic orphan recovery for interrupted moves (#197, #240), fixed Scoped Storage restores on Android 10+ (#199, #239), added a progress dialog for album locks, and sorted trash newest-first (#230)
+• Zero Network Permissions: Stripped the transitive ACCESS_NETWORK_STATE permission pulled in by Media3 so the manifest stays 100% offline (#228, #232)
+• Media Tab Filter: Filter the main Media tab by All, Photos, or Videos (#225, #227, thanks @AndroidSuggest)
+• Photo Editor & Timeline Fixes: Overwriting a photo now keeps its original capture date (#229), fixed rotation snap spinning (#212, thanks @AndroidSuggest), and switched transform actions to clean icon buttons (#211)
+• Viewer & Albums: Fixed multi-stage double-tap zoom (#209, #215, thanks @AndroidSuggest), added Copy Image to clipboard (#231), viewer background options (#218), album list view (#222), and moved album search/sort to the top bar (#239)
+• Sorting, Camera Sync & Thumbnails: Fixed resolveDateTaken sorting (#200, #201, thanks @AndroidSuggest), incremental ContentObserver updates for new camera shots, sharper large-grid thumbnails (#198), and capped huge image decodes to prevent OOM crashes
+• Privacy & Security: Deeper EXIF/XMP metadata stripping when sharing (#223), PBKDF2 PIN hashing with forgot-PIN reset, and backup exclusions for vault/trash
+• Translations: Updated Polish (#210, thanks @tmpjx555) and Brazilian Portuguese (#216, thanks @matcxz)
