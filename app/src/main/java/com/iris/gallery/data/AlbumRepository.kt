@@ -101,7 +101,13 @@ class AlbumRepository(private val context: Context) {
         withTimeoutOrNull(4000) { latch.await() }
     }
 
-    private fun queryMediaStoreIdByPath(path: String, isVideo: Boolean): Long? {
+    private data class MediaStoreRowInfo(
+        val id: Long,
+        val bucketId: Long,
+        val bucketName: String,
+    )
+
+    private fun queryMediaStoreInfoByPath(path: String, isVideo: Boolean): MediaStoreRowInfo? {
         val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(path) else "external"
         val baseTable = if (isVideo) {
             if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
@@ -113,12 +119,26 @@ class AlbumRepository(private val context: Context) {
         return runCatching {
             context.contentResolver.query(
                 baseTable,
-                arrayOf(MediaStore.MediaColumns._ID),
+                arrayOf(
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.Images.Media.BUCKET_ID,
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+                ),
                 "${MediaStore.MediaColumns.DATA}=?",
                 arrayOf(path),
                 null
             )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getLong(0) else null
+                if (!cursor.moveToFirst()) return@use null
+                val idCol = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+                val bIdCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_ID)
+                val bNameCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                val rowId = if (idCol >= 0) cursor.getLong(idCol) else 0L
+                if (rowId <= 0L) return@use null
+                MediaStoreRowInfo(
+                    id = rowId,
+                    bucketId = if (bIdCol >= 0) cursor.getLong(bIdCol) else 0L,
+                    bucketName = if (bNameCol >= 0) cursor.getString(bNameCol).orEmpty() else "",
+                )
             }
         }.getOrNull()
     }
@@ -140,6 +160,7 @@ class AlbumRepository(private val context: Context) {
         val targetRelativePath = getTargetRelativePath(targetDir)
         val targetBucketId = targetDir.absolutePath.lowercase(Locale.ROOT).hashCode().toLong()
         val pathsToScan = mutableListOf<String>()
+        val pathsNeedingInfoResolve = mutableSetOf<String>()
 
         for (item in mediaList) {
             val srcFile = if (item.path.isNotBlank()) File(item.path) else null
@@ -153,11 +174,15 @@ class AlbumRepository(private val context: Context) {
             var finalName = item.name
             var finalId = item.id
             var finalUri = item.uri
+            var finalBucketId = targetBucketId
+            var finalBucketName = targetAlbumName
 
             if (srcFile != null && srcFile.exists() && srcFile.parentFile?.canonicalPath == targetDir.canonicalPath) {
                 done = true
                 finalPath = srcFile.absolutePath
                 finalName = srcFile.name
+                if (item.bucketId != 0L) finalBucketId = item.bucketId
+                if (item.bucketName.isNotBlank()) finalBucketName = item.bucketName
             }
 
             // 1. Try MediaStore RELATIVE_PATH update on API 29+ within the same volume
@@ -170,28 +195,33 @@ class AlbumRepository(private val context: Context) {
                 }.getOrDefault(false)
 
                 if (updated) {
-                    val (resPath, resName, _) = runCatching {
+                    var resPath: String? = null
+                    var resName: String? = null
+                    var resBucketId = 0L
+                    var resBucketName = ""
+                    runCatching {
                         context.contentResolver.query(
                             canonicalUri,
                             arrayOf(
                                 MediaStore.MediaColumns.DATA,
                                 MediaStore.MediaColumns.DISPLAY_NAME,
-                                MediaStore.MediaColumns.BUCKET_ID
+                                MediaStore.Images.Media.BUCKET_ID,
+                                MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
                             ),
                             null, null, null
                         )?.use { cursor ->
                             if (cursor.moveToFirst()) {
                                 val dataCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
                                 val nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                                val bIdCol = cursor.getColumnIndex(MediaStore.MediaColumns.BUCKET_ID)
-                                Triple(
-                                    if (dataCol >= 0) cursor.getString(dataCol) else null,
-                                    if (nameCol >= 0) cursor.getString(nameCol) else null,
-                                    if (bIdCol >= 0) cursor.getLong(bIdCol) else null
-                                )
-                            } else Triple(null, null, null)
+                                val bIdCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_ID)
+                                val bNameCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                                resPath = if (dataCol >= 0) cursor.getString(dataCol) else null
+                                resName = if (nameCol >= 0) cursor.getString(nameCol) else null
+                                resBucketId = if (bIdCol >= 0) cursor.getLong(bIdCol) else 0L
+                                resBucketName = if (bNameCol >= 0) cursor.getString(bNameCol).orEmpty() else ""
+                            }
                         }
-                    }.getOrNull() ?: Triple(null, null, null)
+                    }
 
                     val resolvedName = resName ?: item.name
                     val resolvedPath = resPath ?: File(targetDir, resolvedName).absolutePath
@@ -200,6 +230,8 @@ class AlbumRepository(private val context: Context) {
                     finalName = resolvedName
                     finalId = item.id
                     finalUri = canonicalUri
+                    if (resBucketId != 0L) finalBucketId = resBucketId
+                    if (resBucketName.isNotBlank()) finalBucketName = resBucketName
                     pathsToScan.add(resolvedPath)
                     if (srcFile != null && srcFile.absolutePath != resolvedPath) {
                         pathsToScan.add(srcFile.absolutePath)
@@ -234,6 +266,7 @@ class AlbumRepository(private val context: Context) {
                     finalName = destFile.name
                     pathsToScan.add(destFile.absolutePath)
                     pathsToScan.add(srcFile.absolutePath)
+                    pathsNeedingInfoResolve.add(destFile.absolutePath)
                 }
             }
 
@@ -285,14 +318,15 @@ class AlbumRepository(private val context: Context) {
             if (done) {
                 success++
                 successSource.add(item)
+                RestoredTimestamps.moveDateAdded(context, item.path, finalPath)
                 val tempId = if (finalId > 0) finalId else -abs(finalPath.hashCode().toLong()).coerceAtLeast(1L)
                 val newMedia = item.copy(
                     id = tempId,
                     path = finalPath,
                     name = finalName,
                     uri = if (finalUri.authority == "media") finalUri else Uri.fromFile(File(finalPath)),
-                    bucketId = targetBucketId,
-                    bucketName = targetAlbumName
+                    bucketId = finalBucketId,
+                    bucketName = finalBucketName
                 )
                 moved.add(newMedia)
             } else {
@@ -306,9 +340,9 @@ class AlbumRepository(private val context: Context) {
         }
 
         val resolvedMoved = moved.map { movedItem ->
-            if (movedItem.id < 0 && movedItem.path.isNotBlank()) {
-                val resolvedId = queryMediaStoreIdByPath(movedItem.path, movedItem.isVideo)
-                if (resolvedId != null && resolvedId > 0) {
+            if ((movedItem.id < 0 || movedItem.path in pathsNeedingInfoResolve) && movedItem.path.isNotBlank()) {
+                val info = queryMediaStoreInfoByPath(movedItem.path, movedItem.isVideo)
+                if (info != null && info.id > 0) {
                     val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(movedItem.path) else "external"
                     val baseTable = if (movedItem.isVideo) {
                         if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
@@ -318,8 +352,10 @@ class AlbumRepository(private val context: Context) {
                         else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                     }
                     movedItem.copy(
-                        id = resolvedId,
-                        uri = ContentUris.withAppendedId(baseTable, resolvedId)
+                        id = info.id,
+                        uri = ContentUris.withAppendedId(baseTable, info.id),
+                        bucketId = if (info.bucketId != 0L) info.bucketId else movedItem.bucketId,
+                        bucketName = info.bucketName.ifBlank { movedItem.bucketName },
                     )
                 } else {
                     movedItem
@@ -410,8 +446,8 @@ class AlbumRepository(private val context: Context) {
         }
 
         val resolvedCopied = copied.map { copiedItem ->
-            val resolvedId = queryMediaStoreIdByPath(copiedItem.path, copiedItem.isVideo)
-            if (resolvedId != null && resolvedId > 0) {
+            val info = queryMediaStoreInfoByPath(copiedItem.path, copiedItem.isVideo)
+            if (info != null && info.id > 0) {
                 val vol = if (Build.VERSION.SDK_INT >= 29) resolveVolumeName(copiedItem.path) else "external"
                 val baseTable = if (copiedItem.isVideo) {
                     if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(vol)
@@ -421,8 +457,10 @@ class AlbumRepository(private val context: Context) {
                     else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 }
                 copiedItem.copy(
-                    id = resolvedId,
-                    uri = ContentUris.withAppendedId(baseTable, resolvedId)
+                    id = info.id,
+                    uri = ContentUris.withAppendedId(baseTable, info.id),
+                    bucketId = if (info.bucketId != 0L) info.bucketId else copiedItem.bucketId,
+                    bucketName = info.bucketName.ifBlank { copiedItem.bucketName },
                 )
             } else {
                 copiedItem

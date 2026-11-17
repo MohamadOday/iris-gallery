@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -120,6 +121,7 @@ internal fun PhotoGrid(
     showFavoriteBadge: Boolean = true,
     onToggleSelection: ((Long) -> Unit)? = null,
     onSetSelection: ((Long, Boolean) -> Unit)? = null,
+    onSetBatchSelection: ((Collection<Long>, Boolean) -> Unit)? = null,
     onSetDateSelection: ((List<Long>, Boolean) -> Unit)? = null,
     onInvalidMedia: ((MediaImage) -> Unit)? = null,
     onOpen: (MediaImage) -> Unit,
@@ -336,6 +338,22 @@ internal fun PhotoGrid(
     val currentImages by rememberUpdatedState(images)
     val currentSelection by rememberUpdatedState(selectedIds)
     val currentSetSelection by rememberUpdatedState(onSetSelection)
+    val currentSetBatchSelection by rememberUpdatedState(onSetBatchSelection)
+    var lastSelectedAnchorId by remember { mutableStateOf<Long?>(null) }
+    var previousObservedSelection by remember { mutableStateOf(selectedIds) }
+    LaunchedEffect(selectedIds) {
+        if (selectedIds.isEmpty()) {
+            lastSelectedAnchorId = null
+        } else {
+            val added = selectedIds - previousObservedSelection
+            if (added.size == 1) {
+                lastSelectedAnchorId = added.first()
+            } else if (lastSelectedAnchorId !in selectedIds) {
+                lastSelectedAnchorId = selectedIds.lastOrNull()
+            }
+        }
+        previousObservedSelection = selectedIds
+    }
     val currentCellSize by rememberUpdatedState(cellSize)
     val currentOnCellSizeChange by rememberUpdatedState(onCellSizeChange)
     val formatTimelineLabel: (Long) -> String = remember(currentLocale, timelineDateFormat, customTimelineDateFormat, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, useRelativeDates, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
@@ -384,8 +402,8 @@ internal fun PhotoGrid(
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(cellSize),
-            modifier = Modifier.fillMaxSize().pointerInput(gridState, onSetSelection) {
-                if (currentSetSelection == null) return@pointerInput
+            modifier = Modifier.fillMaxSize().pointerInput(gridState, onSetSelection, onSetBatchSelection) {
+                if (currentSetSelection == null && currentSetBatchSelection == null) return@pointerInput
                 var selecting = true
                 var startId: Long? = null
                 var startPosition = Offset.Zero
@@ -395,6 +413,15 @@ internal fun PhotoGrid(
                 var autoScrollJob: kotlinx.coroutines.Job? = null
                 val edge = 72.dp.toPx()
                 val dragSlop = 16.dp.toPx()
+                fun applyBatchSelection(ids: Collection<Long>, selected: Boolean) {
+                    if (ids.isEmpty()) return
+                    val batch = currentSetBatchSelection
+                    if (batch != null) {
+                        batch(ids, selected)
+                    } else {
+                        ids.forEach { currentSetSelection?.invoke(it, selected) }
+                    }
+                }
                 fun mediaAt(position: Offset) = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
                     item.key is Long &&
                         position.x >= item.offset.x && position.x <= item.offset.x + item.size.width &&
@@ -403,14 +430,39 @@ internal fun PhotoGrid(
                 detectDragGesturesAfterLongPress(
                     onDragStart = { position ->
                         val id = mediaAt(position) ?: return@detectDragGesturesAfterLongPress
-                        startId = id
-                        startPosition = position
+                        val anchorId = lastSelectedAnchorId
                         initialSelection = currentSelection
-                        selecting = id !in initialSelection
+                        startPosition = position
                         suppressReleaseClickId = id
                         hasDragged = false
-                        previousDragIds = setOf(id)
-                        currentSetSelection?.invoke(id, selecting)
+
+                        val allImages = currentImages
+                        val anchorIdx = if (
+                            anchorId != null &&
+                            initialSelection.isNotEmpty() &&
+                            anchorId in initialSelection &&
+                            id !in initialSelection &&
+                            id != anchorId
+                        ) {
+                            allImages.indexOfFirst { it.id == anchorId }
+                        } else -1
+                        val targetIdx = if (anchorIdx >= 0) allImages.indexOfFirst { it.id == id } else -1
+
+                        if (anchorIdx >= 0 && targetIdx >= 0) {
+                            val minIdx = minOf(anchorIdx, targetIdx)
+                            val maxIdx = maxOf(anchorIdx, targetIdx)
+                            val rangeIds = allImages.subList(minIdx, maxIdx + 1).map { it.id }
+                            selecting = true
+                            startId = anchorId
+                            previousDragIds = rangeIds.toSet()
+                            lastSelectedAnchorId = id
+                            applyBatchSelection(rangeIds, true)
+                        } else {
+                            startId = id
+                            selecting = id !in initialSelection
+                            previousDragIds = setOf(id)
+                            applyBatchSelection(listOf(id), selecting)
+                        }
                     },
                     onDrag = { change, _ ->
                         val sId = startId
@@ -430,13 +482,16 @@ internal fun PhotoGrid(
                                     val minIdx = minOf(startIndex, currIndex)
                                     val maxIdx = maxOf(startIndex, currIndex)
                                     val currentRangeIds = allImages.subList(minIdx, maxIdx + 1).map { it.id }.toSet()
-                                    currentRangeIds.forEach { id ->
-                                        currentSetSelection?.invoke(id, selecting)
+                                    if (currentRangeIds != previousDragIds) {
+                                        val entered = currentRangeIds - previousDragIds
+                                        val exited = previousDragIds - currentRangeIds
+                                        applyBatchSelection(entered, selecting)
+                                        if (exited.isNotEmpty()) {
+                                            applyBatchSelection(exited.filter { it in initialSelection }, true)
+                                            applyBatchSelection(exited.filter { it !in initialSelection }, false)
+                                        }
+                                        previousDragIds = currentRangeIds
                                     }
-                                    previousDragIds.filter { it !in currentRangeIds }.forEach { id ->
-                                        currentSetSelection?.invoke(id, id in initialSelection)
-                                    }
-                                    previousDragIds = currentRangeIds
                                 }
                             }
                             val scrollBy = when {

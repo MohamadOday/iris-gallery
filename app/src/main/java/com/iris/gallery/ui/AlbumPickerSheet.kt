@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
@@ -31,6 +33,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
@@ -61,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iris.gallery.R
 import com.iris.gallery.data.AlbumAction
+import com.iris.gallery.data.AlbumPickerSort
 import com.iris.gallery.data.MediaImage
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +76,8 @@ fun AlbumPickerSheet(
     selectedCount: Int,
     albums: List<MediaAlbum>,
     currentAlbumId: Long? = null,
+    pickerSort: AlbumPickerSort = AlbumPickerSort.FOLLOW_ALBUMS,
+    onPickerSortChanged: ((AlbumPickerSort) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSelectAlbum: (MediaAlbum) -> Unit,
     onCreateAlbum: (String) -> Unit,
@@ -77,6 +85,7 @@ fun AlbumPickerSheet(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
 
     val filteredAlbums = remember(albums, searchQuery, currentAlbumId, action) {
         val list = if (action == AlbumAction.MOVE && currentAlbumId != null) {
@@ -122,6 +131,68 @@ fun AlbumPickerSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (onPickerSortChanged != null) {
+                    val sortLabel = when (pickerSort) {
+                        AlbumPickerSort.FOLLOW_ALBUMS -> stringResource(R.string.album_picker_sort_albums)
+                        AlbumPickerSort.RECENT -> stringResource(R.string.album_picker_sort_recent)
+                        AlbumPickerSort.NAME -> stringResource(R.string.album_picker_sort_name)
+                    }
+                    Box {
+                        Surface(
+                            onClick = { showSortMenu = true },
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.Sort,
+                                    contentDescription = stringResource(R.string.action_sort),
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = sortLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            listOf(
+                                AlbumPickerSort.FOLLOW_ALBUMS to stringResource(R.string.album_picker_sort_albums),
+                                AlbumPickerSort.RECENT to stringResource(R.string.album_picker_sort_recent),
+                                AlbumPickerSort.NAME to stringResource(R.string.album_picker_sort_name),
+                            ).forEach { (option, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    trailingIcon = if (pickerSort == option) {
+                                        {
+                                            Icon(
+                                                Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    } else null,
+                                    onClick = {
+                                        showSortMenu = false
+                                        onPickerSortChanged(option)
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.action_cancel))

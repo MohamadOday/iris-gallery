@@ -546,6 +546,9 @@ class VaultRepository(private val context: Context) {
             if (restored != null) {
                 runCatching { vaultFile.delete() }
                 currentItems.remove(item)
+                if (item.dateAdded > 0L && restored.path.isNotBlank()) {
+                    RestoredTimestamps.recordDateAdded(context, restored.path, item.dateAdded)
+                }
                 if (item.originalPath.isNotBlank()) {
                     restoredOriginalPaths.add(item.originalPath)
                 }

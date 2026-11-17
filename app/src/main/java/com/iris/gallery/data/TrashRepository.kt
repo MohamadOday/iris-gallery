@@ -1,11 +1,13 @@
 package com.iris.gallery.data
 
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AtomicFile
@@ -13,11 +15,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.coroutines.resume
 import kotlin.math.abs
 
 data class TrashMoveResult(
@@ -32,7 +37,7 @@ data class TrashRestoreResult(
     val failed: Int,
 )
 
-private data class TrashRestoreTarget(val uri: Uri, val path: String)
+private data class TrashRestoreTarget(val uri: Uri, val path: String, val needsMediaScan: Boolean = false)
 
 private data class RestoreDestination(val volume: String, val relativePath: String)
 
@@ -144,6 +149,30 @@ class TrashRepository(private val context: Context) {
         mediaList
     }
 
+    private fun deleteMediaUri(
+        uri: Uri,
+        selection: String? = null,
+        selectionArgs: Array<String>? = null,
+    ): Boolean {
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val extras = Bundle().apply {
+                    // System trash items have IS_TRASHED=1 and are excluded from default MediaStore operations unless matched explicitly.
+                    putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+                    if (selection != null) {
+                        putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                    }
+                    if (selectionArgs != null) {
+                        putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                    }
+                }
+                context.contentResolver.delete(uri, extras) > 0
+            } else {
+                context.contentResolver.delete(uri, selection, selectionArgs) > 0
+            }
+        }.getOrDefault(false)
+    }
+
     fun deleteFromStorage(item: MediaImage): Boolean {
         var deleted = false
         if (item.path.isNotBlank()) {
@@ -168,49 +197,36 @@ class TrashRepository(private val context: Context) {
         } else {
             item.uri
         }
-        val contentDeleted = runCatching {
-            context.contentResolver.delete(mediaStoreUri, null, null) > 0
-        }.getOrDefault(false)
+        val contentDeleted = deleteMediaUri(mediaStoreUri)
         deleted = deleted || contentDeleted
 
         if (item.id > 0) {
             val table = if (item.isVideo) MediaStore.Video.Media.getContentUri(mediaVolume) else MediaStore.Images.Media.getContentUri(mediaVolume)
-            val idDeleted = runCatching {
-                context.contentResolver.delete(table, "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString())) > 0
-            }.getOrDefault(false)
+            val idDeleted = deleteMediaUri(table, "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
             deleted = deleted || idDeleted
-            runCatching {
-                context.contentResolver.delete(MediaStore.Files.getContentUri(mediaVolume), "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
-            }
+            deleteMediaUri(MediaStore.Files.getContentUri(mediaVolume), "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
             if (mediaVolume == "external" && Build.VERSION.SDK_INT >= 29) {
-                runCatching {
-                    context.contentResolver.delete(MediaStore.Files.getContentUri("external_primary"), "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
-                }
+                deleteMediaUri(MediaStore.Files.getContentUri("external_primary"), "${MediaStore.MediaColumns._ID}=?", arrayOf(item.id.toString()))
             }
         }
 
         if (item.uri != mediaStoreUri) {
-            val genericDeleted = runCatching {
-                context.contentResolver.delete(item.uri, null, null) > 0
-            }.getOrDefault(false)
+            val genericDeleted = deleteMediaUri(item.uri)
             deleted = deleted || genericDeleted
         }
 
         if (item.path.isNotBlank()) {
             val table = if (item.isVideo) MediaStore.Video.Media.getContentUri(mediaVolume) else MediaStore.Images.Media.getContentUri(mediaVolume)
-            val pathDeleted = runCatching {
-                context.contentResolver.delete(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path)) > 0
-            }.getOrDefault(false)
+            val pathDeleted = deleteMediaUri(table, "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
             deleted = deleted || pathDeleted
-            runCatching {
-                context.contentResolver.delete(MediaStore.Files.getContentUri(mediaVolume), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
-            }
+            deleteMediaUri(MediaStore.Files.getContentUri(mediaVolume), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
             if (mediaVolume == "external" && Build.VERSION.SDK_INT >= 29) {
-                runCatching {
-                    context.contentResolver.delete(MediaStore.Files.getContentUri("external_primary"), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
-                }
+                deleteMediaUri(MediaStore.Files.getContentUri("external_primary"), "${MediaStore.MediaColumns.DATA}=?", arrayOf(item.path))
             }
             MediaScannerConnection.scanFile(context, arrayOf(item.path), null, null)
+        }
+        if (deleted && item.path.isNotBlank()) {
+            RestoredTimestamps.removeDateAdded(context, item.path)
         }
         return deleted
     }
@@ -363,58 +379,71 @@ class TrashRepository(private val context: Context) {
         loadTrashItems()
     }
 
-    suspend fun restoreFromTrash(mediaList: List<MediaImage>): TrashRestoreResult = indexLocked {
-        val currentItems = readIndex().toMutableList()
-        val restoredList = mutableListOf<MediaImage>()
-        val idsToRemove = mediaList.map { abs(it.id) }.toSet()
-        var failedCount = 0
+    suspend fun restoreFromTrash(mediaList: List<MediaImage>): TrashRestoreResult {
+        val pathsToScan = mutableListOf<Pair<String, String?>>()
+        val result = indexLocked {
+            val currentItems = readIndex().toMutableList()
+            val restoredList = mutableListOf<MediaImage>()
+            val idsToRemove = mediaList.map { abs(it.id) }.toSet()
+            var failedCount = 0
 
-        val itemsToRestore = currentItems.filter { it.id in idsToRemove }
-        for (item in itemsToRestore) {
-            val trashFile = File(trashDir, item.trashFileName)
-            if (!trashFile.exists()) {
-                currentItems.remove(item)
-                continue
-            }
+            val itemsToRestore = currentItems.filter { it.id in idsToRemove }
+            for (item in itemsToRestore) {
+                val trashFile = File(trashDir, item.trashFileName)
+                if (!trashFile.exists()) {
+                    currentItems.remove(item)
+                    continue
+                }
 
-            val restored = runCatching { restoreFileToStorage(item, trashFile) }
-                .onFailure { android.util.Log.e("IrisTrash", "Restore failed for ${item.originalName}", it) }
-                .getOrNull()
-            if (restored != null) {
-                runCatching { trashFile.delete() }
-                currentItems.remove(item)
-                restoredList.add(
-                    MediaImage(
-                        id = item.id,
-                        uri = restored.uri,
-                        name = item.originalName,
-                        dateTaken = item.dateTaken,
-                        width = item.width,
-                        height = item.height,
-                        path = restored.path,
-                        bucketId = item.originalBucketId,
-                        bucketName = item.originalBucketName,
-                        isVideo = item.isVideo,
-                        durationMs = item.durationMs,
-                        mimeType = item.mimeType,
-                        sizeBytes = item.sizeBytes,
-                        orientation = item.orientation,
-                        title = item.title,
-                        description = item.description,
-                        dateModified = item.dateModified,
-                        dateAdded = item.dateAdded,
+                val restored = runCatching { restoreFileToStorage(item, trashFile) }
+                    .onFailure { android.util.Log.e("IrisTrash", "Restore failed for ${item.originalName}", it) }
+                    .getOrNull()
+                if (restored != null) {
+                    runCatching { trashFile.delete() }
+                    currentItems.remove(item)
+                    if (item.dateAdded > 0L && restored.path.isNotBlank()) {
+                        RestoredTimestamps.recordDateAdded(context, restored.path, item.dateAdded)
+                    }
+                    if (restored.needsMediaScan && restored.path.isNotBlank()) {
+                        pathsToScan.add(restored.path to item.mimeType.ifBlank { null })
+                    }
+                    restoredList.add(
+                        MediaImage(
+                            id = item.id,
+                            uri = restored.uri,
+                            name = item.originalName,
+                            dateTaken = item.dateTaken,
+                            width = item.width,
+                            height = item.height,
+                            path = restored.path,
+                            bucketId = item.originalBucketId,
+                            bucketName = item.originalBucketName,
+                            isVideo = item.isVideo,
+                            durationMs = item.durationMs,
+                            mimeType = item.mimeType,
+                            sizeBytes = item.sizeBytes,
+                            orientation = item.orientation,
+                            title = item.title,
+                            description = item.description,
+                            dateModified = item.dateModified,
+                            dateAdded = item.dateAdded,
+                        )
                     )
-                )
-            } else {
-                // Keep the item in the trash index. The UI reports the failure and the
-                // user can retry after fixing permissions or storage state.
-                failedCount++
+                } else {
+                    // Keep the item in the trash index. The UI reports the failure and the
+                    // user can retry after fixing permissions or storage state.
+                    failedCount++
+                }
             }
-        }
 
-        writeIndex(currentItems)
-        loadTrashItems()
-        TrashRestoreResult(restoredList, failedCount)
+            writeIndex(currentItems)
+            loadTrashItems()
+            TrashRestoreResult(restoredList, failedCount)
+        }
+        if (pathsToScan.isNotEmpty()) {
+            awaitMediaScan(pathsToScan)
+        }
+        return result
     }
 
     suspend fun deletePermanently(mediaList: List<MediaImage>) = indexLocked {
@@ -514,15 +543,27 @@ class TrashRepository(private val context: Context) {
             if (effectiveModMs > 0L) {
                 runCatching { destFile.setLastModified(effectiveModMs) }
             }
-            MediaScannerConnection.scanFile(
-                context,
-                arrayOf(destFile.absolutePath),
-                arrayOf(item.mimeType.ifBlank { null }),
-                null
-            )
-            return TrashRestoreTarget(Uri.fromFile(destFile), destFile.absolutePath)
+            return TrashRestoreTarget(Uri.fromFile(destFile), destFile.absolutePath, needsMediaScan = true)
         }
         return null
+    }
+
+    private suspend fun awaitMediaScan(pathsWithMime: List<Pair<String, String?>>) {
+        val paths = pathsWithMime.map { it.first }.toTypedArray()
+        val mimes = pathsWithMime.map { it.second }.toTypedArray()
+        withTimeoutOrNull(3_000L) {
+            suspendCancellableCoroutine { cont ->
+                var remaining = paths.size
+                MediaScannerConnection.scanFile(context, paths, mimes) { _, _ ->
+                    synchronized(paths) {
+                        remaining--
+                        if (remaining <= 0 && cont.isActive) {
+                            cont.resume(Unit)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun restoreViaMediaStore(

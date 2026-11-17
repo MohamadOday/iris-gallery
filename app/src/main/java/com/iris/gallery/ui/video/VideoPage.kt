@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.SystemClock
@@ -97,6 +96,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import com.iris.gallery.ui.bottomSystemGestureDeadzonePx
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -135,25 +137,17 @@ fun VideoPage(
     onMuteToggled: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val bottomMinDeadzonePx = remember(density) { with(density) { 24.dp.toPx() } }
     val activity = remember(context) {
         generateSequence(context) { (it as? ContextWrapper)?.baseContext }
             .filterIsInstance<Activity>()
             .firstOrNull()
     }
-    val audioManager = remember(context) {
-        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-    }
-    val maxVolume = remember(audioManager) {
-        audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
-    }
-    val minVolume = remember(audioManager) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            audioManager?.getStreamMinVolume(AudioManager.STREAM_MUSIC) ?: 0
-        } else 0
-    }
 
     var currentBrightness by remember { mutableFloatStateOf(0.5f) }
-    var currentVolume by remember { mutableIntStateOf(0) }
+    var currentVolume by remember { mutableFloatStateOf(engine.player.volume.coerceIn(0f, 1f)) }
     var brightnessHudVisible by remember { mutableStateOf(false) }
     var volumeHudVisible by remember { mutableStateOf(false) }
     var brightnessHudTimer by remember { mutableLongStateOf(0L) }
@@ -208,13 +202,18 @@ fun VideoPage(
     LaunchedEffect(engine, active, autoPlay, loop) {
         if (!active) {
             isFirstFrameRendered = false
+            playing = false
             return@LaunchedEffect
         }
         engine.player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        currentVolume = engine.player.volume.coerceIn(0f, 1f)
         isMuted = engine.player.volume == 0f
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(value: Boolean) { playing = value }
-            override fun onVolumeChanged(volume: Float) { isMuted = volume == 0f }
+            override fun onVolumeChanged(volume: Float) {
+                currentVolume = volume.coerceIn(0f, 1f)
+                isMuted = volume == 0f
+            }
             override fun onRenderedFirstFrame() { isFirstFrameRendered = true }
         }
         engine.player.addListener(listener)
@@ -232,6 +231,7 @@ fun VideoPage(
     DisposableEffect(active) {
         onDispose {
             if (active) {
+                playing = false
                 engine.player.pause()
                 activity?.let { act ->
                     val lp = act.window.attributes
@@ -396,6 +396,7 @@ fun VideoPage(
                     // dispatching a normal tap when the 2× hold is released.
                     onLongPress = { },
                     onPress = { position ->
+                        if (position.y < size.height - bottomSystemGestureDeadzonePx(view, bottomMinDeadzonePx)) {
                         coroutineScope {
                         feedbackOnLeft = position.x < size.width / 2f
                         var accelerated = false
@@ -415,6 +416,7 @@ fun VideoPage(
                             }
                         }
                         }
+                        }
                     },
                 )
             }
@@ -424,13 +426,17 @@ fun VideoPage(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val startX = down.position.x
+                    val startY = down.position.y
+                    if (startY >= size.height - bottomSystemGestureDeadzonePx(view, bottomMinDeadzonePx)) {
+                        return@awaitEachGesture
+                    }
                     var totalDragY = 0f
                     var totalDragX = 0f
                     var singleFingerPanDistance = 0f
                     var panStarted = false
                     var gestureType = 0 // 0 = UNLOCKED, 1 = BRIGHTNESS, 2 = VOLUME, 3 = SWIPE_UP, 4 = DISMISS, -1 = HORIZONTAL, -2 = DEADZONE, -3 = 2X_ACTIVE
                     var dragStartBrightness = 0.5f
-                    var dragStartVolume = 0
+                    var dragStartVolume = 1f
                     var lastDragTime = SystemClock.uptimeMillis()
                     var lastDragY = 0f
                     var releaseVelocityY = 0f
@@ -500,7 +506,7 @@ fun VideoPage(
                                     } else if (absY > 16f && absY > absX * 1.2f) {
                                         if (startX < w * 0.08f || startX > w * 0.92f) {
                                             gestureType = -2
-                                        } else if (gestureControls && startX < w * 0.42f) {
+                                        } else if (gestureControls && startX < w * 0.24f) {
                                             gestureType = 1
                                             val curWinBrightness = activity?.window?.attributes?.screenBrightness ?: -1f
                                             dragStartBrightness = if (curWinBrightness in 0f..1f) {
@@ -518,9 +524,9 @@ fun VideoPage(
                                             currentBrightness = dragStartBrightness
                                             brightnessHudVisible = true
                                             brightnessHudTimer = SystemClock.uptimeMillis()
-                                        } else if (gestureControls && startX > w * 0.58f) {
+                                        } else if (gestureControls && startX > w * 0.76f) {
                                             gestureType = 2
-                                            dragStartVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                                            dragStartVolume = engine.player.volume.coerceIn(0f, 1f)
                                             currentVolume = dragStartVolume
                                             volumeHudVisible = true
                                             volumeHudTimer = SystemClock.uptimeMillis()
@@ -554,15 +560,11 @@ fun VideoPage(
                                 2 -> {
                                     val scrollRange = (h * 0.75f).coerceAtLeast(200f)
                                     val deltaRatio = -totalDragY / scrollRange
-                                    val steps = (maxVolume - minVolume).coerceAtLeast(1)
-                                    val newVolume = (dragStartVolume + (deltaRatio * steps).roundToInt()).coerceIn(minVolume, maxVolume)
-                                    if (newVolume != currentVolume) {
+                                    val newVolume = (dragStartVolume + deltaRatio).coerceIn(0f, 1f)
+                                    if (newVolume != currentVolume && (kotlin.math.abs(newVolume - currentVolume) >= 0.005f || newVolume == 0f || newVolume == 1f)) {
                                         currentVolume = newVolume
-                                        audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0)
-                                        if (newVolume > 0 && engine.isMuted) {
-                                            engine.setMuted(false)
-                                            isMuted = false
-                                        }
+                                        engine.setPlayerVolume(newVolume)
+                                        isMuted = newVolume == 0f
                                     }
                                     volumeHudVisible = true
                                     volumeHudTimer = SystemClock.uptimeMillis()
@@ -576,7 +578,7 @@ fun VideoPage(
                                     onDismissDrag(panChange.y)
                                 }
                                 0 -> {
-                                    if (startX in (w * 0.42f)..(w * 0.58f) || !gestureControls) {
+                                    if (startX in (w * 0.24f)..(w * 0.76f) || !gestureControls) {
                                         if (totalDragY < -75f && kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f) {
                                             gestureType = 3
                                             event.changes.forEach { it.consume() }
@@ -624,6 +626,7 @@ fun VideoPage(
                             findViewById<android.view.View>(androidx.media3.ui.R.id.exo_artwork)?.visibility = android.view.View.GONE
                             findViewById<android.view.View>(androidx.media3.ui.R.id.exo_shutter)?.visibility = android.view.View.GONE
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            keepScreenOn = active && playing
                             layoutParams = android.view.ViewGroup.LayoutParams(
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -632,6 +635,10 @@ fun VideoPage(
                     },
                     update = {
                         it.player = engine.player
+                        val shouldKeepScreenOn = active && playing
+                        if (it.keepScreenOn != shouldKeepScreenOn) {
+                            it.keepScreenOn = shouldKeepScreenOn
+                        }
                         it.useController = false
                         it.controllerAutoShow = false
                         it.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
@@ -641,7 +648,10 @@ fun VideoPage(
                         it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_artwork)?.visibility = android.view.View.GONE
                         it.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_shutter)?.visibility = android.view.View.GONE
                     },
-                    onRelease = { it.player = null },
+                    onRelease = {
+                        it.keepScreenOn = false
+                        it.player = null
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -745,10 +755,10 @@ fun VideoPage(
             progress = currentBrightness,
         )
 
-        val volumePercent = ((currentVolume.toFloat() / maxVolume.coerceAtLeast(1)) * 100).roundToInt().coerceIn(0, 100)
+        val volumePercent = (currentVolume * 100f).roundToInt().coerceIn(0, 100)
         val volumeIcon = when {
-            currentVolume == 0 -> Icons.AutoMirrored.Filled.VolumeOff
-            currentVolume < maxVolume / 2 -> Icons.AutoMirrored.Filled.VolumeDown
+            currentVolume <= 0.01f -> Icons.AutoMirrored.Filled.VolumeOff
+            currentVolume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
             else -> Icons.AutoMirrored.Filled.VolumeUp
         }
         VideoGestureHud(
@@ -758,7 +768,7 @@ fun VideoPage(
                 .padding(end = 32.dp),
             icon = volumeIcon,
             percentage = volumePercent,
-            progress = (currentVolume - minVolume).toFloat() / (maxVolume - minVolume).coerceAtLeast(1),
+            progress = currentVolume,
         )
 
         AnimatedVisibility(

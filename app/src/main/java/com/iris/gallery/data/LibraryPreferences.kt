@@ -8,11 +8,30 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class AlbumSort { NEWEST, OLDEST, NAME, ITEM_COUNT, CUSTOM }
 enum class MediaSort { DATE_DESC, DATE_ASC, NAME_ASC, NAME_DESC, SIZE_DESC, SIZE_ASC }
 
+internal val DEFAULT_LIBRARY_ORDER = listOf(
+    "memories",
+    "duplicates",
+    "locked",
+    "trash",
+    "editor",
+    "formats",
+    "folder_view",
+    "excluded_folders",
+    "rescan"
+)
+
+internal fun normalizeLibraryOrder(saved: List<String>): List<String> {
+    val validSaved = saved.filter { it in DEFAULT_LIBRARY_ORDER }.distinct()
+    val missing = DEFAULT_LIBRARY_ORDER.filterNot { it in validSaved }
+    return validSaved + missing
+}
+
 data class LibraryPreferencesState(
     val lockedMedia: Set<Long> = emptySet(),
     val pinnedAlbums: Set<Long> = emptySet(),
     val albumCovers: Map<Long, Long> = emptyMap(),
     val albumOrder: List<Long> = emptyList(),
+    val libraryOrder: List<String> = DEFAULT_LIBRARY_ORDER,
     val albumSort: AlbumSort = AlbumSort.NEWEST,
     val albumMediaSort: MediaSort = MediaSort.DATE_DESC,
     val albumMediaSortOverrides: Map<Long, MediaSort> = emptyMap(),
@@ -42,6 +61,10 @@ class LibraryPreferences(context: Context) {
     fun setAlbumSort(sort: AlbumSort) = update { copy(albumSort = sort) }
 
     fun setAlbumOrder(order: List<Long>) = update { copy(albumOrder = order.distinct()) }
+
+    fun setLibraryOrder(order: List<String>) = update {
+        copy(libraryOrder = normalizeLibraryOrder(order))
+    }
 
     fun setAlbumMediaSort(sort: MediaSort) = update { copy(albumMediaSort = sort) }
 
@@ -92,6 +115,9 @@ class LibraryPreferences(context: Context) {
             if (album != null && media != null) album to media else null
         }.toMap(),
         albumOrder = prefs.getString("album_order", "").orEmpty().split(',').mapNotNull(String::toLongOrNull),
+        libraryOrder = normalizeLibraryOrder(
+            prefs.getString("library_order", "").orEmpty().split(',').filter(String::isNotBlank)
+        ),
         albumSort = runCatching { AlbumSort.valueOf(prefs.getString("album_sort", null).orEmpty()) }
             .getOrDefault(AlbumSort.NEWEST),
         albumMediaSort = runCatching { MediaSort.valueOf(prefs.getString("album_media_sort", null).orEmpty()) }
@@ -111,6 +137,7 @@ class LibraryPreferences(context: Context) {
             .putStringSet("pinned_albums", state.pinnedAlbums.mapTo(mutableSetOf(), Long::toString))
             .putStringSet("album_covers", state.albumCovers.mapTo(mutableSetOf()) { "${it.key}:${it.value}" })
             .putString("album_order", state.albumOrder.joinToString(","))
+            .putString("library_order", state.libraryOrder.joinToString(","))
             .putString("album_sort", state.albumSort.name)
             .putString("album_media_sort", state.albumMediaSort.name)
             .putStringSet("album_media_sort_overrides", state.albumMediaSortOverrides.mapTo(mutableSetOf()) { "${it.key}:${it.value.name}" })

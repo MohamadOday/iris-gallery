@@ -252,6 +252,40 @@ internal fun AlbumSortChip(
     }
 }
 
+internal fun buildMediaAlbums(
+    images: List<MediaImage>,
+    covers: Map<Long, Long>,
+): List<MediaAlbum> = images.groupBy { it.bucketId }.map { (id, media) ->
+    val samplePath = media.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
+    val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
+    MediaAlbum(
+        id = id,
+        name = media.first().bucketName,
+        cover = media.firstOrNull { it.id == covers[id] } ?: media.first(),
+        images = media,
+        isSdCard = isSd,
+        storageLabel = if (isSd) "SD Card" else ""
+    )
+}
+
+internal fun sortMediaAlbums(
+    albums: List<MediaAlbum>,
+    pinned: Set<Long>,
+    sort: AlbumSort,
+    customOrder: List<Long>,
+): List<MediaAlbum> {
+    val orderIndex = customOrder.withIndex().associate { it.value to it.index }
+    return albums.sortedWith(compareByDescending<MediaAlbum> { it.id in pinned }.thenComparator { a, b ->
+        when (sort) {
+            AlbumSort.NEWEST -> b.cover.dateTaken.compareTo(a.cover.dateTaken)
+            AlbumSort.OLDEST -> a.cover.dateTaken.compareTo(b.cover.dateTaken)
+            AlbumSort.NAME -> NaturalOrderComparator.compare(a.name, b.name)
+            AlbumSort.ITEM_COUNT -> b.images.size.compareTo(a.images.size)
+            AlbumSort.CUSTOM -> (orderIndex[a.id] ?: Int.MAX_VALUE).compareTo(orderIndex[b.id] ?: Int.MAX_VALUE)
+        }
+    })
+}
+
 @Composable
 fun AlbumsGrid(
     images: List<MediaImage>,
@@ -264,6 +298,7 @@ fun AlbumsGrid(
     cornerStyle: CornerStyle = CornerStyle.ROUNDED,
     gridSpacing: GridSpacing = GridSpacing.STANDARD,
     showCount: Boolean = true,
+    showLabels: Boolean = true,
     showFilterChips: Boolean = true,
     pinned: Set<Long> = emptySet(),
     covers: Map<Long, Long> = emptyMap(),
@@ -286,28 +321,7 @@ fun AlbumsGrid(
     }
 
     val albums = remember(images, pinned, covers, sort, customOrder) {
-        val base = images.groupBy { it.bucketId }.map { (id, media) ->
-            val samplePath = media.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
-            val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
-            MediaAlbum(
-                id = id,
-                name = media.first().bucketName,
-                cover = media.firstOrNull { it.id == covers[id] } ?: media.first(),
-                images = media,
-                isSdCard = isSd,
-                storageLabel = if (isSd) "SD Card" else ""
-            )
-        }
-        val orderIndex = customOrder.withIndex().associate { it.value to it.index }
-        base.sortedWith(compareByDescending<MediaAlbum> { it.id in pinned }.thenComparator { a, b ->
-            when (sort) {
-                AlbumSort.NEWEST -> b.cover.dateTaken.compareTo(a.cover.dateTaken)
-                AlbumSort.OLDEST -> a.cover.dateTaken.compareTo(b.cover.dateTaken)
-                AlbumSort.NAME -> NaturalOrderComparator.compare(a.name, b.name)
-                AlbumSort.ITEM_COUNT -> b.images.size.compareTo(a.images.size)
-                AlbumSort.CUSTOM -> (orderIndex[a.id] ?: Int.MAX_VALUE).compareTo(orderIndex[b.id] ?: Int.MAX_VALUE)
-            }
-        })
+        sortMediaAlbums(buildMediaAlbums(images, covers), pinned, sort, customOrder)
     }
     LaunchedEffect(sort, customOrder) {
         if (sort == AlbumSort.CUSTOM && customOrder.isEmpty()) {
@@ -571,47 +585,53 @@ fun AlbumsGrid(
                     }
 
                     // Full-width album text container
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp, start = 2.dp, end = 2.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            album.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            modifier = Modifier.fillMaxWidth()
+                    if (showLabels || showCount || album.isSdCard) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp, start = 2.dp, end = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            if (album.isSdCard) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(4.dp),
-                                ) {
-                                    Text(
-                                        text = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.storage_sd_card),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                            if (showCount) {
+                            if (showLabels) {
                                 Text(
-                                    androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_items_count, album.images.size),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    album.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                            if (album.isSdCard || showCount) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (album.isSdCard) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            shape = RoundedCornerShape(4.dp),
+                                        ) {
+                                            Text(
+                                                text = androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.storage_sd_card),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                    if (showCount) {
+                                        Text(
+                                            androidx.compose.ui.res.stringResource(com.iris.gallery.R.string.album_items_count, album.images.size),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

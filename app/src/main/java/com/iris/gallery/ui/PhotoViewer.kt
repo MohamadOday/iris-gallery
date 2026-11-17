@@ -14,6 +14,7 @@ import android.provider.MediaStore
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -185,6 +186,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 import com.iris.gallery.data.AlbumAction
 import com.iris.gallery.data.AlbumOperationResult
+import com.iris.gallery.data.AlbumPickerSort
 import com.iris.gallery.ui.AlbumPickerSheet
 import com.iris.gallery.R
 import java.io.File
@@ -227,12 +229,14 @@ internal fun PhotoViewer(
     preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
     onSetPreferredEditor: (PreferredEditor) -> Unit = {},
     availableAlbums: List<MediaAlbum> = emptyList(),
+    albumPickerSort: AlbumPickerSort = AlbumPickerSort.FOLLOW_ALBUMS,
+    onSetAlbumPickerSort: (AlbumPickerSort) -> Unit = {},
     onToggleFavorite: (Long) -> Unit,
     onClose: () -> Unit,
     onPageChanged: (Long) -> Unit = {},
     onRename: (MediaImage, String) -> Unit = { _, _ -> },
     onDelete: (MediaImage, Boolean) -> Unit,
-    onRestore: (MediaImage) -> Unit = {},
+    onRestore: (MediaImage, () -> Unit) -> Unit = { _, _ -> },
     onEditMetadata: (MediaImage, ExifEditRequest) -> Unit,
     onEdit: (MediaImage) -> Unit,
     onLock: (MediaImage) -> Unit,
@@ -305,11 +309,20 @@ internal fun PhotoViewer(
     LaunchedEffect(controlsVisible, insetsController) {
         insetsController?.let { controller ->
             if (controlsVisible) {
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
                 controller.show(WindowInsetsCompat.Type.systemBars())
             } else {
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(WindowInsetsCompat.Type.systemBars())
+                val rootInsets = window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+                val isGestureNav = rootInsets != null &&
+                    rootInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.tappableElement()).bottom == 0 &&
+                    rootInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom > 0
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                if (isGestureNav) {
+                    controller.hide(WindowInsetsCompat.Type.statusBars())
+                    controller.show(WindowInsetsCompat.Type.navigationBars())
+                } else {
+                    controller.hide(WindowInsetsCompat.Type.systemBars())
+                }
             }
         }
     }
@@ -1312,8 +1325,11 @@ internal fun PhotoViewer(
                         label = stringResource(R.string.action_restore),
                         modifier = Modifier.weight(1f),
                     ) {
-                        onRestore(current)
-                        handleClose()
+                        onRestore(current) {
+                            if (images.size <= 1) {
+                                handleClose()
+                            }
+                        }
                     }
                     ViewerIconButton(
                         icon = Icons.Outlined.DeleteForever,
@@ -1652,6 +1668,8 @@ internal fun PhotoViewer(
             selectedCount = 1,
             albums = availableAlbums,
             currentAlbumId = if (action == AlbumAction.MOVE) current.bucketId else null,
+            pickerSort = albumPickerSort,
+            onPickerSortChanged = onSetAlbumPickerSort,
             onDismiss = { viewerAlbumAction = null },
             onSelectAlbum = { album ->
                 val targetDir = getAlbumDir(album)

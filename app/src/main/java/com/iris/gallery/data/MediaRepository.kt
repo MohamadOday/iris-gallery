@@ -14,6 +14,12 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 
+sealed interface UriLoadResult {
+    data class Ready(val item: MediaImage) : UriLoadResult
+    data object Pending : UriLoadResult
+    data object MissingOrDeleted : UriLoadResult
+}
+
 class MediaRepository(private val context: Context) {
     private val snapshot = AtomicFile(File(context.filesDir, "media_snapshot.bin"))
     private val libraryPreferences = LibraryPreferences(context)
@@ -28,6 +34,13 @@ class MediaRepository(private val context: Context) {
     private val recentMovedOrDeletedIds = java.util.concurrent.ConcurrentHashMap<Long, Long>()
     private val recentMovedOrDeletedPaths = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val verifiedPathsCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun resolveBucketId(rawBucketId: Long, filePath: String): Long {
+        if (rawBucketId != 0L) return rawBucketId
+        val parentPath = filePath.substringBeforeLast('/', "")
+        if (parentPath.isNotBlank()) return parentPath.lowercase(java.util.Locale.ROOT).hashCode().toLong()
+        return 0L
+    }
 
     fun loadSnapshot(): List<MediaImage> = runCatching {
         DataInputStream(snapshot.openRead().buffered()).use { input ->
@@ -437,6 +450,7 @@ class MediaRepository(private val context: Context) {
                         val cursorDateTaken = cursor.getLong(taken)
                         val cursorDateModified = cursor.getLong(modified) * 1_000L
                         val cursorDateAdded = cursor.getLong(added) * 1_000L
+                        val effectiveDateAdded = RestoredTimestamps.getDateAdded(context, filePath) ?: cursorDateAdded
                         val newestRowMs = maxOf(cursorDateModified, cursorDateAdded)
                         val isFreshRow = newestRowMs > 0L && now - newestRowMs < 2 * 60 * 1000L
                         val itemWidth = cursor.getInt(width)
@@ -445,6 +459,7 @@ class MediaRepository(private val context: Context) {
                         val itemSize = cursor.getLong(size)
                         val itemOrientation = cursor.getInt(orientation)
                         val itemTitle = libraryPreferences.getCustomTitle(mediaId) ?: cursor.getString(title).orEmpty()
+                        val itemBucketId = if (trashed) -2L else resolveBucketId(cursor.getLong(bucketId), filePath)
 
                         // Snapshot entries land in the cache, so an unchanged row can
                         // skip the disk stat and the EXIF read entirely. This is what
@@ -453,8 +468,9 @@ class MediaRepository(private val context: Context) {
                         if (existing != null &&
                             existing.name == displayName &&
                             existing.path == filePath &&
+                            existing.bucketId == itemBucketId &&
                             existing.dateModified == cursorDateModified &&
-                            existing.dateAdded == cursorDateAdded &&
+                            existing.dateAdded == effectiveDateAdded &&
                             existing.sizeBytes == itemSize &&
                             existing.orientation == itemOrientation &&
                             existing.width == itemWidth &&
@@ -519,8 +535,9 @@ class MediaRepository(private val context: Context) {
                         if (!trashed && existing != null &&
                             existing.name == displayName &&
                             existing.path == filePath &&
+                            existing.bucketId == itemBucketId &&
                             existing.dateModified == effectiveModified &&
-                            existing.dateAdded == cursorDateAdded &&
+                            existing.dateAdded == effectiveDateAdded &&
                             existing.sizeBytes == itemSize &&
                             existing.orientation == itemOrientation &&
                             existing.width == itemWidth &&
@@ -540,10 +557,11 @@ class MediaRepository(private val context: Context) {
 
                         if (takenTime <= 0L && cursorDateTaken > 0L) takenTime = cursorDateTaken
                         if (takenTime <= 0L && effectiveModified > 0L) takenTime = effectiveModified
-                        if (takenTime <= 0L && cursorDateAdded > 0L) takenTime = cursorDateAdded
+                        if (takenTime <= 0L && effectiveDateAdded > 0L) takenTime = effectiveDateAdded
 
-                        val itemBucketId = if (trashed) -2L else cursor.getLong(bucketId)
-                        val itemBucketName = if (trashed) "Trash" else cursor.getString(bucketName).orEmpty().ifBlank { "Other" }
+                        val itemBucketName = if (trashed) "Trash" else cursor.getString(bucketName).orEmpty().ifBlank {
+                            filePath.substringBeforeLast('/', "").substringAfterLast('/', "").ifBlank { "Other" }
+                        }
 
                         val newImage = MediaImage(
                             id = mediaId,
@@ -562,7 +580,7 @@ class MediaRepository(private val context: Context) {
                             orientation = itemOrientation,
                             title = itemTitle,
                             dateModified = effectiveModified,
-                            dateAdded = cursorDateAdded,
+                            dateAdded = effectiveDateAdded,
                         )
                         if (!trashed) {
                             inMemoryCache[mediaId] = newImage
@@ -572,7 +590,10 @@ class MediaRepository(private val context: Context) {
                 }
             }
         }
-        val sorted = result.distinctBy { it.uri }.sortedWith(
+        val sorted = result
+            .distinctBy { it.id }
+            .distinctBy { it.path.ifBlank { it.id.toString() } }
+            .sortedWith(
             compareByDescending<MediaImage> { it.dateTaken }
                 .thenByDescending { it.dateModified }
                 .thenByDescending { it.dateAdded }
@@ -586,10 +607,10 @@ class MediaRepository(private val context: Context) {
         sorted
     }
 
-    suspend fun loadImageByUri(uri: Uri): MediaImage? = withContext(Dispatchers.IO) {
-        val segments = uri.pathSegments
-        val isImageCollection = segments.contains("images")
-        val isVideoCollection = segments.contains("video")
+    suspend fun loadImageByUri(uri: Uri): MediaImage? =
+        (loadImageByUriResult(uri) as? UriLoadResult.Ready)?.item
+
+    suspend fun loadImageByUriResult(uri: Uri): UriLoadResult = withContext(Dispatchers.IO) {
         val projection = buildList {
             add(MediaStore.MediaColumns._ID)
             add(MediaStore.MediaColumns.DISPLAY_NAME)
@@ -603,6 +624,10 @@ class MediaRepository(private val context: Context) {
             add(MediaStore.MediaColumns.DATA)
             add(MediaStore.MediaColumns.WIDTH)
             add(MediaStore.MediaColumns.HEIGHT)
+            add(MediaStore.Images.Media.BUCKET_ID)
+            add(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+            add(MediaStore.Video.VideoColumns.DURATION)
+            add(MediaStore.Images.Media.ORIENTATION)
             if (Build.VERSION.SDK_INT >= 29) {
                 add(MediaStore.MediaColumns.RELATIVE_PATH)
                 add(MediaStore.MediaColumns.VOLUME_NAME)
@@ -611,23 +636,11 @@ class MediaRepository(private val context: Context) {
             if (Build.VERSION.SDK_INT >= 30) {
                 add(MediaStore.MediaColumns.IS_TRASHED)
             }
-            if (isImageCollection) {
-                add(MediaStore.Images.Media.BUCKET_ID)
-                add(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
-                add(MediaStore.Images.Media.ORIENTATION)
-            } else if (isVideoCollection) {
-                add(MediaStore.Video.VideoColumns.BUCKET_ID)
-                add(MediaStore.Video.VideoColumns.BUCKET_DISPLAY_NAME)
-                add(MediaStore.Video.VideoColumns.DURATION)
-                if (Build.VERSION.SDK_INT >= 29) {
-                    add(MediaStore.MediaColumns.ORIENTATION)
-                }
-            }
         }.toTypedArray()
 
         runCatching {
             context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                if (!cursor.moveToFirst()) return@use null
+                if (!cursor.moveToFirst()) return@use UriLoadResult.MissingOrDeleted
 
                 fun index(column: String) = cursor.getColumnIndex(column)
                 fun text(column: String): String = index(column).takeIf { it >= 0 }?.let { cursor.getString(it) }.orEmpty()
@@ -635,9 +648,13 @@ class MediaRepository(private val context: Context) {
                 fun integer(column: String): Int = index(column).takeIf { it >= 0 }?.let { cursor.getInt(it) } ?: 0
 
                 val id = number(MediaStore.MediaColumns._ID)
-                if (id <= 0L) return@use null
-                if (Build.VERSION.SDK_INT >= 29 && integer(MediaStore.MediaColumns.IS_PENDING) != 0) return@use null
-                if (Build.VERSION.SDK_INT >= 30 && integer(MediaStore.MediaColumns.IS_TRASHED) != 0) return@use null
+                if (id <= 0L) return@use UriLoadResult.MissingOrDeleted
+                if (Build.VERSION.SDK_INT >= 29 && integer(MediaStore.MediaColumns.IS_PENDING) != 0) {
+                    return@use UriLoadResult.Pending
+                }
+                if (Build.VERSION.SDK_INT >= 30 && integer(MediaStore.MediaColumns.IS_TRASHED) != 0) {
+                    return@use UriLoadResult.MissingOrDeleted
+                }
                 val displayName = text(MediaStore.MediaColumns.DISPLAY_NAME)
                     .ifBlank { text(MediaStore.MediaColumns.TITLE) }
                 val rawData = text(MediaStore.MediaColumns.DATA)
@@ -650,29 +667,68 @@ class MediaRepository(private val context: Context) {
                     relativePath.isNotBlank() -> "/storage/emulated/0/$relativePath$displayName"
                     else -> ""
                 }
+                if (isMarkedMovedOrDeleted(id, filePath)) return@use UriLoadResult.MissingOrDeleted
+
                 val mimeType = text(MediaStore.MediaColumns.MIME_TYPE)
                 val mediaType = integer(MediaStore.Files.FileColumns.MEDIA_TYPE)
                 val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ||
                     mimeType.startsWith("video/", ignoreCase = true)
+                val isImage = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE ||
+                    mimeType.startsWith("image/", ignoreCase = true)
+                if (!isImage && !isVideo) return@use UriLoadResult.MissingOrDeleted
+
+                val volumeForUri = if (volumeName.isNotBlank() && volumeName != "external_primary") volumeName else "external"
+                val canonicalUri = if (isVideo) {
+                    ContentUris.withAppendedId(MediaStore.Video.Media.getContentUri(volumeForUri), id)
+                } else {
+                    ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(volumeForUri), id)
+                }
+
                 val dateModified = number(MediaStore.MediaColumns.DATE_MODIFIED) * 1_000L
-                val dateAdded = number(MediaStore.MediaColumns.DATE_ADDED) * 1_000L
+                val cursorDateAdded = number(MediaStore.MediaColumns.DATE_ADDED) * 1_000L
+                val cursorSize = number(MediaStore.MediaColumns.SIZE)
+                val now = System.currentTimeMillis()
+                val newestRowMs = maxOf(dateModified, cursorDateAdded)
+                val isFreshRow = newestRowMs > 0L && now - newestRowMs < 2 * 60 * 1000L
+
+                var diskSize = -1L
+                var diskMod = 0L
+                var fileReady = false
+                if (filePath.isNotBlank()) {
+                    val file = File(filePath)
+                    if (file.exists()) {
+                        diskSize = file.length()
+                        diskMod = file.lastModified()
+                        fileReady = diskSize > 0L || cursorSize > 0L
+                    } else if (volumeName.isNotBlank() && volumeName != "external_primary") {
+                        fileReady = runCatching {
+                            context.contentResolver.openAssetFileDescriptor(canonicalUri, "r")?.use { true } ?: false
+                        }.getOrDefault(false)
+                    }
+                }
+                if (!fileReady) {
+                    return@use if (isFreshRow || filePath.isBlank()) UriLoadResult.Pending else UriLoadResult.MissingOrDeleted
+                }
+
+                val effectiveModified = if (diskMod > 0L) diskMod else dateModified
+                val effectiveSize = if (diskSize > 0L) diskSize else cursorSize
+                val dateAdded = RestoredTimestamps.getDateAdded(context, filePath) ?: cursorDateAdded
                 var dateTaken = number(MediaStore.Images.Media.DATE_TAKEN)
                 if (!isVideo && dateTaken <= 0L && filePath.isNotBlank()) {
-                    extractExifDateTaken(context, uri, filePath)?.let { if (it > 0L) dateTaken = it }
+                    extractExifDateTaken(context, canonicalUri, filePath)?.let { if (it > 0L) dateTaken = it }
                 }
-                if (dateTaken <= 0L) dateTaken = dateModified
+                if (dateTaken <= 0L) dateTaken = effectiveModified
                 if (dateTaken <= 0L) dateTaken = dateAdded
 
                 val bucketName = text(MediaStore.Images.Media.BUCKET_DISPLAY_NAME).ifBlank {
-                    File(filePath).parentFile?.name.orEmpty().ifBlank { "Other" }
+                    filePath.substringBeforeLast('/', "").substringAfterLast('/', "").ifBlank { "Other" }
                 }
-                val bucketId = number(MediaStore.Images.Media.BUCKET_ID).takeIf { it != 0L }
-                    ?: (filePath.hashCode().toLong() and 0xFFFFFFFFL)
-                val title = text(MediaStore.MediaColumns.TITLE).ifBlank { displayName }
+                val bucketId = resolveBucketId(number(MediaStore.Images.Media.BUCKET_ID), filePath)
+                val title = libraryPreferences.getCustomTitle(id) ?: text(MediaStore.MediaColumns.TITLE).ifBlank { displayName }
 
-                MediaImage(
+                val item = MediaImage(
                     id = id,
-                    uri = uri,
+                    uri = canonicalUri,
                     name = displayName,
                     dateTaken = dateTaken,
                     width = integer(MediaStore.Images.Media.WIDTH),
@@ -683,14 +739,16 @@ class MediaRepository(private val context: Context) {
                     isVideo = isVideo,
                     durationMs = number(MediaStore.Video.VideoColumns.DURATION),
                     mimeType = mimeType,
-                    sizeBytes = number(MediaStore.MediaColumns.SIZE),
+                    sizeBytes = effectiveSize,
                     orientation = integer(MediaStore.Images.Media.ORIENTATION),
                     title = title,
-                    dateModified = dateModified,
+                    dateModified = effectiveModified,
                     dateAdded = dateAdded,
-                ).also { inMemoryCache[it.id] = it }
-            }
-        }.getOrNull()
+                )
+                inMemoryCache[item.id] = item
+                UriLoadResult.Ready(item)
+            } ?: UriLoadResult.MissingOrDeleted
+        }.getOrElse { UriLoadResult.Pending }
     }
 
     suspend fun getGenerationByVolume(): Map<String, Long>? = withContext(Dispatchers.IO) {
@@ -854,6 +912,7 @@ class MediaRepository(private val context: Context) {
 
             verifiedPathsCache.remove(item.path)
             verifiedPathsCache[renamedPath] = System.currentTimeMillis()
+            RestoredTimestamps.moveDateAdded(context, item.path, renamedPath)
             android.media.MediaScannerConnection.scanFile(context, arrayOf(renamedPath), null, null)
 
             val updatedItem = item.copy(name = resolvedFinalName, path = renamedPath)
@@ -882,6 +941,7 @@ class MediaRepository(private val context: Context) {
                 val resolvedFinalName = destFile.name
                 verifiedPathsCache.remove(item.path)
                 verifiedPathsCache[renamedPath] = System.currentTimeMillis()
+                RestoredTimestamps.moveDateAdded(context, item.path, renamedPath)
 
                 if (item.id > 0 && canonicalUri.authority == "media") {
                     val values = android.content.ContentValues().apply {

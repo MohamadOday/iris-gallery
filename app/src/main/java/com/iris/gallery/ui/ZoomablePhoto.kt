@@ -49,6 +49,10 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
@@ -87,6 +91,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 
+internal fun bottomSystemGestureDeadzonePx(view: android.view.View, minPx: Float): Float {
+    val insetBottom = ViewCompat.getRootWindowInsets(view)
+        ?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.mandatorySystemGestures())
+        ?.bottom?.toFloat() ?: 0f
+    return maxOf(insetBottom, minPx)
+}
+
 @OptIn(UnstableApi::class)
 @Composable
 internal fun ZoomablePhoto(
@@ -112,6 +123,9 @@ internal fun ZoomablePhoto(
     onZoomChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val bottomMinDeadzonePx = remember(density) { with(density) { 24.dp.toPx() } }
     val scaleAnim = remember(image.id) { Animatable(1f) }
     val offsetAnim = remember(image.id) { Animatable(Offset.Zero, Offset.VectorConverter) }
     val rotationAnim = remember(image.id) { Animatable(0f) }
@@ -296,7 +310,10 @@ internal fun ZoomablePhoto(
                 .pointerInput(image.id, pinchToRotate) {
                     val touchSlop = viewConfiguration.touchSlop
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (down.position.y >= size.height - bottomSystemGestureDeadzonePx(view, bottomMinDeadzonePx)) {
+                            return@awaitEachGesture
+                        }
                         var totalDragY = 0f
                         var totalDragX = 0f
                         var singleFingerPanDistance = 0f

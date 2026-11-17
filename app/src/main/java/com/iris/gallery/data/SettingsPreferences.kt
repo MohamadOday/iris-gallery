@@ -15,6 +15,7 @@ enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
 enum class StartupTab(val pageIndex: Int) { MEDIA(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
 enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
 enum class DeleteMode { TRASH, PERMANENT, ALWAYS_ASK }
+enum class AlbumPickerSort { FOLLOW_ALBUMS, RECENT, NAME }
 
 enum class TimelineDateFormat {
     SYSTEM_DEFAULT,
@@ -142,6 +143,7 @@ data class SettingsState(
     val showVideoDurationBadge: Boolean = true,
     val showMediaFormatBadge: Boolean = true,
     val showAlbumCount: Boolean = true,
+    val showAlbumLabels: Boolean = true,
     val autoPlayVideo: Boolean = true,
     val loopVideo: Boolean = true,
     val videoDoubleTapToZoom: Boolean = false,
@@ -163,6 +165,8 @@ data class SettingsState(
     val showFavoritesTab: Boolean = true,
     val showLibraryTab: Boolean = true,
     val showAlbumFilterChips: Boolean = true,
+    val tiltNavIcons: Boolean = true,
+    val albumPickerSort: AlbumPickerSort = AlbumPickerSort.FOLLOW_ALBUMS,
     val biometricLockEnabled: Boolean = true,
     val vaultHideFromStorage: Boolean = true,
     val appLockEnabled: Boolean = false,
@@ -221,6 +225,7 @@ class SettingsPreferences(context: Context) {
     fun setShowVideoDurationBadge(show: Boolean) = update { copy(showVideoDurationBadge = show) }
     fun setShowMediaFormatBadge(show: Boolean) = update { copy(showMediaFormatBadge = show) }
     fun setShowAlbumCount(show: Boolean) = update { copy(showAlbumCount = show) }
+    fun setShowAlbumLabels(show: Boolean) = update { copy(showAlbumLabels = show) }
     fun setAutoPlayVideo(autoPlay: Boolean) = update { copy(autoPlayVideo = autoPlay) }
     fun setLoopVideo(loop: Boolean) = update { copy(loopVideo = loop) }
     fun setVideoDoubleTapToZoom(enabled: Boolean) = update { copy(videoDoubleTapToZoom = enabled) }
@@ -254,6 +259,8 @@ class SettingsPreferences(context: Context) {
         else copy(showLibraryTab = show)
     }
     fun setShowAlbumFilterChips(show: Boolean) = update { copy(showAlbumFilterChips = show) }
+    fun setTiltNavIcons(tilt: Boolean) = update { copy(tiltNavIcons = tilt) }
+    fun setAlbumPickerSort(sort: AlbumPickerSort) = update { copy(albumPickerSort = sort) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
     fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
     fun setAppLockEnabled(enabled: Boolean) = update { copy(appLockEnabled = enabled) }
@@ -417,6 +424,7 @@ class SettingsPreferences(context: Context) {
             showVideoDurationBadge = prefs.getBoolean("show_video_duration_badge", true),
             showMediaFormatBadge = prefs.getBoolean("show_media_format_badge", true),
             showAlbumCount = prefs.getBoolean("show_album_count", true),
+            showAlbumLabels = prefs.getBoolean("show_album_labels", true),
             autoPlayVideo = prefs.getBoolean("auto_play_video", true),
             loopVideo = prefs.getBoolean("loop_video", true),
             videoDoubleTapToZoom = prefs.getBoolean("video_double_tap_to_zoom", false),
@@ -438,6 +446,8 @@ class SettingsPreferences(context: Context) {
             showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
             showLibraryTab = prefs.getBoolean("show_library_tab", true),
             showAlbumFilterChips = prefs.getBoolean("show_album_filter_chips", true),
+            tiltNavIcons = prefs.getBoolean("tilt_nav_icons", true),
+            albumPickerSort = runCatching { AlbumPickerSort.valueOf(prefs.getString("album_picker_sort", null).orEmpty()) }.getOrDefault(AlbumPickerSort.FOLLOW_ALBUMS),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
             vaultHideFromStorage = prefs.getBoolean("vault_hide_from_storage", true),
             appLockEnabled = prefs.getBoolean("app_lock_enabled", false),
@@ -482,6 +492,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_video_duration_badge", state.showVideoDurationBadge)
             .putBoolean("show_media_format_badge", state.showMediaFormatBadge)
             .putBoolean("show_album_count", state.showAlbumCount)
+            .putBoolean("show_album_labels", state.showAlbumLabels)
             .putBoolean("auto_play_video", state.autoPlayVideo)
             .putBoolean("loop_video", state.loopVideo)
             .putBoolean("video_double_tap_to_zoom", state.videoDoubleTapToZoom)
@@ -503,6 +514,8 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_favorites_tab", state.showFavoritesTab)
             .putBoolean("show_library_tab", state.showLibraryTab)
             .putBoolean("show_album_filter_chips", state.showAlbumFilterChips)
+            .putBoolean("tilt_nav_icons", state.tiltNavIcons)
+            .putString("album_picker_sort", state.albumPickerSort.name)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)
             .putBoolean("vault_hide_from_storage", state.vaultHideFromStorage)
             .putBoolean("app_lock_enabled", state.appLockEnabled)

@@ -38,10 +38,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.provider.DocumentsContract
 import java.io.File
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
@@ -58,6 +60,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ViewDay
@@ -74,6 +77,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -86,10 +90,13 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -161,6 +168,28 @@ fun SettingsScreen(
     var showTimePickerDialog by remember { mutableStateOf(false) }
     var showExcludedFoldersDialog by remember { mutableStateOf(false) }
     var showSecureSharingDialog by remember { mutableStateOf(false) }
+    var isSearching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearching) {
+        if (isSearching) {
+            searchFocusRequester.requestFocus()
+        }
+    }
+
+    BackHandler(enabled = isSearching) {
+        isSearching = false
+        searchQuery = ""
+    }
+
+    val searchTokens = remember(searchQuery) {
+        searchQuery.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    }
+    fun matches(vararg texts: String): Boolean {
+        if (searchTokens.isEmpty()) return true
+        return searchTokens.all { token -> texts.any { it.contains(token, ignoreCase = true) } }
+    }
 
     fun clearCache() {
         runCatching {
@@ -178,16 +207,292 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.section_settings)) },
+                title = {
+                    if (isSearching) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.search_settings_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            Icons.Filled.Clear,
+                                            contentDescription = stringResource(R.string.clear_search)
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    } else {
+                        Text(stringResource(R.string.section_settings))
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (isSearching) {
+                            isSearching = false
+                            searchQuery = ""
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.action_back))
+                    }
+                },
+                actions = {
+                    if (!isSearching) {
+                        IconButton(onClick = { isSearching = true }) {
+                            Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { scaffoldPadding ->
+        val languageSectionTitle = stringResource(R.string.settings_section_language)
+        val languageTitle = stringResource(R.string.settings_language_title)
+        val languageSysDefault = stringResource(R.string.settings_language_system_default)
+        val langLabel = if (currentLang.code.isEmpty()) {
+            val sysLocale = getSystemDefaultLocale(context)
+            "${currentLang.flag} $languageSysDefault (${sysLocale.getDisplayLanguage(sysLocale).replaceFirstChar { it.uppercase() }})"
+        } else {
+            "${currentLang.flag} ${currentLang.nativeName}"
+        }
+        val showLanguageSection = matches(languageSectionTitle) || matches(languageTitle, langLabel)
+
+        val appearanceSectionTitle = stringResource(R.string.settings_section_appearance)
+        val appearanceSectionMatch = matches(appearanceSectionTitle)
+        val themeModeTitle = stringResource(R.string.settings_theme_mode)
+        val themeSystemStr = stringResource(R.string.settings_theme_system)
+        val themeLightStr = stringResource(R.string.settings_theme_light)
+        val themeDarkStr = stringResource(R.string.settings_theme_dark)
+        val showThemeMode = appearanceSectionMatch || matches(themeModeTitle, themeSystemStr, themeLightStr, themeDarkStr)
+        val amoledTitle = stringResource(R.string.settings_amoled_black_title)
+        val amoledDesc = stringResource(R.string.settings_amoled_black_desc)
+        val showAmoled = appearanceSectionMatch || matches(amoledTitle, amoledDesc)
+        val materialYouTitle = stringResource(R.string.settings_material_you_title)
+        val materialYouDesc = stringResource(R.string.settings_material_you_desc)
+        val showMaterialYou = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            (appearanceSectionMatch || matches(materialYouTitle, materialYouDesc))
+        val customAccentsTitle = stringResource(R.string.settings_custom_accents)
+        val showCustomAccents = appearanceSectionMatch || matches(customAccentsTitle)
+
+        val layoutSectionTitle = stringResource(R.string.settings_section_layout)
+        val layoutSectionMatch = matches(layoutSectionTitle)
+        val cornerStyleTitle = stringResource(R.string.settings_corner_style)
+        val cornerSharp = stringResource(R.string.settings_corner_sharp)
+        val cornerSubtle = stringResource(R.string.settings_corner_subtle)
+        val cornerRounded = stringResource(R.string.settings_corner_rounded)
+        val cornerPill = stringResource(R.string.settings_corner_pill)
+        val showCornerStyle = layoutSectionMatch || matches(cornerStyleTitle, cornerSharp, cornerSubtle, cornerRounded, cornerPill)
+        val gridSpacingTitle = stringResource(R.string.settings_grid_spacing)
+        val spacingCompact = stringResource(R.string.settings_spacing_compact)
+        val spacingStandard = stringResource(R.string.settings_spacing_standard)
+        val spacingRelaxed = stringResource(R.string.settings_spacing_relaxed)
+        val showGridSpacing = layoutSectionMatch || matches(gridSpacingTitle, spacingCompact, spacingStandard, spacingRelaxed)
+        val photosTileTitle = stringResource(R.string.settings_photos_tile_size)
+        val showPhotosTileSize = layoutSectionMatch || matches(photosTileTitle)
+        val albumsTileTitle = stringResource(R.string.settings_albums_tile_size)
+        val showAlbumsTileSize = layoutSectionMatch || matches(albumsTileTitle)
+
+        val badgesSectionTitle = stringResource(R.string.settings_section_badges)
+        val badgesSectionMatch = matches(badgesSectionTitle)
+        val timelineTitle = stringResource(R.string.settings_show_timeline_title)
+        val timelineDesc = stringResource(R.string.settings_show_timeline_desc)
+        val dateFormatTitle = stringResource(R.string.settings_date_format_title)
+        val relativeDatesTitle = stringResource(R.string.settings_relative_dates_title)
+        val relativeDatesDesc = stringResource(R.string.settings_relative_dates_desc)
+        val dayOfWeekTitle = stringResource(R.string.settings_show_day_of_week_title)
+        val dayOfWeekDesc = stringResource(R.string.settings_show_day_of_week_desc)
+        val abbrevDayTitle = stringResource(R.string.settings_abbreviate_day_title)
+        val abbrevDayDesc = stringResource(R.string.settings_abbreviate_day_desc)
+        val smartYearTitle = stringResource(R.string.settings_smart_year_title)
+        val smartYearDesc = stringResource(R.string.settings_smart_year_desc)
+        val showTimeline = badgesSectionMatch || matches(
+            timelineTitle, timelineDesc,
+            dateFormatTitle, relativeDatesTitle, relativeDatesDesc,
+            dayOfWeekTitle, dayOfWeekDesc, abbrevDayTitle, abbrevDayDesc,
+            smartYearTitle, smartYearDesc
+        )
+        val badgeDurationTitle = stringResource(R.string.settings_badge_duration_title)
+        val badgeDurationDesc = stringResource(R.string.settings_badge_duration_desc)
+        val showBadgeDuration = badgesSectionMatch || matches(badgeDurationTitle, badgeDurationDesc)
+        val badgeFormatsTitle = stringResource(R.string.settings_badge_formats_title)
+        val badgeFormatsDesc = stringResource(R.string.settings_badge_formats_desc)
+        val showBadgeFormats = badgesSectionMatch || matches(badgeFormatsTitle, badgeFormatsDesc)
+        val albumCountTitle = stringResource(R.string.settings_album_count_title)
+        val albumCountDesc = stringResource(R.string.settings_album_count_desc)
+        val showAlbumCount = badgesSectionMatch || matches(albumCountTitle, albumCountDesc)
+        val albumLabelsTitle = stringResource(R.string.settings_album_labels_title)
+        val albumLabelsDesc = stringResource(R.string.settings_album_labels_desc)
+        val showAlbumLabels = badgesSectionMatch || matches(albumLabelsTitle, albumLabelsDesc)
+
+        val viewerSectionTitle = stringResource(R.string.settings_section_viewer)
+        val viewerSectionMatch = matches(viewerSectionTitle)
+        val viewerHeaderTitle = stringResource(R.string.settings_viewer_header_title)
+        val viewerHeaderStyleLabel = stringResource(settings.viewerHeaderStyle.getDisplayNameRes())
+        val showViewerHeader = viewerSectionMatch || matches(viewerHeaderTitle, viewerHeaderStyleLabel)
+        val autoplayTitle = stringResource(R.string.settings_autoplay_video_title)
+        val autoplayDesc = stringResource(R.string.settings_autoplay_video_desc)
+        val showAutoplay = viewerSectionMatch || matches(autoplayTitle, autoplayDesc)
+        val loopTitle = stringResource(R.string.settings_loop_video_title)
+        val loopDesc = stringResource(R.string.settings_loop_video_desc)
+        val showLoop = viewerSectionMatch || matches(loopTitle, loopDesc)
+        val videoDoubleTapTitle = stringResource(R.string.settings_video_double_tap_zoom_title)
+        val videoDoubleTapDesc = stringResource(R.string.settings_video_double_tap_zoom_desc)
+        val showVideoDoubleTap = viewerSectionMatch || matches(videoDoubleTapTitle, videoDoubleTapDesc)
+        val videoGesturesTitle = stringResource(R.string.settings_video_gesture_controls_title)
+        val videoGesturesDesc = stringResource(R.string.settings_video_gesture_controls_desc)
+        val showVideoGestures = viewerSectionMatch || matches(videoGesturesTitle, videoGesturesDesc)
+        val userCommentsTitle = stringResource(R.string.settings_show_user_comments_title)
+        val userCommentsDesc = stringResource(R.string.settings_show_user_comments_desc)
+        val showUserComments = viewerSectionMatch || matches(userCommentsTitle, userCommentsDesc)
+        val filmstripTitle = stringResource(R.string.settings_show_filmstrip_title)
+        val filmstripDesc = stringResource(R.string.settings_show_filmstrip_desc)
+        val showFilmstrip = viewerSectionMatch || matches(filmstripTitle, filmstripDesc)
+        val pinchRotateTitle = stringResource(R.string.settings_pinch_to_rotate_title)
+        val pinchRotateDesc = stringResource(R.string.settings_pinch_to_rotate_desc)
+        val showPinchRotate = viewerSectionMatch || matches(pinchRotateTitle, pinchRotateDesc)
+        val multiStageZoomTitle = stringResource(R.string.settings_multi_stage_zoom_title)
+        val multiStageZoomDesc = stringResource(R.string.settings_multi_stage_zoom_desc)
+        val zoomScaleTitle = stringResource(R.string.settings_zoom_scale_title)
+        val showMultiStageZoom = viewerSectionMatch || matches(multiStageZoomTitle, multiStageZoomDesc, zoomScaleTitle)
+
+        val memoriesSectionTitle = stringResource(R.string.settings_section_memories)
+        val memoriesSectionMatch = matches(memoriesSectionTitle)
+        val memoriesNotifTitle = stringResource(R.string.setting_memories_notifications)
+        val memoriesNotifDesc = stringResource(R.string.setting_memories_notifications_desc)
+        val memoriesTimeTitle = stringResource(R.string.setting_memories_time)
+        val memoriesTimeDesc = stringResource(R.string.setting_memories_time_desc)
+        val showMemories = memoriesSectionMatch || matches(memoriesNotifTitle, memoriesNotifDesc, memoriesTimeTitle, memoriesTimeDesc)
+
+        val behaviorSectionTitle = stringResource(R.string.settings_section_behavior)
+        val behaviorSectionMatch = matches(behaviorSectionTitle)
+        val navTabsTitle = stringResource(R.string.settings_navigation_tabs_title)
+        val navTabsDesc = stringResource(R.string.settings_navigation_tabs_desc)
+        val tabMediaStr = stringResource(R.string.tab_media)
+        val tabAlbumsStr = stringResource(R.string.tab_albums)
+        val tabFavoritesStr = stringResource(R.string.tab_favorites)
+        val tabLibraryStr = stringResource(R.string.tab_library)
+        val showNavTabs = behaviorSectionMatch || matches(navTabsTitle, navTabsDesc, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr)
+        val tiltNavIconsTitle = stringResource(R.string.settings_tilt_nav_icons_title)
+        val tiltNavIconsDesc = stringResource(R.string.settings_tilt_nav_icons_desc)
+        val showTiltNavIcons = behaviorSectionMatch || matches(tiltNavIconsTitle, tiltNavIconsDesc)
+        val albumTopTitle = stringResource(R.string.settings_album_top_section_title)
+        val albumFiltersTitle = stringResource(R.string.settings_album_filters_title)
+        val albumFiltersDesc = stringResource(R.string.settings_album_filters_desc)
+        val showAlbumFilters = behaviorSectionMatch || matches(albumTopTitle, albumFiltersTitle, albumFiltersDesc)
+        val startupTabTitle = stringResource(R.string.settings_startup_tab)
+        val showStartupTab = behaviorSectionMatch || matches(startupTabTitle, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr)
+        val appLockTitle = stringResource(R.string.settings_app_lock_title)
+        val appLockDesc = stringResource(R.string.settings_app_lock_desc)
+        val changePinStr = stringResource(R.string.settings_change_pin)
+        val bioUnlockTitle = stringResource(R.string.settings_biometric_unlock_title)
+        val bioUnlockDesc = stringResource(R.string.settings_biometric_unlock_desc)
+        val showAppLock = behaviorSectionMatch || matches(appLockTitle, appLockDesc, changePinStr, bioUnlockTitle, bioUnlockDesc)
+        val hideVaultTitle = stringResource(R.string.settings_hide_vault_title)
+        val hideVaultDesc = stringResource(R.string.settings_hide_vault_desc)
+        val showHideVault = behaviorSectionMatch || matches(hideVaultTitle, hideVaultDesc)
+        val storageAccessTitle = stringResource(R.string.settings_storage_access_title)
+        val storageAccessDescGranted = stringResource(R.string.settings_storage_access_desc_granted)
+        val storageAccessDescPrompt = stringResource(R.string.settings_storage_access_desc_prompt)
+        val showStorageAccess = Build.VERSION.SDK_INT <= 29 &&
+            (behaviorSectionMatch || matches(storageAccessTitle, storageAccessDescGranted, storageAccessDescPrompt))
+        val silentVaultTitle = stringResource(R.string.settings_silent_vault_title)
+        val silentVaultDescGranted = stringResource(R.string.settings_silent_vault_desc_granted)
+        val silentVaultDescPrompt = stringResource(R.string.settings_silent_vault_desc_prompt)
+        val showSilentVault = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && settings.vaultHideFromStorage &&
+            (behaviorSectionMatch || matches(silentVaultTitle, silentVaultDescGranted, silentVaultDescPrompt))
+        val vaultBioTitle = stringResource(R.string.settings_vault_biometric_title)
+        val vaultBioDesc = stringResource(R.string.settings_vault_biometric_desc)
+        val showVaultBio = behaviorSectionMatch || matches(vaultBioTitle, vaultBioDesc)
+        val confirmDeleteTitle = stringResource(R.string.settings_confirm_delete_title)
+        val confirmDeleteDesc = stringResource(R.string.settings_confirm_delete_desc)
+        val showConfirmDelete = behaviorSectionMatch || matches(confirmDeleteTitle, confirmDeleteDesc)
+        val deleteModeTitle = stringResource(R.string.settings_delete_mode_title)
+        val deleteModeDesc = stringResource(R.string.settings_delete_mode_desc)
+        val deleteModeTrash = stringResource(R.string.settings_delete_mode_trash)
+        val deleteModePerm = stringResource(R.string.settings_delete_mode_permanent)
+        val deleteModeAsk = stringResource(R.string.settings_delete_mode_always_ask)
+        val showDeleteMode = behaviorSectionMatch || matches(deleteModeTitle, deleteModeDesc, deleteModeTrash, deleteModePerm, deleteModeAsk)
+        val systemTrashTitle = stringResource(R.string.settings_system_trash_title)
+        val systemTrashDesc = stringResource(R.string.settings_system_trash_desc)
+        val showSystemTrash = Build.VERSION.SDK_INT >= 30 &&
+            (behaviorSectionMatch || matches(systemTrashTitle, systemTrashDesc))
+        val prefEditorTitle = stringResource(R.string.settings_preferred_editor_title)
+        val prefEditorDesc = stringResource(R.string.settings_preferred_editor_desc)
+        val editorAsk = stringResource(R.string.settings_editor_always_ask)
+        val editorBuiltin = stringResource(R.string.settings_editor_builtin)
+        val editorExternal = stringResource(R.string.settings_editor_external)
+        val showPreferredEditor = behaviorSectionMatch || matches(prefEditorTitle, prefEditorDesc, editorAsk, editorBuiltin, editorExternal)
+        val overwriteTitle = stringResource(R.string.settings_editor_overwrite_title)
+        val overwriteDesc = stringResource(R.string.settings_editor_overwrite_desc)
+        val showOverwrite = behaviorSectionMatch || matches(overwriteTitle, overwriteDesc)
+        val secureSharingTitle = stringResource(R.string.settings_secure_sharing_title)
+        val secureSharingModeTitle = stringResource(settings.secureSharingMode.getTitleRes())
+        val secureSharingModeDesc = stringResource(settings.secureSharingMode.getDescriptionRes())
+        val showSecureSharing = behaviorSectionMatch || matches(secureSharingTitle, secureSharingModeTitle, secureSharingModeDesc)
+
+        val storageSectionTitle = stringResource(R.string.settings_section_storage)
+        val storageSectionMatch = matches(storageSectionTitle)
+        val rescanMediaLabel = stringResource(R.string.settings_rescan_media)
+        val excludedFoldersLabel = stringResource(R.string.excluded_folders_title)
+        val clearCacheLabel = stringResource(R.string.settings_clear_cache)
+        val resetAllLabel = stringResource(R.string.settings_reset_all)
+        val showRescanMedia = storageSectionMatch || matches(rescanMediaLabel)
+        val showExcludedFoldersBtn = storageSectionMatch || matches(excludedFoldersLabel)
+        val showClearCache = storageSectionMatch || matches(clearCacheLabel)
+        val showResetAll = storageSectionMatch || matches(resetAllLabel)
+
+        val aboutTitle = stringResource(R.string.library_about_title)
+        val aboutSubtitle = stringResource(R.string.library_about_subtitle)
+        val showAboutSection = matches(aboutTitle, aboutSubtitle)
+
+        val hasAnyAppearance = showThemeMode || showAmoled || showMaterialYou || showCustomAccents
+        val hasAnyLayout = showCornerStyle || showGridSpacing || showPhotosTileSize || showAlbumsTileSize
+        val hasAnyBadges = showTimeline || showBadgeDuration || showBadgeFormats || showAlbumCount || showAlbumLabels
+        val hasAnyViewer = showViewerHeader || showAutoplay || showLoop || showVideoDoubleTap ||
+            showVideoGestures || showUserComments || showFilmstrip || showPinchRotate || showMultiStageZoom
+        val hasAnyBehavior = showNavTabs || showTiltNavIcons || showAlbumFilters || showStartupTab || showAppLock ||
+            showHideVault || showStorageAccess || showSilentVault || showVaultBio ||
+            showConfirmDelete || showDeleteMode || showSystemTrash || showPreferredEditor ||
+            showOverwrite || showSecureSharing
+        val hasAnyStorage = showRescanMedia || showExcludedFoldersBtn || showClearCache || showResetAll
+        val hasAnyMatches = showLanguageSection || hasAnyAppearance || hasAnyLayout ||
+            hasAnyBadges || hasAnyViewer || showMemories || hasAnyBehavior ||
+            hasAnyStorage || showAboutSection
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -195,9 +500,35 @@ fun SettingsScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+        if (!hasAnyMatches && searchTokens.isNotEmpty()) {
+            item(key = "settings_empty_search") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 64.dp, horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.empty_search_settings, searchQuery.trim()),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
         // Section: Language & Region
+        if (showLanguageSection) {
         item {
-            SettingsSectionHeader(Icons.Outlined.Language, stringResource(R.string.settings_section_language))
+            SettingsSectionHeader(Icons.Outlined.Language, languageSectionTitle)
         }
 
         item {
@@ -219,16 +550,10 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.settings_language_title),
+                            text = languageTitle,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        val langLabel = if (currentLang.code.isEmpty()) {
-                            val sysLocale = getSystemDefaultLocale(context)
-                            "${currentLang.flag} ${stringResource(R.string.settings_language_system_default)} (${sysLocale.getDisplayLanguage(sysLocale).replaceFirstChar { it.uppercase() }})"
-                        } else {
-                            "${currentLang.flag} ${currentLang.nativeName}"
-                        }
                         Text(
                             text = langLabel,
                             style = MaterialTheme.typography.bodySmall,
@@ -245,20 +570,20 @@ fun SettingsScreen(
                 }
             }
         }
+        }
 
         // Section 1: Appearance & Theme
+        if (hasAnyAppearance) {
         item {
-            SettingsSectionHeader(Icons.Outlined.Palette, stringResource(R.string.settings_section_appearance))
+            SettingsSectionHeader(Icons.Outlined.Palette, appearanceSectionTitle)
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(stringResource(R.string.settings_theme_mode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            val appearanceBlocks = buildList<@Composable () -> Unit> {
+                if (showThemeMode) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(themeModeTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -271,9 +596,9 @@ fun SettingsScreen(
                                 label = {
                                     Text(
                                         when (mode) {
-                                            ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_system)
-                                            ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
-                                            ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
+                                            ThemeMode.SYSTEM -> themeSystemStr
+                                            ThemeMode.LIGHT -> themeLightStr
+                                            ThemeMode.DARK -> themeDarkStr
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
@@ -282,33 +607,35 @@ fun SettingsScreen(
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_amoled_black_title),
-                        subtitle = stringResource(R.string.settings_amoled_black_desc),
-                        checked = settings.amoledBlack,
-                        onCheckedChange = { preferences.setAmoledBlack(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    // Material You dynamic color selector
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        }
+                    }
+                }
+                if (showAmoled) {
+                    add {
                         SettingsSwitchRow(
-                            title = stringResource(R.string.settings_material_you_title),
-                            subtitle = stringResource(R.string.settings_material_you_desc),
+                            title = amoledTitle,
+                            subtitle = amoledDesc,
+                            checked = settings.amoledBlack,
+                            onCheckedChange = { preferences.setAmoledBlack(it) }
+                        )
+                    }
+                }
+                if (showMaterialYou) {
+                    add {
+                        SettingsSwitchRow(
+                            title = materialYouTitle,
+                            subtitle = materialYouDesc,
                             checked = settings.accentColor == AccentColor.MATERIAL_YOU,
                             onCheckedChange = { isChecked ->
                                 preferences.setAccentColor(if (isChecked) AccentColor.MATERIAL_YOU else AccentColor.IRIS)
                             }
                         )
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
-
-                    Text(stringResource(R.string.settings_custom_accents), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                }
+                if (showCustomAccents) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(customAccentsTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -346,24 +673,101 @@ fun SettingsScreen(
                             }
                         }
                     }
+                        }
+                    }
                 }
             }
+            SettingsSectionCard(appearanceBlocks)
+        }
         }
 
         // Section 2: Layout & Grid Customization
+        if (hasAnyLayout) {
         item {
-            SettingsSectionHeader(Icons.Outlined.GridView, stringResource(R.string.settings_section_layout))
+            SettingsSectionHeader(Icons.Outlined.GridView, layoutSectionTitle)
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(stringResource(R.string.settings_corner_style), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    
+            val screenWidthDp = LocalConfiguration.current.screenWidthDp.toFloat()
+            val density = LocalDensity.current
+            val photoSpacingDp = settings.gridSpacing.dp.toFloat()
+            val photoAvailableWidth = (screenWidthDp - 2 * photoSpacingDp).coerceAtLeast(100f)
+
+            // Dynamic slider boundaries for Photos
+            val minPhotoDp = maxOf(36f, ((photoAvailableWidth + photoSpacingDp) / 6.8f - photoSpacingDp).coerceAtLeast(36f))
+            val maxPhotoDp = (photoAvailableWidth * 0.72f).coerceIn(160f, 320f)
+            val currentPhotoSize = settings.photoGridSize.coerceIn(minPhotoDp, maxPhotoDp)
+            val photoColumns = GridCalculations.calculatePhotoColumns(
+                screenWidthDp = screenWidthDp,
+                cellSizeDp = currentPhotoSize,
+                gridSpacingDp = photoSpacingDp,
+                density = density
+            )
+
+            // Dynamic slider boundaries for Albums
+            val albumSpacingDp = (settings.gridSpacing.dp + 8).toFloat()
+            val albumPaddingDp = 12f
+            val albumAvailableWidth = (screenWidthDp - 2 * albumPaddingDp).coerceAtLeast(100f)
+            val minAlbumDp = maxOf(48f, ((albumAvailableWidth + albumSpacingDp) / 4.8f - albumSpacingDp).coerceAtLeast(48f))
+            val maxAlbumDp = (albumAvailableWidth * 0.85f).coerceIn(200f, 420f)
+            val currentAlbumSize = settings.albumGridSize.coerceIn(minAlbumDp, maxAlbumDp)
+            val albumColumns = GridCalculations.calculateAlbumColumns(
+                screenWidthDp = screenWidthDp,
+                cellSizeDp = currentAlbumSize,
+                gridSpacingDp = settings.gridSpacing.dp.toFloat(),
+                density = density
+            )
+
+            val colorScheme = MaterialTheme.colorScheme
+            val materialYouTiles = listOf(
+                Triple(
+                    listOf(colorScheme.primaryContainer, colorScheme.primary.copy(alpha = 0.35f)),
+                    colorScheme.onPrimaryContainer,
+                    Icons.Outlined.PhotoCamera
+                ),
+                Triple(
+                    listOf(colorScheme.secondaryContainer, colorScheme.secondary.copy(alpha = 0.3f)),
+                    colorScheme.onSecondaryContainer,
+                    Icons.Outlined.Landscape
+                ),
+                Triple(
+                    listOf(colorScheme.tertiaryContainer, colorScheme.tertiary.copy(alpha = 0.35f)),
+                    colorScheme.onTertiaryContainer,
+                    Icons.Outlined.Videocam
+                ),
+                Triple(
+                    listOf(colorScheme.surfaceVariant, colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                    colorScheme.onSurfaceVariant,
+                    Icons.Outlined.AutoAwesome
+                ),
+                Triple(
+                    listOf(colorScheme.inversePrimary.copy(alpha = 0.45f), colorScheme.primaryContainer),
+                    colorScheme.primary,
+                    Icons.Outlined.WbSunny
+                ),
+                Triple(
+                    listOf(colorScheme.secondary.copy(alpha = 0.25f), colorScheme.tertiaryContainer),
+                    colorScheme.onSecondaryContainer,
+                    Icons.Outlined.Folder
+                ),
+                Triple(
+                    listOf(colorScheme.tertiary.copy(alpha = 0.25f), colorScheme.primaryContainer),
+                    colorScheme.onTertiaryContainer,
+                    Icons.Outlined.Image
+                ),
+                Triple(
+                    listOf(colorScheme.primary.copy(alpha = 0.2f), colorScheme.secondaryContainer),
+                    colorScheme.onPrimaryContainer,
+                    Icons.Outlined.PhotoAlbum
+                ),
+            )
+
+            val layoutBlocks = buildList<@Composable () -> Unit> {
+                if (showCornerStyle) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(cornerStyleTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
                     // 2x2 grid for symmetrical, perfect alignment
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -371,13 +775,13 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.SHARP,
                                 onClick = { preferences.setCornerStyle(CornerStyle.SHARP) },
-                                label = { Text(stringResource(R.string.settings_corner_sharp), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(cornerSharp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.CLASSIC,
                                 onClick = { preferences.setCornerStyle(CornerStyle.CLASSIC) },
-                                label = { Text(stringResource(R.string.settings_corner_subtle), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(cornerSubtle, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -385,20 +789,23 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.ROUNDED,
                                 onClick = { preferences.setCornerStyle(CornerStyle.ROUNDED) },
-                                label = { Text(stringResource(R.string.settings_corner_rounded), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(cornerRounded, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.cornerStyle == CornerStyle.SQUIRCLE,
                                 onClick = { preferences.setCornerStyle(CornerStyle.SQUIRCLE) },
-                                label = { Text(stringResource(R.string.settings_corner_pill), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(cornerPill, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Text(stringResource(R.string.settings_grid_spacing), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                if (showGridSpacing) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(gridSpacingTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -411,9 +818,9 @@ fun SettingsScreen(
                                 label = {
                                     Text(
                                         when (spacing) {
-                                            GridSpacing.COMPACT -> stringResource(R.string.settings_spacing_compact)
-                                            GridSpacing.STANDARD -> stringResource(R.string.settings_spacing_standard)
-                                            GridSpacing.RELAXED -> stringResource(R.string.settings_spacing_relaxed)
+                                            GridSpacing.COMPACT -> spacingCompact
+                                            GridSpacing.STANDARD -> spacingStandard
+                                            GridSpacing.RELAXED -> spacingRelaxed
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center
@@ -422,86 +829,14 @@ fun SettingsScreen(
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    val screenWidthDp = LocalConfiguration.current.screenWidthDp.toFloat()
-                    val density = LocalDensity.current
-                    val photoSpacingDp = settings.gridSpacing.dp.toFloat()
-                    val photoAvailableWidth = (screenWidthDp - 2 * photoSpacingDp).coerceAtLeast(100f)
-
-                    // Dynamic slider boundaries for Photos
-                    val minPhotoDp = maxOf(36f, ((photoAvailableWidth + photoSpacingDp) / 6.8f - photoSpacingDp).coerceAtLeast(36f))
-                    val maxPhotoDp = (photoAvailableWidth * 0.72f).coerceIn(160f, 320f)
-                    val currentPhotoSize = settings.photoGridSize.coerceIn(minPhotoDp, maxPhotoDp)
-                    val photoColumns = GridCalculations.calculatePhotoColumns(
-                        screenWidthDp = screenWidthDp,
-                        cellSizeDp = currentPhotoSize,
-                        gridSpacingDp = photoSpacingDp,
-                        density = density
-                    )
-
-                    // Dynamic slider boundaries for Albums
-                    val albumSpacingDp = (settings.gridSpacing.dp + 8).toFloat()
-                    val albumPaddingDp = 12f
-                    val albumAvailableWidth = (screenWidthDp - 2 * albumPaddingDp).coerceAtLeast(100f)
-                    val minAlbumDp = maxOf(48f, ((albumAvailableWidth + albumSpacingDp) / 4.8f - albumSpacingDp).coerceAtLeast(48f))
-                    val maxAlbumDp = (albumAvailableWidth * 0.85f).coerceIn(200f, 420f)
-                    val currentAlbumSize = settings.albumGridSize.coerceIn(minAlbumDp, maxAlbumDp)
-                    val albumColumns = GridCalculations.calculateAlbumColumns(
-                        screenWidthDp = screenWidthDp,
-                        cellSizeDp = currentAlbumSize,
-                        gridSpacingDp = settings.gridSpacing.dp.toFloat(),
-                        density = density
-                    )
-
-                    val colorScheme = MaterialTheme.colorScheme
-                    val materialYouTiles = listOf(
-                        Triple(
-                            listOf(colorScheme.primaryContainer, colorScheme.primary.copy(alpha = 0.35f)),
-                            colorScheme.onPrimaryContainer,
-                            Icons.Outlined.PhotoCamera
-                        ),
-                        Triple(
-                            listOf(colorScheme.secondaryContainer, colorScheme.secondary.copy(alpha = 0.3f)),
-                            colorScheme.onSecondaryContainer,
-                            Icons.Outlined.Landscape
-                        ),
-                        Triple(
-                            listOf(colorScheme.tertiaryContainer, colorScheme.tertiary.copy(alpha = 0.35f)),
-                            colorScheme.onTertiaryContainer,
-                            Icons.Outlined.Videocam
-                        ),
-                        Triple(
-                            listOf(colorScheme.surfaceVariant, colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-                            colorScheme.onSurfaceVariant,
-                            Icons.Outlined.AutoAwesome
-                        ),
-                        Triple(
-                            listOf(colorScheme.inversePrimary.copy(alpha = 0.45f), colorScheme.primaryContainer),
-                            colorScheme.primary,
-                            Icons.Outlined.WbSunny
-                        ),
-                        Triple(
-                            listOf(colorScheme.secondary.copy(alpha = 0.25f), colorScheme.tertiaryContainer),
-                            colorScheme.onSecondaryContainer,
-                            Icons.Outlined.Folder
-                        ),
-                        Triple(
-                            listOf(colorScheme.tertiary.copy(alpha = 0.25f), colorScheme.primaryContainer),
-                            colorScheme.onTertiaryContainer,
-                            Icons.Outlined.Image
-                        ),
-                        Triple(
-                            listOf(colorScheme.primary.copy(alpha = 0.2f), colorScheme.secondaryContainer),
-                            colorScheme.onPrimaryContainer,
-                            Icons.Outlined.PhotoAlbum
-                        ),
-                    )
-
+                        }
+                    }
+                }
+                if (showPhotosTileSize) {
+                    add {
                     // Photos Grid Tile Size & Live Preview
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(stringResource(R.string.settings_photos_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(photosTileTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                         // Scaled Live Photos Grid Mockup (Dynamic Height, Full Width Fill)
                         Surface(
@@ -657,12 +992,13 @@ fun SettingsScreen(
                             valueRange = minPhotoDp..maxPhotoDp,
                         )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
+                    }
+                }
+                if (showAlbumsTileSize) {
+                    add {
                     // Albums Grid Tile Size & Live Preview
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(stringResource(R.string.settings_albums_tile_size), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(albumsTileTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                         // Compact Scaled Live Albums Grid Mockup
                         Surface(
@@ -782,25 +1118,27 @@ fun SettingsScreen(
                             valueRange = minAlbumDp..maxAlbumDp,
                         )
                     }
+                    }
                 }
             }
+            SettingsSectionCard(layoutBlocks)
+        }
         }
 
         // Section 3: Media Badges & Timeline
+        if (hasAnyBadges) {
         item {
-            SettingsSectionHeader(Icons.Outlined.ViewDay, stringResource(R.string.settings_section_badges))
+            SettingsSectionHeader(Icons.Outlined.ViewDay, badgesSectionTitle)
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            val badgeBlocks = buildList<@Composable () -> Unit> {
+                if (showTimeline) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = stringResource(R.string.settings_show_timeline_title),
-                        subtitle = stringResource(R.string.settings_show_timeline_desc),
+                        title = timelineTitle,
+                        subtitle = timelineDesc,
                         checked = settings.showTimelineHeaders,
                         onCheckedChange = { preferences.setShowTimelineHeaders(it) }
                     )
@@ -827,7 +1165,7 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Text(
-                                        stringResource(R.string.settings_date_format_title),
+                                        dateFormatTitle,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -852,8 +1190,8 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                             SettingsSwitchRow(
-                                title = stringResource(R.string.settings_relative_dates_title),
-                                subtitle = stringResource(R.string.settings_relative_dates_desc),
+                                title = relativeDatesTitle,
+                                subtitle = relativeDatesDesc,
                                 checked = settings.useRelativeDates,
                                 onCheckedChange = { preferences.setUseRelativeDates(it) }
                             )
@@ -861,8 +1199,8 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                             SettingsSwitchRow(
-                                title = stringResource(R.string.settings_show_day_of_week_title),
-                                subtitle = stringResource(R.string.settings_show_day_of_week_desc),
+                                title = dayOfWeekTitle,
+                                subtitle = dayOfWeekDesc,
                                 checked = settings.showDayOfWeek,
                                 onCheckedChange = { preferences.setShowDayOfWeek(it) }
                             )
@@ -876,8 +1214,8 @@ fun SettingsScreen(
                                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(bottom = 14.dp))
 
                                     SettingsSwitchRow(
-                                        title = stringResource(R.string.settings_abbreviate_day_title),
-                                        subtitle = stringResource(R.string.settings_abbreviate_day_desc),
+                                        title = abbrevDayTitle,
+                                        subtitle = abbrevDayDesc,
                                         checked = settings.abbreviateDayOfWeek,
                                         onCheckedChange = { preferences.setAbbreviateDayOfWeek(it) }
                                     )
@@ -887,155 +1225,179 @@ fun SettingsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                             SettingsSwitchRow(
-                                title = stringResource(R.string.settings_smart_year_title),
-                                subtitle = stringResource(R.string.settings_smart_year_desc),
+                                title = smartYearTitle,
+                                subtitle = smartYearDesc,
                                 checked = settings.smartYearHiding,
                                 onCheckedChange = { preferences.setSmartYearHiding(it) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_badge_duration_title),
-                        subtitle = stringResource(R.string.settings_badge_duration_desc),
-                        checked = settings.showVideoDurationBadge,
-                        onCheckedChange = { preferences.setShowVideoDurationBadge(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_badge_formats_title),
-                        subtitle = stringResource(R.string.settings_badge_formats_desc),
-                        checked = settings.showMediaFormatBadge,
-                        onCheckedChange = { preferences.setShowMediaFormatBadge(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_album_count_title),
-                        subtitle = stringResource(R.string.settings_album_count_desc),
-                        checked = settings.showAlbumCount,
-                        onCheckedChange = { preferences.setShowAlbumCount(it) }
-                    )
+                        }
+                    }
+                }
+                if (showBadgeDuration) {
+                    add {
+                        SettingsSwitchRow(
+                            title = badgeDurationTitle,
+                            subtitle = badgeDurationDesc,
+                            checked = settings.showVideoDurationBadge,
+                            onCheckedChange = { preferences.setShowVideoDurationBadge(it) }
+                        )
+                    }
+                }
+                if (showBadgeFormats) {
+                    add {
+                        SettingsSwitchRow(
+                            title = badgeFormatsTitle,
+                            subtitle = badgeFormatsDesc,
+                            checked = settings.showMediaFormatBadge,
+                            onCheckedChange = { preferences.setShowMediaFormatBadge(it) }
+                        )
+                    }
+                }
+                if (showAlbumCount) {
+                    add {
+                        SettingsSwitchRow(
+                            title = albumCountTitle,
+                            subtitle = albumCountDesc,
+                            checked = settings.showAlbumCount,
+                            onCheckedChange = { preferences.setShowAlbumCount(it) }
+                        )
+                    }
+                }
+                if (showAlbumLabels) {
+                    add {
+                        SettingsSwitchRow(
+                            title = albumLabelsTitle,
+                            subtitle = albumLabelsDesc,
+                            checked = settings.showAlbumLabels,
+                            onCheckedChange = { preferences.setShowAlbumLabels(it) }
+                        )
+                    }
                 }
             }
+            SettingsSectionCard(badgeBlocks)
+        }
         }
 
         // Section 4: Viewer & Playback
+        if (hasAnyViewer) {
         item {
-            SettingsSectionHeader(Icons.Outlined.PlayCircle, stringResource(R.string.settings_section_viewer))
+            SettingsSectionHeader(Icons.Outlined.PlayCircle, viewerSectionTitle)
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showViewerHeaderDialog = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+            val viewerBlocks = buildList<@Composable () -> Unit> {
+                if (showViewerHeader) {
+                    add {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showViewerHeaderDialog = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                stringResource(R.string.settings_viewer_header_title),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                stringResource(settings.viewerHeaderStyle.getDisplayNameRes()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    viewerHeaderTitle,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    viewerHeaderStyleLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                    }
+                }
+                if (showAutoplay) {
+                    add {
+                        SettingsSwitchRow(
+                            title = autoplayTitle,
+                            subtitle = autoplayDesc,
+                            checked = settings.autoPlayVideo,
+                            onCheckedChange = { preferences.setAutoPlayVideo(it) }
                         )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
+                }
+                if (showLoop) {
+                    add {
+                        SettingsSwitchRow(
+                            title = loopTitle,
+                            subtitle = loopDesc,
+                            checked = settings.loopVideo,
+                            onCheckedChange = { preferences.setLoopVideo(it) }
+                        )
+                    }
+                }
+                if (showVideoDoubleTap) {
+                    add {
+                        SettingsSwitchRow(
+                            title = videoDoubleTapTitle,
+                            subtitle = videoDoubleTapDesc,
+                            checked = settings.videoDoubleTapToZoom,
+                            onCheckedChange = { preferences.setVideoDoubleTapToZoom(it) }
+                        )
+                    }
+                }
+                if (showVideoGestures) {
+                    add {
+                        SettingsSwitchRow(
+                            title = videoGesturesTitle,
+                            subtitle = videoGesturesDesc,
+                            checked = settings.videoGestureControls,
+                            onCheckedChange = { preferences.setVideoGestureControls(it) }
+                        )
+                    }
+                }
+                if (showUserComments) {
+                    add {
+                        SettingsSwitchRow(
+                            title = userCommentsTitle,
+                            subtitle = userCommentsDesc,
+                            checked = settings.showViewerUserComments,
+                            onCheckedChange = { preferences.setShowViewerUserComments(it) }
+                        )
+                    }
+                }
+                if (showFilmstrip) {
+                    add {
+                        SettingsSwitchRow(
+                            title = filmstripTitle,
+                            subtitle = filmstripDesc,
+                            checked = settings.showFilmstrip,
+                            onCheckedChange = { preferences.setShowFilmstrip(it) }
+                        )
+                    }
+                }
+                if (showPinchRotate) {
+                    add {
+                        SettingsSwitchRow(
+                            title = pinchRotateTitle,
+                            subtitle = pinchRotateDesc,
+                            checked = settings.pinchToRotate,
+                            onCheckedChange = { preferences.setPinchToRotate(it) }
+                        )
+                    }
+                }
+                if (showMultiStageZoom) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = stringResource(R.string.settings_autoplay_video_title),
-                        subtitle = stringResource(R.string.settings_autoplay_video_desc),
-                        checked = settings.autoPlayVideo,
-                        onCheckedChange = { preferences.setAutoPlayVideo(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_loop_video_title),
-                        subtitle = stringResource(R.string.settings_loop_video_desc),
-                        checked = settings.loopVideo,
-                        onCheckedChange = { preferences.setLoopVideo(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_video_double_tap_zoom_title),
-                        subtitle = stringResource(R.string.settings_video_double_tap_zoom_desc),
-                        checked = settings.videoDoubleTapToZoom,
-                        onCheckedChange = { preferences.setVideoDoubleTapToZoom(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_video_gesture_controls_title),
-                        subtitle = stringResource(R.string.settings_video_gesture_controls_desc),
-                        checked = settings.videoGestureControls,
-                        onCheckedChange = { preferences.setVideoGestureControls(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_show_user_comments_title),
-                        subtitle = stringResource(R.string.settings_show_user_comments_desc),
-                        checked = settings.showViewerUserComments,
-                        onCheckedChange = { preferences.setShowViewerUserComments(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_show_filmstrip_title),
-                        subtitle = stringResource(R.string.settings_show_filmstrip_desc),
-                        checked = settings.showFilmstrip,
-                        onCheckedChange = { preferences.setShowFilmstrip(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_pinch_to_rotate_title),
-                        subtitle = stringResource(R.string.settings_pinch_to_rotate_desc),
-                        checked = settings.pinchToRotate,
-                        onCheckedChange = { preferences.setPinchToRotate(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_multi_stage_zoom_title),
-                        subtitle = stringResource(R.string.settings_multi_stage_zoom_desc),
+                        title = multiStageZoomTitle,
+                        subtitle = multiStageZoomDesc,
                         checked = settings.multiStageZoom,
                         onCheckedChange = { preferences.setMultiStageZoom(it) }
                     )
@@ -1047,8 +1409,8 @@ fun SettingsScreen(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                            
-                            Text(stringResource(R.string.settings_zoom_scale_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
+                            Text(zoomScaleTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1070,13 +1432,18 @@ fun SettingsScreen(
                             }
                         }
                     }
+                        }
+                    }
                 }
             }
+            SettingsSectionCard(viewerBlocks)
+        }
         }
 
         // Section: Memories & Notifications
+        if (showMemories) {
         item {
-            SettingsSectionHeader(Icons.Outlined.Notifications, stringResource(R.string.settings_section_memories))
+            SettingsSectionHeader(Icons.Outlined.Notifications, memoriesSectionTitle)
         }
 
         item {
@@ -1087,8 +1454,8 @@ fun SettingsScreen(
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = stringResource(R.string.setting_memories_notifications),
-                        subtitle = stringResource(R.string.setting_memories_notifications_desc),
+                        title = memoriesNotifTitle,
+                        subtitle = memoriesNotifDesc,
                         checked = settings.memoriesNotificationEnabled,
                         onCheckedChange = { enabled ->
                             preferences.setMemoriesNotificationEnabled(enabled)
@@ -1127,12 +1494,12 @@ fun SettingsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                     Text(
-                                        text = stringResource(R.string.setting_memories_time),
+                                        text = memoriesTimeTitle,
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
-                                        text = stringResource(R.string.setting_memories_time_desc),
+                                        text = memoriesTimeDesc,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1155,21 +1522,21 @@ fun SettingsScreen(
                 }
             }
         }
+        }
 
         // Section 5: Startup & Security
+        if (hasAnyBehavior) {
         item {
-            SettingsSectionHeader(Icons.Outlined.Dashboard, stringResource(R.string.settings_section_behavior))
+            SettingsSectionHeader(Icons.Outlined.Dashboard, behaviorSectionTitle)
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(stringResource(R.string.settings_navigation_tabs_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.settings_navigation_tabs_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val behaviorBlocks = buildList<@Composable () -> Unit> {
+                if (showNavTabs) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(navTabsTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(navTabsDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1189,7 +1556,7 @@ fun SettingsScreen(
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
-                                label = { Text(stringResource(R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabMediaStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
@@ -1207,7 +1574,7 @@ fun SettingsScreen(
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
-                                label = { Text(stringResource(R.string.tab_albums), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabAlbumsStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1227,7 +1594,7 @@ fun SettingsScreen(
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
-                                label = { Text(stringResource(R.string.tab_favorites), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabFavoritesStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
@@ -1245,26 +1612,42 @@ fun SettingsScreen(
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
-                                label = { Text(stringResource(R.string.tab_library), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabLibraryStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Text(stringResource(R.string.settings_album_top_section_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                if (showTiltNavIcons) {
+                    add {
+                        SettingsSwitchRow(
+                            title = tiltNavIconsTitle,
+                            subtitle = tiltNavIconsDesc,
+                            checked = settings.tiltNavIcons,
+                            onCheckedChange = { preferences.setTiltNavIcons(it) }
+                        )
+                    }
+                }
+                if (showAlbumFilters) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(albumTopTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                     SettingsSwitchRow(
-                        title = stringResource(R.string.settings_album_filters_title),
-                        subtitle = stringResource(R.string.settings_album_filters_desc),
+                        title = albumFiltersTitle,
+                        subtitle = albumFiltersDesc,
                         checked = settings.showAlbumFilterChips,
                         onCheckedChange = { preferences.setShowAlbumFilterChips(it) }
                     )
+                        }
+                    }
+                }
+                if (showStartupTab) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(startupTabTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Text(stringResource(R.string.settings_startup_tab), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    
                     // 2x2 grid for symmetrical, perfect alignment
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1273,14 +1656,14 @@ fun SettingsScreen(
                                 selected = settings.startupTab == StartupTab.MEDIA,
                                 enabled = settings.showMediaTab,
                                 onClick = { preferences.setStartupTab(StartupTab.MEDIA) },
-                                label = { Text(stringResource(R.string.tab_media), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabMediaStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.ALBUMS,
                                 enabled = settings.showAlbumsTab,
                                 onClick = { preferences.setStartupTab(StartupTab.ALBUMS) },
-                                label = { Text(stringResource(R.string.tab_albums), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabAlbumsStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1289,23 +1672,26 @@ fun SettingsScreen(
                                 selected = settings.startupTab == StartupTab.FAVORITES,
                                 enabled = settings.showFavoritesTab,
                                 onClick = { preferences.setStartupTab(StartupTab.FAVORITES) },
-                                label = { Text(stringResource(R.string.tab_favorites), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabFavoritesStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.startupTab == StartupTab.LIBRARY,
                                 enabled = settings.showLibraryTab,
                                 onClick = { preferences.setStartupTab(StartupTab.LIBRARY) },
-                                label = { Text(stringResource(R.string.tab_library), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(tabLibraryStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
+                        }
+                    }
+                }
+                if (showAppLock) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     SettingsSwitchRow(
-                        title = stringResource(R.string.settings_app_lock_title),
-                        subtitle = stringResource(R.string.settings_app_lock_desc),
+                        title = appLockTitle,
+                        subtitle = appLockDesc,
                         checked = settings.appLockEnabled && settings.hasPin,
                         onCheckedChange = { isChecked ->
                             if (isChecked) {
@@ -1329,33 +1715,36 @@ fun SettingsScreen(
                             onClick = { showChangePinDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(stringResource(R.string.settings_change_pin))
+                            Text(changePinStr)
                         }
 
                         if (isBiometricHardwareAvailable(context)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                             SettingsSwitchRow(
-                                title = stringResource(R.string.settings_biometric_unlock_title),
-                                subtitle = stringResource(R.string.settings_biometric_unlock_desc),
+                                title = bioUnlockTitle,
+                                subtitle = bioUnlockDesc,
                                 checked = settings.appLockBiometricsEnabled,
                                 onCheckedChange = { preferences.setAppLockBiometricsEnabled(it) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_hide_vault_title),
-                        subtitle = stringResource(R.string.settings_hide_vault_desc),
-                        checked = settings.vaultHideFromStorage,
-                        onCheckedChange = { preferences.setVaultHideFromStorage(it) }
-                    )
-
-                    if (Build.VERSION.SDK_INT <= 29) {
+                        }
+                    }
+                }
+                if (showHideVault) {
+                    add {
+                        SettingsSwitchRow(
+                            title = hideVaultTitle,
+                            subtitle = hideVaultDesc,
+                            checked = settings.vaultHideFromStorage,
+                            onCheckedChange = { preferences.setVaultHideFromStorage(it) }
+                        )
+                    }
+                }
+                if (showStorageAccess) {
+                    add {
                         val hasStorage = remember(context) { com.iris.gallery.data.StorageAccess.hasWriteAccess(context) }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1363,13 +1752,13 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
-                                    stringResource(R.string.settings_storage_access_title),
+                                    storageAccessTitle,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    if (hasStorage) stringResource(R.string.settings_storage_access_desc_granted)
-                                    else stringResource(R.string.settings_storage_access_desc_prompt),
+                                    if (hasStorage) storageAccessDescGranted
+                                    else storageAccessDescPrompt,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1403,10 +1792,10 @@ fun SettingsScreen(
                             }
                         }
                     }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && settings.vaultHideFromStorage) {
+                }
+                if (showSilentVault) {
+                    add {
                         val hasAllFiles = remember(context) { Environment.isExternalStorageManager() }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1414,13 +1803,13 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
-                                    stringResource(R.string.settings_silent_vault_title),
+                                    silentVaultTitle,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    if (hasAllFiles) stringResource(R.string.settings_silent_vault_desc_granted)
-                                    else stringResource(R.string.settings_silent_vault_desc_prompt),
+                                    if (hasAllFiles) silentVaultDescGranted
+                                    else silentVaultDescPrompt,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1460,35 +1849,37 @@ fun SettingsScreen(
                             }
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_vault_biometric_title),
-                        subtitle = stringResource(R.string.settings_vault_biometric_desc),
-                        checked = settings.biometricLockEnabled,
-                        onCheckedChange = { preferences.setBiometricLockEnabled(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_confirm_delete_title),
-                        subtitle = stringResource(R.string.settings_confirm_delete_desc),
-                        checked = settings.confirmDelete,
-                        onCheckedChange = { preferences.setConfirmDelete(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                }
+                if (showVaultBio) {
+                    add {
+                        SettingsSwitchRow(
+                            title = vaultBioTitle,
+                            subtitle = vaultBioDesc,
+                            checked = settings.biometricLockEnabled,
+                            onCheckedChange = { preferences.setBiometricLockEnabled(it) }
+                        )
+                    }
+                }
+                if (showConfirmDelete) {
+                    add {
+                        SettingsSwitchRow(
+                            title = confirmDeleteTitle,
+                            subtitle = confirmDeleteDesc,
+                            checked = settings.confirmDelete,
+                            onCheckedChange = { preferences.setConfirmDelete(it) }
+                        )
+                    }
+                }
+                if (showDeleteMode) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            stringResource(R.string.settings_delete_mode_title),
+                            deleteModeTitle,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            stringResource(R.string.settings_delete_mode_desc),
+                            deleteModeDesc,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1500,44 +1891,44 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.deleteMode == DeleteMode.TRASH,
                                 onClick = { preferences.setDeleteMode(DeleteMode.TRASH) },
-                                label = { Text(stringResource(R.string.settings_delete_mode_trash), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                label = { Text(deleteModeTrash, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.deleteMode == DeleteMode.PERMANENT,
                                 onClick = { preferences.setDeleteMode(DeleteMode.PERMANENT) },
-                                label = { Text(stringResource(R.string.settings_delete_mode_permanent), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                label = { Text(deleteModePerm, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.deleteMode == DeleteMode.ALWAYS_ASK,
                                 onClick = { preferences.setDeleteMode(DeleteMode.ALWAYS_ASK) },
-                                label = { Text(stringResource(R.string.settings_delete_mode_always_ask), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                label = { Text(deleteModeAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             )
                         }
                     }
-
-                    if (Build.VERSION.SDK_INT >= 30) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
+                    }
+                }
+                if (showSystemTrash) {
+                    add {
                         SettingsSwitchRow(
-                            title = stringResource(R.string.settings_system_trash_title),
-                            subtitle = stringResource(R.string.settings_system_trash_desc),
+                            title = systemTrashTitle,
+                            subtitle = systemTrashDesc,
                             checked = settings.useSystemTrash,
                             onCheckedChange = { preferences.setUseSystemTrash(it) }
                         )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                }
+                if (showPreferredEditor) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            stringResource(R.string.settings_preferred_editor_title),
+                            prefEditorTitle,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            stringResource(R.string.settings_preferred_editor_desc),
+                            prefEditorDesc,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1549,35 +1940,37 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
                                 onClick = { preferences.setPreferredEditor(PreferredEditor.ALWAYS_ASK) },
-                                label = { Text(stringResource(R.string.settings_editor_always_ask), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(editorAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
                                 onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
-                                label = { Text(stringResource(R.string.settings_editor_builtin), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(editorBuiltin, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                             FilterChip(
                                 modifier = Modifier.weight(1f),
                                 selected = settings.preferredEditor == PreferredEditor.EXTERNAL,
                                 onClick = { preferences.setPreferredEditor(PreferredEditor.EXTERNAL) },
-                                label = { Text(stringResource(R.string.settings_editor_external), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                label = { Text(editorExternal, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_editor_overwrite_title),
-                        subtitle = stringResource(R.string.settings_editor_overwrite_desc),
-                        checked = settings.editorOverwriteOriginal,
-                        onCheckedChange = { preferences.setEditorOverwriteOriginal(it) }
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Row(
+                    }
+                }
+                if (showOverwrite) {
+                    add {
+                        SettingsSwitchRow(
+                            title = overwriteTitle,
+                            subtitle = overwriteDesc,
+                            checked = settings.editorOverwriteOriginal,
+                            onCheckedChange = { preferences.setEditorOverwriteOriginal(it) }
+                        )
+                    }
+                }
+                if (showSecureSharing) {
+                    add {
+                        Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
@@ -1601,19 +1994,19 @@ fun SettingsScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    stringResource(R.string.settings_secure_sharing_title),
+                                    secureSharingTitle,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
                             Text(
-                                stringResource(settings.secureSharingMode.getTitleRes()),
+                                secureSharingModeTitle,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (settings.secureSharingMode != SecureSharingMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                stringResource(settings.secureSharingMode.getDescriptionRes()),
+                                secureSharingModeDesc,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1625,13 +2018,17 @@ fun SettingsScreen(
                             modifier = Modifier.size(16.dp)
                         )
                     }
+                    }
                 }
             }
+            SettingsSectionCard(behaviorBlocks)
+        }
         }
 
         // Section 6: Cache & Reset
+        if (hasAnyStorage) {
         item {
-            SettingsSectionHeader(Icons.Outlined.CleaningServices, stringResource(R.string.settings_section_storage))
+            SettingsSectionHeader(Icons.Outlined.CleaningServices, storageSectionTitle)
         }
 
         item {
@@ -1641,48 +2038,58 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = onRescanMedia,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.settings_rescan_media))
+                    if (showRescanMedia) {
+                        OutlinedButton(
+                            onClick = onRescanMedia,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(rescanMediaLabel)
+                        }
                     }
 
-                    OutlinedButton(
-                        onClick = { showExcludedFoldersDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Outlined.FolderOff, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.excluded_folders_title))
+                    if (showExcludedFoldersBtn) {
+                        OutlinedButton(
+                            onClick = { showExcludedFoldersDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.FolderOff, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(excludedFoldersLabel)
+                        }
                     }
 
-                    OutlinedButton(
-                        onClick = ::clearCache,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Outlined.CleaningServices, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.settings_clear_cache))
+                    if (showClearCache) {
+                        OutlinedButton(
+                            onClick = ::clearCache,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.CleaningServices, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(clearCacheLabel)
+                        }
                     }
 
-                    OutlinedButton(
-                        onClick = { showResetDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Outlined.RestartAlt, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.settings_reset_all))
+                    if (showResetAll) {
+                        OutlinedButton(
+                            onClick = { showResetDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.RestartAlt, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(resetAllLabel)
+                        }
                     }
                 }
             }
         }
+        }
 
         // Section 7: About Iris Gallery
+        if (showAboutSection) {
         item {
-            SettingsSectionHeader(Icons.Outlined.Info, stringResource(R.string.library_about_title))
+            SettingsSectionHeader(Icons.Outlined.Info, aboutTitle)
         }
 
         item {
@@ -1701,12 +2108,12 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
-                            stringResource(R.string.library_about_title),
+                            aboutTitle,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            stringResource(R.string.library_about_subtitle),
+                            aboutSubtitle,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1719,6 +2126,7 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
         }
     }
     }
@@ -2251,6 +2659,24 @@ fun ExcludedFoldersDialog(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SettingsSectionCard(blocks: List<@Composable () -> Unit>) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            blocks.forEachIndexed { index, block ->
+                if (index > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+                block()
+            }
+        }
     }
 }
 

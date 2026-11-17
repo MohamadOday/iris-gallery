@@ -370,12 +370,15 @@ fun MediaThumbnail(
     var isDepth by remember(image.id) { mutableStateOf(cachedDepth) }
 
     if (bitmap == null) {
-        LaunchedEffect(cacheKey, image.uri) {
+        LaunchedEffect(cacheKey, image.uri, image.sizeBytes, image.dateModified) {
             val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, image, targetSizePx) }
             if (loaded != null) {
                 bitmap = loaded
             } else {
-                val isGhost = withContext(Dispatchers.IO) {
+                val isFreshItem = System.currentTimeMillis() - maxOf(image.dateModified, image.dateAdded) < 60_000L
+                val isGhost = if (isFreshItem) {
+                    false
+                } else withContext(Dispatchers.IO) {
                     val filePath = image.path
                     if (filePath.isNotBlank()) {
                         val file = java.io.File(filePath)

@@ -137,7 +137,9 @@
     <string name="search_files_placeholder">Search photos, videos, formats…</string>
     <string name="search_photos_placeholder">Search photos…</string>
     <string name="search_videos_placeholder">Search videos…</string>
+    <string name="search_settings_placeholder">Search settings…</string>
     <string name="empty_search_files">No files matching \"%1$s\"</string>
+    <string name="empty_search_settings">No settings matching \"%1$s\"</string>
     <string name="action_search">Search</string>
     <string name="clear_search">Clear search</string>
     <string name="sort_recent">Recent</string>
@@ -842,4 +844,14 @@
     <string name="dialog_overwrite_original_title">Overwrite original</string>
     <string name="dialog_overwrite_original_desc">Replace original file instead of saving a copy</string>
     <string name="toast_edited_overwritten">Original image replaced</string>
+
+    <string name="settings_album_labels_title">Show album names</string>
+    <string name="settings_album_labels_desc">Display album and folder names below album tiles</string>
+    <string name="settings_tilt_nav_icons_title">Tilt bottom bar icons</string>
+    <string name="settings_tilt_nav_icons_desc">Tilt unselected icons in the bottom navigation bar</string>
+    <string name="album_picker_sort_albums">Albums sort</string>
+    <string name="album_picker_sort_recent">Recent</string>
+    <string name="album_picker_sort_name">A-Z</string>
+    <string name="library_edit_order">Reorder items</string>
+    <string name="library_reset_order">Reset order</string>
 </resources>
