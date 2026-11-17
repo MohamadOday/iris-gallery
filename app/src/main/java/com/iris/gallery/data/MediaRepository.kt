@@ -611,6 +611,10 @@ class MediaRepository(private val context: Context) {
         (loadImageByUriResult(uri) as? UriLoadResult.Ready)?.item
 
     suspend fun loadImageByUriResult(uri: Uri): UriLoadResult = withContext(Dispatchers.IO) {
+        val segments = uri.pathSegments
+        val isFilesUri = "file" in segments
+        val isVideoUri = "video" in segments
+        val isImageUri = "images" in segments
         val projection = buildList {
             add(MediaStore.MediaColumns._ID)
             add(MediaStore.MediaColumns.DISPLAY_NAME)
@@ -619,14 +623,19 @@ class MediaRepository(private val context: Context) {
             add(MediaStore.MediaColumns.DATE_MODIFIED)
             add(MediaStore.MediaColumns.SIZE)
             add(MediaStore.MediaColumns.MIME_TYPE)
-            add(MediaStore.Files.FileColumns.MEDIA_TYPE)
+            // media_type only exists on the Files view; requesting it on Images/Video throws IllegalArgumentException.
+            if (isFilesUri) {
+                add(MediaStore.Files.FileColumns.MEDIA_TYPE)
+            }
             add(MediaStore.MediaColumns.TITLE)
             add(MediaStore.MediaColumns.DATA)
             add(MediaStore.MediaColumns.WIDTH)
             add(MediaStore.MediaColumns.HEIGHT)
             add(MediaStore.Images.Media.BUCKET_ID)
             add(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
-            add(MediaStore.Video.VideoColumns.DURATION)
+            if (!isImageUri) {
+                add(MediaStore.Video.VideoColumns.DURATION)
+            }
             add(MediaStore.Images.Media.ORIENTATION)
             if (Build.VERSION.SDK_INT >= 29) {
                 add(MediaStore.MediaColumns.RELATIVE_PATH)
@@ -639,7 +648,14 @@ class MediaRepository(private val context: Context) {
         }.toTypedArray()
 
         runCatching {
-            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            val cursor = if (Build.VERSION.SDK_INT >= 30) {
+                context.contentResolver.query(uri, projection, Bundle().apply {
+                    putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+                }, null)
+            } else {
+                context.contentResolver.query(uri, projection, null, null, null)
+            }
+            cursor?.use { cursor ->
                 if (!cursor.moveToFirst()) return@use UriLoadResult.MissingOrDeleted
 
                 fun index(column: String) = cursor.getColumnIndex(column)
@@ -670,10 +686,16 @@ class MediaRepository(private val context: Context) {
                 if (isMarkedMovedOrDeleted(id, filePath)) return@use UriLoadResult.MissingOrDeleted
 
                 val mimeType = text(MediaStore.MediaColumns.MIME_TYPE)
-                val mediaType = integer(MediaStore.Files.FileColumns.MEDIA_TYPE)
-                val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ||
+                val mediaType = if (isFilesUri) {
+                    integer(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                } else {
+                    0
+                }
+                val isVideo = isVideoUri ||
+                    mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ||
                     mimeType.startsWith("video/", ignoreCase = true)
-                val isImage = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE ||
+                val isImage = isImageUri ||
+                    mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE ||
                     mimeType.startsWith("image/", ignoreCase = true)
                 if (!isImage && !isVideo) return@use UriLoadResult.MissingOrDeleted
 
@@ -774,8 +796,18 @@ class MediaRepository(private val context: Context) {
                     context.contentResolver.query(
                         base,
                         arrayOf(MediaStore.MediaColumns._ID),
-                        "${MediaStore.MediaColumns.GENERATION_MODIFIED} > ?",
-                        arrayOf(generation.toString()),
+                        Bundle().apply {
+                            putString(
+                                android.content.ContentResolver.QUERY_ARG_SQL_SELECTION,
+                                "${MediaStore.MediaColumns.GENERATION_MODIFIED} > ?"
+                            )
+                            putStringArray(
+                                android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                                arrayOf(generation.toString())
+                            )
+                            // Include pending items so in-flight camera shots/downloads enter pending retry tracking instead of being skipped when generation advances.
+                            putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+                        },
                         null
                     )?.use { cursor ->
                         while (cursor.moveToNext()) {
@@ -826,6 +858,16 @@ class MediaRepository(private val context: Context) {
         generationPrefs.edit()
             .putString("generations", generations.entries.joinToString("|") { "${it.key}:${it.value}" })
             .apply()
+    }
+
+    fun getCurrentMediaStoreVersion(): String? = runCatching {
+        MediaStore.getVersion(context)
+    }.getOrNull()
+
+    fun loadMediaStoreVersion(): String? = generationPrefs.getString("mediastore_version", null)
+
+    fun saveMediaStoreVersion(version: String) {
+        generationPrefs.edit().putString("mediastore_version", version).apply()
     }
 
     fun isSnapshotComplete(): Boolean = generationPrefs.getBoolean("snapshot_complete", false)

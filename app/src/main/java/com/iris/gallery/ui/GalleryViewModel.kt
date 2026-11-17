@@ -262,35 +262,41 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun registerObserver() {
         if (contentObserver != null) return
         runCatching {
+            fun handleObservedUris(uris: Collection<Uri>) {
+                if (uris.isNotEmpty()) {
+                    synchronized(pendingChangedUris) { pendingChangedUris.addAll(uris) }
+                }
+                liveReloadJob?.cancel()
+                liveReloadJob = viewModelScope.launch {
+                    delay(250)
+                    val batch = synchronized(pendingChangedUris) {
+                        pendingChangedUris.toSet().also { pendingChangedUris.clear() }
+                    }
+                    val itemUris = batch.filter { it.lastPathSegment?.toLongOrNull() != null }
+                    if (batch.isNotEmpty() && itemUris.size == batch.size && itemUris.size <= 200) {
+                        applyIncrementalMediaChanges(itemUris)
+                    } else {
+                        checkForChanges()
+                    }
+                }
+            }
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean, uri: Uri?) {
                     super.onChange(selfChange, uri)
-                    if (uri != null) {
-                        synchronized(pendingChangedUris) { pendingChangedUris.add(uri) }
-                    }
-                    liveReloadJob?.cancel()
-                    liveReloadJob = viewModelScope.launch {
-                        delay(250)
-                        val batch = synchronized(pendingChangedUris) {
-                            pendingChangedUris.toSet().also { pendingChangedUris.clear() }
-                        }
-                        val itemUris = batch.filter { it.lastPathSegment?.toLongOrNull() != null }
-                        if (batch.isNotEmpty() && itemUris.size == batch.size && itemUris.size <= 200) {
-                            applyIncrementalMediaChanges(itemUris)
-                        } else {
-                            checkForChanges()
-                        }
-                    }
+                    handleObservedUris(listOfNotNull(uri))
+                }
+
+                override fun onChange(selfChange: Boolean, uris: MutableCollection<Uri>, flags: Int) {
+                    handleObservedUris(uris)
                 }
             }
             val resolver = getApplication<Application>().contentResolver
             val volumes = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                runCatching { MediaStore.getExternalVolumeNames(getApplication()) }
+                val detected = runCatching { MediaStore.getExternalVolumeNames(getApplication()) }
                     .getOrNull()
                     ?.filter { it.isNotBlank() }
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.toSet()
-                    ?: setOf(MediaStore.VOLUME_EXTERNAL)
+                    .orEmpty()
+                (detected + MediaStore.VOLUME_EXTERNAL).toSet()
             } else {
                 setOf(MediaStore.VOLUME_EXTERNAL)
             }
@@ -573,10 +579,22 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
             val previous = lastGenerationByVolume ?: repository.loadGenerationByVolume()
             val current = runCatching { repository.getGenerationByVolume() }.getOrNull()
-            if (previous != null && current != null && repository.isSnapshotComplete()) {
-                val changed = runCatching { repository.getChangedUrisSince(previous) }.getOrDefault(emptyList())
+            val prevVersion = repository.loadMediaStoreVersion()
+            val currVersion = withContext(Dispatchers.IO) { repository.getCurrentMediaStoreVersion() }
+            val versionMismatch = prevVersion != null && currVersion != null && prevVersion != currVersion
+            val generationInvalid = previous != null && current != null && current.any { (vol, gen) ->
+                val prevGen = previous[vol]
+                prevGen == null || gen < prevGen
+            }
+            if (previous != null && current != null && !versionMismatch && !generationInvalid && repository.isSnapshotComplete()) {
+                val changed = if (current != previous) {
+                    runCatching { repository.getChangedUrisSince(previous) }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
                 lastGenerationByVolume = current
                 repository.saveGenerationByVolume(current)
+                if (currVersion != null) repository.saveMediaStoreVersion(currVersion)
 
                 if (!hasCheckedObsolete) {
                     val knownIds = _uiState.value.images.mapTo(HashSet()) { it.id }
@@ -627,6 +645,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     }
                     try {
                         repository.setSnapshotComplete(false)
+                        // Capture generation and MediaStore version before scanning so any rows committed mid-scan are picked up on the next check.
+                        val scanStartGenerations = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
+                        val scanStartVersion = withContext(Dispatchers.IO) { repository.getCurrentMediaStoreVersion() }
                         val loaded = repository.loadImages()
                         val loadedPaths = loaded.mapTo(HashSet(loaded.size)) { it.path }
                         val loadedIds = loaded.mapTo(HashSet(loaded.size)) { it.id }
@@ -657,10 +678,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         // landed in the meantime; this stale write made the trash look short.
                         _uiState.update { it.copy(images = combined, loading = false, error = null) }
                         repository.setSnapshotComplete(true)
-                        val generations = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
-                        if (generations != null) {
-                            lastGenerationByVolume = generations
-                            repository.saveGenerationByVolume(generations)
+                        if (scanStartGenerations != null) {
+                            lastGenerationByVolume = scanStartGenerations
+                            repository.saveGenerationByVolume(scanStartGenerations)
+                        }
+                        if (scanStartVersion != null) {
+                            repository.saveMediaStoreVersion(scanStartVersion)
                         }
                         if (_duplicateState.value.hasScanned) _duplicateState.value = DuplicateScanState()
                     } catch (e: Exception) {
