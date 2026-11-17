@@ -84,7 +84,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
         viewModelScope.launch {
             settingsPreferences.state.map { it.useSystemTrash }.distinctUntilChanged().drop(1).collect {
-                refresh(showLoading = false)
+                refreshTrashOnly()
             }
         }
         viewModelScope.launch {

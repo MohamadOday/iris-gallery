@@ -413,11 +413,17 @@ internal fun GalleryScaffold(
     LaunchedEffect(destination, librarySection) {
         if (destination == 3 && librarySection == "locked") {
             onEnterVault()
+            if (!lockedAuthorized) {
+                onRequestUnlock()
+            }
         } else {
             onLockVault()
         }
         if (destination != 3 || librarySection != null) {
             isEditingLibraryOrder = false
+        }
+        if (destination != 1 || selectedAlbumId != null) {
+            isEditingAlbumOrder = false
         }
     }
 
@@ -1484,7 +1490,6 @@ internal fun GalleryScaffold(
                             }
                         }
                         "locked" -> if (!lockedAuthorized) {
-                            LaunchedEffect(Unit) { onRequestUnlock() }
                             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -2221,7 +2226,51 @@ internal fun GalleryScaffold(
         )
     }
 
+    val activity = remember(context) {
+        generateSequence(context) { (it as? android.content.ContextWrapper)?.baseContext }
+            .filterIsInstance<android.app.Activity>()
+            .firstOrNull()
+    }
+    var lastRootBackPressMs by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    var exitConfirmToast by remember { mutableStateOf<Toast?>(null) }
+
+    BackHandler(
+        enabled = onPick == null &&
+            activeOverlayScreen == null &&
+            editorImage == null &&
+            externalMedia == null &&
+            selectedId == null &&
+            selectedIds.isEmpty() &&
+            !isFileSearching &&
+            !isAlbumSearching &&
+            selectedAlbum == null &&
+            librarySection == null &&
+            !isEditingAlbumOrder &&
+            !isEditingLibraryOrder
+    ) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastRootBackPressMs <= 2000L) {
+            exitConfirmToast?.cancel()
+            exitConfirmToast = null
+            activity?.finish()
+        } else {
+            lastRootBackPressMs = now
+            exitConfirmToast?.cancel()
+            exitConfirmToast = Toast.makeText(
+                context,
+                R.string.toast_press_back_again_to_exit,
+                Toast.LENGTH_SHORT
+            ).also { it.show() }
+        }
+    }
     BackHandler(enabled = !isFileSearching && selectedIds.isNotEmpty()) { clearSelection() }
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum == null && isAlbumSearching) {
+        isAlbumSearching = false
+        albumSearchQuery = ""
+    }
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum == null && isEditingAlbumOrder) {
+        isEditingAlbumOrder = false
+    }
     BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection == null && isEditingLibraryOrder) {
         isEditingLibraryOrder = false
     }

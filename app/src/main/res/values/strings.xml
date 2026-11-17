@@ -854,4 +854,5 @@
     <string name="album_picker_sort_name">A-Z</string>
     <string name="library_edit_order">Reorder items</string>
     <string name="library_reset_order">Reset order</string>
+    <string name="toast_press_back_again_to_exit">Press back again to exit</string>
 </resources>

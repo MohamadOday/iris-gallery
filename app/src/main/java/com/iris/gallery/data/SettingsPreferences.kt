@@ -194,9 +194,17 @@ data class SettingsState(
 }
 
 class SettingsPreferences(context: Context) {
-    private val prefs = context.getSharedPreferences("iris_gallery_settings", Context.MODE_PRIVATE)
-    private val _state = MutableStateFlow(read())
+    private val prefs = context.applicationContext.getSharedPreferences("iris_gallery_settings", Context.MODE_PRIVATE)
+    private val _state: MutableStateFlow<SettingsState> = synchronized(sharedLock) {
+        sharedState ?: MutableStateFlow(read()).also { sharedState = it }
+    }
     val state: StateFlow<SettingsState> = _state.asStateFlow()
+
+    companion object {
+        private val sharedLock = Any()
+        @Volatile
+        private var sharedState: MutableStateFlow<SettingsState>? = null
+    }
 
     fun setThemeMode(mode: ThemeMode) = update { copy(themeMode = mode) }
     fun setLanguage(lang: String) = update { copy(language = lang) }
@@ -379,18 +387,24 @@ class SettingsPreferences(context: Context) {
     }
 
     fun resetToDefaults() {
-        val security = _state.value
-        _state.value = SettingsState().copy(
-            appLockPinHash = security.appLockPinHash,
-            appLockPinSalt = security.appLockPinSalt,
-            appLockEnabled = security.appLockEnabled,
-        )
-        write(_state.value)
+        synchronized(sharedLock) {
+            val security = _state.value
+            val reset = SettingsState().copy(
+                appLockPinHash = security.appLockPinHash,
+                appLockPinSalt = security.appLockPinSalt,
+                appLockEnabled = security.appLockEnabled,
+            )
+            _state.value = reset
+            write(reset)
+        }
     }
 
     private fun update(transform: SettingsState.() -> SettingsState) {
-        _state.value = _state.value.transform()
-        write(_state.value)
+        synchronized(sharedLock) {
+            val updated = _state.value.transform()
+            _state.value = updated
+            write(updated)
+        }
     }
 
     private fun read(): SettingsState {
