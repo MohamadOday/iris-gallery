@@ -7,6 +7,7 @@
     
     <!--  Navigation Tabs  -->
     <string name="tab_photos">Zdjęcia</string>
+    <string name="tab_videos">Wideo</string>
     <string name="tab_media">Multimedia</string>
     <string name="tab_albums">Albumy</string>
     <string name="tab_favorites">Ulubione</string>
@@ -133,8 +134,9 @@
     
     <!--  Albums Screen  -->
     <string name="search_albums_placeholder">Przeszukaj albumy (%1$d)…</string>
-    <string name="search_files_placeholder">Szukaj zdjęć…</string>
-    <string name="search_videos_placeholder">Szukaj filmów…</string>
+    <string name="search_files_placeholder">Szukaj zdjęć, filmów, formatów…</string>
+    <string name="search_photos_placeholder">Szukaj zdjęć…</string>
+    <string name="search_videos_placeholder">Szukaj filmów…</string> 
     <string name="empty_search_files">Brak plików pasujących do „%1$s”</string>
     <string name="action_search">Szukaj</string>
     <string name="clear_search">Wyczyść wyszukiwanie</string>
@@ -501,6 +503,11 @@
     <string name="app_lock_biometric_negative">Użyj kodu PIN</string>
     <string name="app_lock_auth_cancelled">Uwierzytelnianie anulowane</string>
     <string name="app_lock_biometrics_unavailable">Biometria jest niedostępna</string>
+    <string name="app_lock_forgot_pin">Nie pamiętasz kodu PIN?</string>
+    <string name="app_lock_reset_title">Zresetuj blokadę Iris</string>
+    <string name="app_lock_reset_subtitle">Potwierdź blokadę ekranu telefonu, aby zresetować kod PIN Galerii</string>
+    <string name="app_lock_reset_unavailable">Nie ustawiono blokady ekranu telefonu, więc nie można zresetować kodu PIN Galerii w ten sposób.</string>
+    <string name="app_lock_reset_success">Kod PIN Galerii został zresetowany. Blokada aplikacji jest teraz wyłączona.</string>
     <string name="pin_keypad_use_pin">Użyj kodu PIN</string>
     <string name="pin_setup_create_title">Utwórz PIN galerii</string>
     <string name="pin_setup_create_subtitle">Wprowadź PIN składający się z 4 do 6 cyfr</string>
@@ -624,6 +631,9 @@
     <string name="toast_vault_items_deleted">Trwale usunięto %1$d elem.</string>
     <string name="toast_lock_cancelled">Anulowano blokowanie</string>
     <string name="toast_could_not_request_removal">Nie można było zażądać usunięcia z pamięci</string>
+    <string name="toast_storage_permission_needed">Przyznaj uprawnienie Pamięć, aby usuwać lub przywracać pliki, a następnie spróbuj ponownie</string>
+    <string name="toast_storage_permission_granted">Przyznano uprawnienie Pamięć. Spróbuj ponownie.</string>
+    <string name="toast_restore_failed_count">Nie udało się przywrócić elementów: %1$d</string>
     <string name="toast_could_not_request_metadata">Nie można było zażądać dostępu do metadanych</string>
     <string name="toast_error_storage_removal">Nie można było zażądać usunięcia z pamięci</string>
     <string name="toast_error_original_removal">Nie można było usunąć oryginalnego pliku z pamięci</string>
@@ -691,6 +701,9 @@
     <string name="toast_folder_excluded">Folder został wykluczony z galerii</string>
     <string name="toast_folder_unexcluded">Folder został przywrócony do galerii</string>
     <string name="toast_share_failed">Nie udało się przygotować multimediów do udostępnienia</string>
+    <string name="action_copy_image">Kopiuj obraz</string>
+    <string name="toast_image_copied">Skopiowano obraz do schowka</string>
+    <string name="toast_copy_image_failed">Nie udało się skopiować obrazu</string>
     <string name="no_excluded_folders">Brak wykluczonych folderów</string>
     <string name="filter_all_albums">Wszystkie</string>
     <string name="filter_camera_system">Aparat i system</string>
@@ -795,7 +808,9 @@
     <string name="exclude_option_system_picker_desc">Przeglądaj pamięć urządzenia, aby wybrać dowolny katalog</string>
     <string name="dialog_choose_album_to_exclude_title">Wybierz album do wykluczenia</string>
     <string name="no_albums_to_exclude">Nie znaleziono żadnych albumów</string>
-    
+    <string name="action_filter">Filtruj</string>
+    <string name="filters">%1$s (%2$d)</string>
+
     <string name="empty_videos">Nie znaleziono filmów</string>
     <string name="filter_videos">Wideo</string>
     <string name="filter_videos_count">Wideo (%1$d)</string>
@@ -811,6 +826,13 @@
 
     <string name="settings_navigation_tabs_title">Karty nawigacji</string>
     <string name="settings_navigation_tabs_desc">Wybierz, które karty mają pojawiać się na dolnym pasku nawigacji</string>
+    <string name="settings_storage_access_title">Dostęp do pamięci</string>
+    <string name="settings_storage_access_desc_granted">Operacje usuwania, przywracania i przenoszenia mogą zapisywać dane w pamięci współdzielonej.</string>
+    <string name="settings_storage_access_desc_prompt">Przyznaj uprawnienie Pamięć, aby działały operacje usuwania, przywracania i przenoszenia.</string>
+    <string name="settings_storage_access_button">Otwórz ustawienia</string>
+    <string name="settings_album_top_section_title">Filtry albumów</string>
+    <string name="settings_album_filters_title">Pokaż paski filtrów albumów</string>
+    <string name="settings_album_filters_desc">Wyświetlaj filtry Wszystkie, Aparat i system, Aplikacje oraz Wideo nad siatką albumów.</string>
     <string name="settings_multi_stage_zoom_title">Wielostopniowe powiększenie</string>
     <string name="settings_multi_stage_zoom_desc">Dwukrotne dotknięcie przełącza między dopasowaniem, wypełnieniem a oryginalnym rozmiarem pikseli 1:1</string>
     <string name="format_svg">SVG</string>
