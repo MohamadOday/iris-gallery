@@ -1,0 +1,6 @@
+• Albums, MediaStore & Fresh Captures: Fixed duplicate albums per folder (#250), copy/move/restore duplicates (#242), and fresh photos or screenshots flickering during refresh
+• Trash & Restore: Fixed private trash restores keeping original added timestamps (#248), hardened System Trash sync, restore confirmation, and permanent deletes (#214), and refreshed trash immediately when toggling System Trash
+• Viewer, Video & Gestures: Kept the screen awake during video playback (#243), scaled video volume swipes relative to system volume with narrower side zones (#205), protected bottom OS swipe gestures when toolbars are hidden (#233), and removed duplicate delete toasts (#249)
+• Grid, Albums & Library UI: Added long-press range selection (#188), Move/Copy album picker sorting (#247), Library item reordering (#219), a Settings toggle for album labels (#206), a Settings toggle for tilted bottom bar icons plus narrower Media icon (#249), Settings search, and press-back-again to exit
+• Vault Navigation: Fixed biometric unlock prompts firing on other tabs after leaving the unlocked Vault in Library
+• Translations: Updated Polish translations (#244, thanks @tmpjx555)
