@@ -136,8 +136,10 @@
     <string name="search_albums_placeholder">Przeszukaj albumy (%1$d)…</string>
     <string name="search_files_placeholder">Szukaj zdjęć, filmów, formatów…</string>
     <string name="search_photos_placeholder">Szukaj zdjęć…</string>
-    <string name="search_videos_placeholder">Szukaj filmów…</string> 
+    <string name="search_videos_placeholder">Szukaj filmów…</string>
+    <string name="search_settings_placeholder">Szukaj w ustawieniach…</string>
     <string name="empty_search_files">Brak plików pasujących do „%1$s”</string>
+    <string name="empty_search_settings">Brak ustawień pasujących do „%1$s”</string>
     <string name="action_search">Szukaj</string>
     <string name="clear_search">Wyczyść wyszukiwanie</string>
     <string name="sort_recent">Ostatnie</string>
@@ -842,4 +844,15 @@
     <string name="dialog_overwrite_original_title">Nadpisz oryginał</string>
     <string name="dialog_overwrite_original_desc">Zastąp oryginalny plik zamiast zapisywać kopię</string>
     <string name="toast_edited_overwritten">Oryginalny obraz został zastąpiony</string>
+
+    <string name="settings_album_labels_title">Pokaż nazwy albumów</string>
+    <string name="settings_album_labels_desc">Wyświetlaj nazwy albumów i folderów pod kafelkami albumów</string>
+    <string name="settings_tilt_nav_icons_title">Przechyl ikony dolnego paska</string>
+    <string name="settings_tilt_nav_icons_desc">Przechylaj niezaznaczone ikony na dolnym pasku nawigacji</string>
+    <string name="album_picker_sort_albums">Sortowanie albumów</string>
+    <string name="album_picker_sort_recent">Ostatnie</string>
+    <string name="album_picker_sort_name">A-Z</string>
+    <string name="library_edit_order">Zmień kolejność elementów</string>
+    <string name="library_reset_order">Resetuj kolejność</string>
+    <string name="toast_press_back_again_to_exit">Naciśnij przycisk Wstecz ponownie, aby wyjść</string>
 </resources>
