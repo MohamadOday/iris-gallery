@@ -428,16 +428,25 @@ internal fun GalleryScaffold(
     }
 
     var handledIntentGeneration by remember { mutableStateOf(-1L) }
+    // A camera app opens its newest shot before the library knows about it: the cached
+    // snapshot shown at startup and the MediaStore observer both lag behind. Keep the request
+    // so the standalone viewer can be swapped for the regular one (swipe through the library,
+    // delete to trash) as soon as the item shows up in [images].
+    var pendingExternalUri by remember { mutableStateOf<Uri?>(null) }
+    fun findInLibrary(uri: Uri, path: String): MediaImage? = images.firstOrNull {
+        it.uri == uri ||
+        (path.isNotBlank() && it.path == path) ||
+        it.uri.lastPathSegment == uri.lastPathSegment
+    }
     LaunchedEffect(initialViewUri, initialEditMode, initialOpenLatest, images, initialIntentGeneration) {
         if (handledIntentGeneration != initialIntentGeneration) {
+            pendingExternalUri = null
             if (initialViewUri != null) {
-                handledIntentGeneration = initialIntentGeneration
                 val resolved = withContext(Dispatchers.IO) { resolveMediaUri(context, initialViewUri) }
-                val matched = images.firstOrNull {
-                    it.uri == initialViewUri ||
-                    (resolved.path.isNotBlank() && it.path == resolved.path) ||
-                    it.uri.lastPathSegment == initialViewUri.lastPathSegment
-                }
+                // Mark as handled only after resolving: if [images] changes meanwhile, this effect
+                // is restarted and must not skip the intent.
+                handledIntentGeneration = initialIntentGeneration
+                val matched = findInLibrary(initialViewUri, resolved.path)
                 if (matched != null) {
                     if (initialEditMode) {
                         editorImage = matched
@@ -456,6 +465,7 @@ internal fun GalleryScaffold(
                     } else {
                         externalMedia = resolved
                         selectedId = null
+                        pendingExternalUri = initialViewUri
                     }
                 }
             } else if (initialOpenLatest && images.isNotEmpty()) {
@@ -463,6 +473,23 @@ internal fun GalleryScaffold(
                 viewerImages = null
                 selectedId = images.first().id
                 externalMedia = null
+            }
+        } else {
+            val pendingUri = pendingExternalUri
+            if (pendingUri != null) {
+                val shown = externalMedia
+                if (shown == null) {
+                    // The standalone viewer was closed (or left for the editor): nothing to swap.
+                    pendingExternalUri = null
+                } else {
+                    val matched = findInLibrary(pendingUri, shown.path)
+                    if (matched != null) {
+                        pendingExternalUri = null
+                        viewerImages = null
+                        selectedId = matched.id
+                        externalMedia = null
+                    }
+                }
             }
         }
     }
