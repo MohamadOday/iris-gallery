@@ -87,6 +87,9 @@ class EditorCanvasView(context: Context) : View(context) {
     private var twoFingerStartOverlayY = 0.5f
     private var twoFingerStartMidPoint = BrushPoint(0.5f, 0.5f)
     var colorFilter: android.graphics.ColorFilter? = null; set(value) { field = value; invalidate() }
+    var vignetteStrength: Float = 0f; set(value) { field = value; invalidate() }
+    var comparingOriginal: Boolean = false; set(value) { field = value; invalidate() }
+    var originalBitmap: Bitmap? = null; set(value) { field = value; if (comparingOriginal) invalidate() }
     private var bitmap: Bitmap? = null
     private var composite: Bitmap? = null
     private var pixelated: Bitmap? = null
@@ -219,6 +222,19 @@ class EditorCanvasView(context: Context) : View(context) {
 
     var lockedAspect: Float? = null
 
+    fun resetCrop() {
+        lockedAspect = null
+        session.crop.set(0f, 0f, 1f, 1f)
+        invalidate()
+    }
+
+    fun hasCustomCrop(): Boolean {
+        return session.crop.left > 0.001f ||
+            session.crop.top > 0.001f ||
+            session.crop.right < 0.999f ||
+            session.crop.bottom < 0.999f
+    }
+
     fun setCropAspect(aspect: Float?) {
         lockedAspect = aspect?.takeIf { it > 0f }
         val targetAspect = lockedAspect ?: run {
@@ -274,6 +290,19 @@ class EditorCanvasView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (comparingOriginal) {
+            val orig = originalBitmap ?: bitmap ?: return
+            fitRect(orig, destination, cropped = false)
+            canvas.save()
+            if (userZoom > 1f || userPanX != 0f || userPanY != 0f) {
+                canvas.translate(userPanX, userPanY)
+                canvas.scale(userZoom, userZoom, width / 2f, height / 2f)
+            }
+            imagePaint.colorFilter = null
+            canvas.drawBitmap(orig, null, destination, imagePaint)
+            canvas.restore()
+            return
+        }
         val source = composite ?: bitmap ?: return
         fitRect(source, destination, cropped = tool != EditorTool.CROP)
 
@@ -303,6 +332,10 @@ class EditorCanvasView(context: Context) : View(context) {
         imagePaint.colorFilter = colorFilter
         canvas.drawBitmap(source, sourcePixelRect(source), destination, imagePaint)
         imagePaint.colorFilter = null
+
+        if (vignetteStrength > 0.005f) {
+            drawEditorVignette(canvas, destination, vignetteStrength)
+        }
 
         canvas.save(); canvas.clipRect(destination)
         activeStroke?.let { drawStroke(canvas, it) }
