@@ -24,6 +24,13 @@ class MainActivity : ComponentActivity() {
     private val currentIntentState = mutableStateOf<Intent?>(null)
     private val intentGenerationState = mutableStateOf(0L)
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val savedLanguage = newBase.getSharedPreferences("iris_gallery_settings", android.content.Context.MODE_PRIVATE)
+            .getString("app_language", "")
+            .orEmpty()
+        super.attachBaseContext(com.iris.gallery.ui.wrapContextWithLanguage(newBase, savedLanguage))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentIntentState.value = intent
@@ -46,8 +53,23 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = !isDark
             isAppearanceLightNavigationBars = !isDark
         }
-        if (initialSettings.language.isNotEmpty()) {
-            com.iris.gallery.ui.setAppLanguage(this, initialSettings.language)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val localeManager = getSystemService(android.app.LocaleManager::class.java)
+            val systemAppLocales = localeManager?.applicationLocales
+            if (systemAppLocales != null && !systemAppLocales.isEmpty) {
+                val activeTag = systemAppLocales[0]?.toLanguageTag().orEmpty()
+                if (activeTag.isNotEmpty() && activeTag != initialSettings.language) {
+                    val normalizedTag = if (activeTag.startsWith("zh", ignoreCase = true)) "zh" else activeTag.substringBefore("-")
+                    val matched = com.iris.gallery.data.SUPPORTED_LANGUAGES.firstOrNull {
+                        it.code.equals(activeTag, ignoreCase = true) || it.code.equals(normalizedTag, ignoreCase = true)
+                    }
+                    if (matched != null) {
+                        settingsPreferences.setLanguage(matched.code)
+                    }
+                }
+            } else if (initialSettings.language.isNotEmpty()) {
+                com.iris.gallery.ui.setAppLanguage(this, initialSettings.language, recreateIfNeeded = false)
+            }
         }
         setContent {
             val activeIntent = currentIntentState.value ?: intent

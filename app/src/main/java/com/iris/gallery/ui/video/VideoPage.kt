@@ -122,6 +122,7 @@ fun VideoPage(
     engine: VideoEngine,
     active: Boolean,
     controlsVisible: Boolean,
+    isDismissing: Boolean = false,
     autoPlay: Boolean = true,
     loop: Boolean = true,
     doubleTapToZoom: Boolean = false,
@@ -610,7 +611,7 @@ fun VideoPage(
                 scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y,
             ),
         ) {
-            if (active) {
+            if (active && !isDismissing) {
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
@@ -655,7 +656,7 @@ fun VideoPage(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            if (!active || !isFirstFrameRendered) {
+            if (!active || !isFirstFrameRendered || isDismissing) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(media.uri)

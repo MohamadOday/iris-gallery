@@ -106,8 +106,9 @@ class VaultRepository(private val context: Context) {
     fun loadVaultItems(): List<MediaImage> = synchronized(indexLock) {
         val items = readIndexStrict() ?: salvageCorruptIndex()
         val sortedItems = items.sortedWith(
-            compareByDescending<VaultItem> { it.dateLocked }
-                .thenByDescending { it.dateTaken }
+            compareByDescending<VaultItem> { it.dateTaken }
+                .thenByDescending { it.dateModified }
+                .thenByDescending { it.dateAdded }
                 .thenByDescending { it.id }
         )
         val mediaList = sortedItems.mapNotNull { item ->
@@ -251,14 +252,11 @@ class VaultRepository(private val context: Context) {
             val tempFile = File(vaultDir, ".${vaultFileName}.iris_tmp")
 
             val srcFile = if (item.path.isNotBlank()) File(item.path) else null
-            val expectedBytes = when {
-                srcFile != null && srcFile.exists() && srcFile.length() > 0L -> srcFile.length()
-                item.sizeBytes > 0L -> item.sizeBytes
-                else -> 0L
-            }
+            val directFileReadable = srcFile != null && srcFile.exists() && srcFile.canRead() && srcFile.length() > 0L
+            val expectedBytes = if (directFileReadable) srcFile!!.length() else 0L
 
             var copied = false
-            if (srcFile != null && srcFile.exists()) {
+            if (directFileReadable && srcFile != null) {
                 copied = runCatching {
                     srcFile.copyTo(tempFile, overwrite = true)
                     val copiedBytes = tempFile.length()
@@ -266,6 +264,7 @@ class VaultRepository(private val context: Context) {
                 }.getOrDefault(false)
             }
 
+            var copiedFromStream = false
             if (!copied) {
                 runCatching { tempFile.delete() }
                 copied = runCatching {
@@ -278,8 +277,9 @@ class VaultRepository(private val context: Context) {
                         }
                     }
                     val copiedBytes = tempFile.length()
-                    tempFile.exists() && copiedBytes > 0L && (expectedBytes <= 0L || copiedBytes == expectedBytes)
+                    tempFile.exists() && copiedBytes > 0L
                 }.getOrDefault(false)
+                copiedFromStream = copied
             }
 
             val finalized = if (copied) {
@@ -291,7 +291,7 @@ class VaultRepository(private val context: Context) {
                         tempFile.delete()
                     }
                     val finalBytes = targetFile.length()
-                    targetFile.exists() && finalBytes > 0L && (expectedBytes <= 0L || finalBytes == expectedBytes)
+                    targetFile.exists() && finalBytes > 0L && (copiedFromStream || expectedBytes <= 0L || finalBytes == expectedBytes)
                 }.getOrDefault(false)
             } else {
                 false
@@ -943,7 +943,8 @@ class VaultRepository(private val context: Context) {
      * The extension is preserved whenever possible.
      */
     private fun truncateToFileSystemLimit(prefix: String, name: String): String {
-        val maxBytes = 255 - (prefix.toByteArray(Charsets.UTF_8).size + 4)
+        // Reserve room for `.${vaultFileName}.iris_tmp` staging prefix/suffix (10+ bytes).
+        val maxBytes = 255 - (prefix.toByteArray(Charsets.UTF_8).size + 12)
         if (name.toByteArray(Charsets.UTF_8).size <= maxBytes) return name
         val dot = name.lastIndexOf('.')
         val stem = if (dot > 0) name.substring(0, dot) else name
@@ -1015,13 +1016,14 @@ class VaultRepository(private val context: Context) {
         )
     }
 
-    /** Returns null when the index exists but cannot be parsed. */
+    /** Returns null when the index exists (or its atomic backup exists) but cannot be parsed. */
     private fun readIndexStrict(): List<VaultItem>? {
         val file = indexFile.baseFile
-        if (!file.exists()) return emptyList()
+        val backupFile = File("${file.path}.bak")
+        if (!file.exists() && !backupFile.exists()) return emptyList()
         return try {
             val json = indexFile.openRead().bufferedReader().use { it.readText() }
-            if (json.isBlank()) return emptyList()
+            if (json.isBlank()) return null
             val array = JSONArray(json)
             val list = mutableListOf<VaultItem>()
             for (i in 0 until array.length()) {

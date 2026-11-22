@@ -12,7 +12,14 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class AccentColor { MATERIAL_YOU, IRIS, LAPIS_MESOPOTAMIA, EMERALD, ISHTAR_AMBER, ROSE, MONOCHROME }
 enum class CornerStyle(val dp: Int) { SHARP(0), CLASSIC(4), ROUNDED(12), SQUIRCLE(18) }
 enum class GridSpacing(val dp: Int) { COMPACT(2), STANDARD(4), RELAXED(8) }
-enum class StartupTab(val pageIndex: Int) { MEDIA(0), ALBUMS(1), FAVORITES(2), LIBRARY(3) }
+enum class PhotoGridLayout { MOSAIC, GRID }
+enum class AlbumsViewMode { GRID, LIST }
+enum class NavBarStyle { DOCKED, FLOATING }
+enum class NavLabelMode { ALWAYS, SELECTED_ONLY, HIDDEN }
+enum class StartupTab(val pageIndex: Int) { MEDIA(0), ALBUMS(1), FAVORITES(2), LIBRARY(3), VAULT(4) }
+
+val DEFAULT_SELECTION_PILL_ACTIONS = listOf("share", "move", "favorite", "lock", "delete")
+val ALL_SELECTION_PILL_ACTIONS = listOf("share", "move", "copy", "favorite", "lock", "delete", "delete_permanent", "select_all")
 enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
 enum class DeleteMode { TRASH, PERMANENT, ALWAYS_ASK }
 enum class AlbumPickerSort { FOLLOW_ALBUMS, RECENT, NAME }
@@ -131,8 +138,15 @@ data class SettingsState(
     val accentColor: AccentColor = AccentColor.MATERIAL_YOU,
     val cornerStyle: CornerStyle = CornerStyle.ROUNDED,
     val gridSpacing: GridSpacing = GridSpacing.STANDARD,
+    val photoGridLayout: PhotoGridLayout = PhotoGridLayout.MOSAIC,
+    val animateGifThumbnails: Boolean = false,
+    val showHiddenItems: Boolean = false,
     val photoGridSize: Float = 105f,
     val albumGridSize: Float = 156f,
+    val albumsViewMode: AlbumsViewMode = AlbumsViewMode.GRID,
+    val groupDirectSubfolders: Boolean = false,
+    val albumHierarchyDepth: Int = 0,
+    val globalAlbumSearch: Boolean = true,
     val showTimelineHeaders: Boolean = true,
     val timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
     val customTimelineDateFormat: String = "d. MMMM yyyy",
@@ -155,6 +169,7 @@ data class SettingsState(
     val showFilmstrip: Boolean = true,
     val dismissedFilmstripTip: Boolean = false,
     val pinchToRotate: Boolean = true,
+    val showImageRotateButton: Boolean = false,
     val dismissedRotateTip: Boolean = false,
     val doubleTapZoomLevel: Float = 2.5f,
     val multiStageZoom: Boolean = true,
@@ -164,8 +179,13 @@ data class SettingsState(
     val showAlbumsTab: Boolean = true,
     val showFavoritesTab: Boolean = true,
     val showLibraryTab: Boolean = true,
+    val showVaultTab: Boolean = false,
     val showAlbumFilterChips: Boolean = true,
     val tiltNavIcons: Boolean = true,
+    val navBarStyle: NavBarStyle = NavBarStyle.DOCKED,
+    val navLabelMode: NavLabelMode = NavLabelMode.ALWAYS,
+    val useFloatingSelectionToolbar: Boolean = false,
+    val selectionPillActions: List<String> = DEFAULT_SELECTION_PILL_ACTIONS,
     val albumPickerSort: AlbumPickerSort = AlbumPickerSort.FOLLOW_ALBUMS,
     val biometricLockEnabled: Boolean = true,
     val vaultHideFromStorage: Boolean = true,
@@ -213,8 +233,15 @@ class SettingsPreferences(context: Context) {
     fun setAccentColor(color: AccentColor) = update { copy(accentColor = color) }
     fun setCornerStyle(style: CornerStyle) = update { copy(cornerStyle = style) }
     fun setGridSpacing(spacing: GridSpacing) = update { copy(gridSpacing = spacing) }
+    fun setPhotoGridLayout(layout: PhotoGridLayout) = update { copy(photoGridLayout = layout) }
+    fun setAnimateGifThumbnails(enabled: Boolean) = update { copy(animateGifThumbnails = enabled) }
+    fun setShowHiddenItems(show: Boolean) = update { copy(showHiddenItems = show) }
     fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
     fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
+    fun setAlbumsViewMode(mode: AlbumsViewMode) = update { copy(albumsViewMode = mode) }
+    fun setGroupDirectSubfolders(enabled: Boolean) = update { copy(groupDirectSubfolders = enabled) }
+    fun setAlbumHierarchyDepth(depth: Int) = update { copy(albumHierarchyDepth = depth.coerceIn(0, 4)) }
+    fun setGlobalAlbumSearch(enabled: Boolean) = update { copy(globalAlbumSearch = enabled) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
     fun setTimelineDateFormat(format: TimelineDateFormat) = update { copy(timelineDateFormat = format) }
     fun setCustomTimelineDateFormat(pattern: String) = update {
@@ -245,29 +272,44 @@ class SettingsPreferences(context: Context) {
     fun setShowFilmstrip(show: Boolean) = update { copy(showFilmstrip = show) }
     fun setDismissedFilmstripTip(dismissed: Boolean) = update { copy(dismissedFilmstripTip = dismissed) }
     fun setPinchToRotate(enabled: Boolean) = update { copy(pinchToRotate = enabled) }
+    fun setShowImageRotateButton(show: Boolean) = update { copy(showImageRotateButton = show) }
     fun setDismissedRotateTip(dismissed: Boolean) = update { copy(dismissedRotateTip = dismissed) }
     fun setDoubleTapZoomLevel(level: Float) = update { copy(doubleTapZoomLevel = level) }
     fun setMultiStageZoom(enabled: Boolean) = update { copy(multiStageZoom = enabled) }
     fun setStartupTab(tab: StartupTab) = update { copy(startupTab = tab) }
     fun setMediaFilter(filter: Int) = update { copy(mediaFilter = filter) }
     fun setShowMediaTab(show: Boolean) = update {
-        if (!show && !showAlbumsTab && !showFavoritesTab && !showLibraryTab) this
+        if (!show && !showAlbumsTab && !showFavoritesTab && !showLibraryTab && !showVaultTab) this
         else copy(showMediaTab = show)
     }
     fun setShowAlbumsTab(show: Boolean) = update {
-        if (!show && !showMediaTab && !showFavoritesTab && !showLibraryTab) this
+        if (!show && !showMediaTab && !showFavoritesTab && !showLibraryTab && !showVaultTab) this
         else copy(showAlbumsTab = show)
     }
     fun setShowFavoritesTab(show: Boolean) = update {
-        if (!show && !showMediaTab && !showAlbumsTab && !showLibraryTab) this
+        if (!show && !showMediaTab && !showAlbumsTab && !showLibraryTab && !showVaultTab) this
         else copy(showFavoritesTab = show)
     }
     fun setShowLibraryTab(show: Boolean) = update {
-        if (!show && !showMediaTab && !showAlbumsTab && !showFavoritesTab) this
+        if (!show && !showMediaTab && !showAlbumsTab && !showFavoritesTab && !showVaultTab) this
         else copy(showLibraryTab = show)
+    }
+    fun setShowVaultTab(show: Boolean) = update {
+        if (!show && !showMediaTab && !showAlbumsTab && !showFavoritesTab && !showLibraryTab) this
+        else copy(
+            showVaultTab = show,
+            startupTab = if (!show && startupTab == StartupTab.VAULT) StartupTab.MEDIA else startupTab
+        )
     }
     fun setShowAlbumFilterChips(show: Boolean) = update { copy(showAlbumFilterChips = show) }
     fun setTiltNavIcons(tilt: Boolean) = update { copy(tiltNavIcons = tilt) }
+    fun setNavBarStyle(style: NavBarStyle) = update { copy(navBarStyle = style) }
+    fun setNavLabelMode(mode: NavLabelMode) = update { copy(navLabelMode = mode) }
+    fun setUseFloatingSelectionToolbar(enabled: Boolean) = update { copy(useFloatingSelectionToolbar = enabled) }
+    fun setSelectionPillActions(actions: List<String>) = update {
+        val valid = actions.filter { it in ALL_SELECTION_PILL_ACTIONS }.distinct()
+        copy(selectionPillActions = if (valid.isEmpty()) DEFAULT_SELECTION_PILL_ACTIONS else valid)
+    }
     fun setAlbumPickerSort(sort: AlbumPickerSort) = update { copy(albumPickerSort = sort) }
     fun setBiometricLockEnabled(enabled: Boolean) = update { copy(biometricLockEnabled = enabled) }
     fun setVaultHideFromStorage(enabled: Boolean) = update { copy(vaultHideFromStorage = enabled) }
@@ -421,8 +463,19 @@ class SettingsPreferences(context: Context) {
             accentColor = runCatching { AccentColor.valueOf(accentStr.orEmpty()) }.getOrDefault(AccentColor.MATERIAL_YOU),
             cornerStyle = runCatching { CornerStyle.valueOf(cornerStr.orEmpty()) }.getOrDefault(CornerStyle.ROUNDED),
             gridSpacing = runCatching { GridSpacing.valueOf(spacingStr.orEmpty()) }.getOrDefault(GridSpacing.STANDARD),
+            photoGridLayout = runCatching {
+                PhotoGridLayout.valueOf(prefs.getString("photo_grid_layout", null).orEmpty())
+            }.getOrDefault(PhotoGridLayout.MOSAIC),
+            animateGifThumbnails = prefs.getBoolean("animate_gif_thumbnails", false),
+            showHiddenItems = prefs.getBoolean("show_hidden_items", false),
             photoGridSize = prefs.getFloat("photo_grid_size", 105f),
             albumGridSize = prefs.getFloat("album_grid_size", 156f),
+            albumsViewMode = runCatching {
+                AlbumsViewMode.valueOf(prefs.getString("albums_view_mode", null).orEmpty())
+            }.getOrDefault(AlbumsViewMode.GRID),
+            groupDirectSubfolders = prefs.getBoolean("group_direct_subfolders", false),
+            albumHierarchyDepth = prefs.getInt("album_hierarchy_depth", 0).coerceIn(0, 4),
+            globalAlbumSearch = prefs.getBoolean("global_album_search", true),
             showTimelineHeaders = prefs.getBoolean("show_timeline_headers", true),
             timelineDateFormat = runCatching { TimelineDateFormat.valueOf(dateFormatStr.orEmpty()) }.getOrDefault(TimelineDateFormat.SYSTEM_DEFAULT),
             customTimelineDateFormat = runCatching {
@@ -450,6 +503,7 @@ class SettingsPreferences(context: Context) {
             showFilmstrip = prefs.getBoolean("show_filmstrip", true),
             dismissedFilmstripTip = prefs.getBoolean("dismissed_filmstrip_tip", false),
             pinchToRotate = prefs.getBoolean("pinch_to_rotate", true),
+            showImageRotateButton = prefs.getBoolean("show_image_rotate_button", false),
             dismissedRotateTip = prefs.getBoolean("dismissed_rotate_tip", false),
             doubleTapZoomLevel = prefs.getFloat("double_tap_zoom_level", 2.5f),
             multiStageZoom = prefs.getBoolean("multi_stage_zoom_v2", true),
@@ -459,8 +513,22 @@ class SettingsPreferences(context: Context) {
             showAlbumsTab = prefs.getBoolean("show_albums_tab", true),
             showFavoritesTab = prefs.getBoolean("show_favorites_tab", true),
             showLibraryTab = prefs.getBoolean("show_library_tab", true),
+            showVaultTab = prefs.getBoolean("show_vault_tab", false),
             showAlbumFilterChips = prefs.getBoolean("show_album_filter_chips", true),
             tiltNavIcons = prefs.getBoolean("tilt_nav_icons", true),
+            navBarStyle = runCatching {
+                NavBarStyle.valueOf(prefs.getString("nav_bar_style", null).orEmpty())
+            }.getOrDefault(NavBarStyle.DOCKED),
+            navLabelMode = runCatching {
+                NavLabelMode.valueOf(prefs.getString("nav_label_mode", null).orEmpty())
+            }.getOrDefault(NavLabelMode.ALWAYS),
+            useFloatingSelectionToolbar = prefs.getBoolean("use_floating_selection_toolbar", false),
+            selectionPillActions = prefs.getString("selection_pill_actions", null)
+                ?.split(',')
+                ?.filter { it in ALL_SELECTION_PILL_ACTIONS }
+                ?.distinct()
+                ?.takeIf { it.isNotEmpty() }
+                ?: DEFAULT_SELECTION_PILL_ACTIONS,
             albumPickerSort = runCatching { AlbumPickerSort.valueOf(prefs.getString("album_picker_sort", null).orEmpty()) }.getOrDefault(AlbumPickerSort.FOLLOW_ALBUMS),
             biometricLockEnabled = prefs.getBoolean("biometric_lock_enabled", true),
             vaultHideFromStorage = prefs.getBoolean("vault_hide_from_storage", true),
@@ -494,8 +562,15 @@ class SettingsPreferences(context: Context) {
             .putString("accent_color", state.accentColor.name)
             .putString("corner_style", state.cornerStyle.name)
             .putString("grid_spacing", state.gridSpacing.name)
+            .putString("photo_grid_layout", state.photoGridLayout.name)
+            .putBoolean("animate_gif_thumbnails", state.animateGifThumbnails)
+            .putBoolean("show_hidden_items", state.showHiddenItems)
             .putFloat("photo_grid_size", state.photoGridSize)
             .putFloat("album_grid_size", state.albumGridSize)
+            .putString("albums_view_mode", state.albumsViewMode.name)
+            .putBoolean("group_direct_subfolders", state.groupDirectSubfolders)
+            .putInt("album_hierarchy_depth", state.albumHierarchyDepth)
+            .putBoolean("global_album_search", state.globalAlbumSearch)
             .putBoolean("show_timeline_headers", state.showTimelineHeaders)
             .putString("timeline_date_format", state.timelineDateFormat.name)
             .putString("custom_timeline_date_format", state.customTimelineDateFormat)
@@ -518,6 +593,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_filmstrip", state.showFilmstrip)
             .putBoolean("dismissed_filmstrip_tip", state.dismissedFilmstripTip)
             .putBoolean("pinch_to_rotate", state.pinchToRotate)
+            .putBoolean("show_image_rotate_button", state.showImageRotateButton)
             .putBoolean("dismissed_rotate_tip", state.dismissedRotateTip)
             .putFloat("double_tap_zoom_level", state.doubleTapZoomLevel)
             .putBoolean("multi_stage_zoom_v2", state.multiStageZoom)
@@ -527,8 +603,13 @@ class SettingsPreferences(context: Context) {
             .putBoolean("show_albums_tab", state.showAlbumsTab)
             .putBoolean("show_favorites_tab", state.showFavoritesTab)
             .putBoolean("show_library_tab", state.showLibraryTab)
+            .putBoolean("show_vault_tab", state.showVaultTab)
             .putBoolean("show_album_filter_chips", state.showAlbumFilterChips)
             .putBoolean("tilt_nav_icons", state.tiltNavIcons)
+            .putString("nav_bar_style", state.navBarStyle.name)
+            .putString("nav_label_mode", state.navLabelMode.name)
+            .putBoolean("use_floating_selection_toolbar", state.useFloatingSelectionToolbar)
+            .putString("selection_pill_actions", state.selectionPillActions.joinToString(","))
             .putString("album_picker_sort", state.albumPickerSort.name)
             .putBoolean("biometric_lock_enabled", state.biometricLockEnabled)
             .putBoolean("vault_hide_from_storage", state.vaultHideFromStorage)

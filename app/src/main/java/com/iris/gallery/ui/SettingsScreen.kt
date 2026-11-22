@@ -32,12 +32,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -112,6 +118,7 @@ import androidx.compose.material.icons.outlined.Landscape
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.ui.graphics.Brush
@@ -125,10 +132,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.iris.gallery.R
+import com.iris.gallery.data.ALL_SELECTION_PILL_ACTIONS
 import com.iris.gallery.data.AccentColor
 import com.iris.gallery.data.CornerStyle
 import com.iris.gallery.data.DeleteMode
 import com.iris.gallery.data.GridSpacing
+import com.iris.gallery.data.NavBarStyle
+import com.iris.gallery.data.NavLabelMode
 import com.iris.gallery.data.PreferredEditor
 import com.iris.gallery.data.SecureSharingMode
 import com.iris.gallery.data.SettingsPreferences
@@ -142,6 +152,17 @@ import com.iris.gallery.data.getSystemDefaultLocale
 import com.iris.gallery.ui.LanguageSelectionBottomSheet
 import com.iris.gallery.ui.setAppLanguage
 import kotlin.math.roundToInt
+
+private enum class SettingsCategory {
+    APPEARANCE,
+    LAYOUT,
+    TIMELINE_BADGES,
+    VIEWER,
+    NAVIGATION_BEHAVIOR,
+    PRIVACY_SECURITY,
+    MEMORIES,
+    STORAGE,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,6 +189,8 @@ fun SettingsScreen(
     var showTimePickerDialog by remember { mutableStateOf(false) }
     var showExcludedFoldersDialog by remember { mutableStateOf(false) }
     var showSecureSharingDialog by remember { mutableStateOf(false) }
+    var showSelectionPillCustomizer by remember { mutableStateOf(false) }
+    var activeCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var isSearching by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val searchFocusRequester = remember { FocusRequester() }
@@ -181,6 +204,9 @@ fun SettingsScreen(
     BackHandler(enabled = isSearching) {
         isSearching = false
         searchQuery = ""
+    }
+    BackHandler(enabled = !isSearching && activeCategory != null) {
+        activeCategory = null
     }
 
     val searchTokens = remember(searchQuery) {
@@ -254,7 +280,22 @@ fun SettingsScreen(
                             )
                         )
                     } else {
-                        Text(stringResource(R.string.section_settings))
+                        val headerTitleRes = when (activeCategory) {
+                            SettingsCategory.APPEARANCE -> R.string.settings_section_appearance
+                            SettingsCategory.LAYOUT -> R.string.settings_section_layout
+                            SettingsCategory.TIMELINE_BADGES -> R.string.settings_section_badges
+                            SettingsCategory.VIEWER -> R.string.settings_section_viewer
+                            SettingsCategory.NAVIGATION_BEHAVIOR -> R.string.settings_section_nav_behavior
+                            SettingsCategory.PRIVACY_SECURITY -> R.string.settings_section_privacy_security
+                            SettingsCategory.MEMORIES -> R.string.settings_section_memories
+                            SettingsCategory.STORAGE -> R.string.settings_section_storage
+                            null -> R.string.section_settings
+                        }
+                        Text(
+                            text = stringResource(headerTitleRes),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 },
                 navigationIcon = {
@@ -262,6 +303,8 @@ fun SettingsScreen(
                         if (isSearching) {
                             isSearching = false
                             searchQuery = ""
+                        } else if (activeCategory != null) {
+                            activeCategory = null
                         } else {
                             onBack()
                         }
@@ -310,6 +353,13 @@ fun SettingsScreen(
 
         val layoutSectionTitle = stringResource(R.string.settings_section_layout)
         val layoutSectionMatch = matches(layoutSectionTitle)
+        val gridLayoutTitle = stringResource(R.string.settings_grid_layout_title)
+        val gridLayoutMosaic = stringResource(R.string.settings_grid_layout_mosaic)
+        val gridLayoutSquare = stringResource(R.string.settings_grid_layout_square)
+        val showGridLayout = layoutSectionMatch || matches(gridLayoutTitle, gridLayoutMosaic, gridLayoutSquare)
+        val animateGifsTitle = stringResource(R.string.settings_animate_gif_thumbs_title)
+        val animateGifsDesc = stringResource(R.string.settings_animate_gif_thumbs_desc)
+        val showAnimateGifs = layoutSectionMatch || matches(animateGifsTitle, animateGifsDesc)
         val cornerStyleTitle = stringResource(R.string.settings_corner_style)
         val cornerSharp = stringResource(R.string.settings_corner_sharp)
         val cornerSubtle = stringResource(R.string.settings_corner_subtle)
@@ -384,6 +434,9 @@ fun SettingsScreen(
         val pinchRotateTitle = stringResource(R.string.settings_pinch_to_rotate_title)
         val pinchRotateDesc = stringResource(R.string.settings_pinch_to_rotate_desc)
         val showPinchRotate = viewerSectionMatch || matches(pinchRotateTitle, pinchRotateDesc)
+        val imageRotateBtnTitle = stringResource(R.string.settings_image_rotate_button_title)
+        val imageRotateBtnDesc = stringResource(R.string.settings_image_rotate_button_desc)
+        val showImageRotateBtn = viewerSectionMatch || matches(imageRotateBtnTitle, imageRotateBtnDesc)
         val multiStageZoomTitle = stringResource(R.string.settings_multi_stage_zoom_title)
         val multiStageZoomDesc = stringResource(R.string.settings_multi_stage_zoom_desc)
         val zoomScaleTitle = stringResource(R.string.settings_zoom_scale_title)
@@ -397,59 +450,83 @@ fun SettingsScreen(
         val memoriesTimeDesc = stringResource(R.string.setting_memories_time_desc)
         val showMemories = memoriesSectionMatch || matches(memoriesNotifTitle, memoriesNotifDesc, memoriesTimeTitle, memoriesTimeDesc)
 
-        val behaviorSectionTitle = stringResource(R.string.settings_section_behavior)
-        val behaviorSectionMatch = matches(behaviorSectionTitle)
+        val behaviorSectionTitle = stringResource(R.string.settings_section_nav_behavior)
+        val privacySectionTitle = stringResource(R.string.settings_section_privacy_security)
+        val legacyBehaviorSectionTitle = stringResource(R.string.settings_section_behavior)
+        val behaviorSectionMatch = matches(behaviorSectionTitle, legacyBehaviorSectionTitle)
+        val privacySectionMatch = matches(privacySectionTitle, legacyBehaviorSectionTitle)
         val navTabsTitle = stringResource(R.string.settings_navigation_tabs_title)
         val navTabsDesc = stringResource(R.string.settings_navigation_tabs_desc)
         val tabMediaStr = stringResource(R.string.tab_media)
         val tabAlbumsStr = stringResource(R.string.tab_albums)
         val tabFavoritesStr = stringResource(R.string.tab_favorites)
         val tabLibraryStr = stringResource(R.string.tab_library)
-        val showNavTabs = behaviorSectionMatch || matches(navTabsTitle, navTabsDesc, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr)
+        val tabVaultStr = stringResource(R.string.tab_vault)
+        val showNavTabs = behaviorSectionMatch || matches(navTabsTitle, navTabsDesc, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr, tabVaultStr)
         val tiltNavIconsTitle = stringResource(R.string.settings_tilt_nav_icons_title)
         val tiltNavIconsDesc = stringResource(R.string.settings_tilt_nav_icons_desc)
         val showTiltNavIcons = behaviorSectionMatch || matches(tiltNavIconsTitle, tiltNavIconsDesc)
+        val navBarStyleTitle = stringResource(R.string.settings_nav_bar_style_title)
+        val navBarDockedStr = stringResource(R.string.settings_nav_bar_docked)
+        val navBarFloatingStr = stringResource(R.string.settings_nav_bar_floating)
+        val showNavBarStyle = behaviorSectionMatch || matches(navBarStyleTitle, navBarDockedStr, navBarFloatingStr)
+        val navLabelModeTitle = stringResource(R.string.settings_nav_label_mode_title)
+        val navLabelAlwaysStr = stringResource(R.string.settings_nav_label_always)
+        val navLabelSelectedStr = stringResource(R.string.settings_nav_label_selected)
+        val navLabelHiddenStr = stringResource(R.string.settings_nav_label_hidden)
+        val showNavLabelMode = behaviorSectionMatch || matches(navLabelModeTitle, navLabelAlwaysStr, navLabelSelectedStr, navLabelHiddenStr)
+        val floatingSelectionTitle = stringResource(R.string.settings_floating_selection_toolbar_title)
+        val floatingSelectionDesc = stringResource(R.string.settings_floating_selection_toolbar_desc)
+        val selectionPillTitle = stringResource(R.string.settings_selection_pill_title)
+        val selectionPillDesc = stringResource(R.string.settings_selection_pill_desc)
+        val showSelectionPillSetting = behaviorSectionMatch || matches(floatingSelectionTitle, floatingSelectionDesc, selectionPillTitle, selectionPillDesc)
         val albumTopTitle = stringResource(R.string.settings_album_top_section_title)
         val albumFiltersTitle = stringResource(R.string.settings_album_filters_title)
         val albumFiltersDesc = stringResource(R.string.settings_album_filters_desc)
         val showAlbumFilters = behaviorSectionMatch || matches(albumTopTitle, albumFiltersTitle, albumFiltersDesc)
+        val globalAlbumSearchTitle = stringResource(R.string.settings_global_album_search_title)
+        val globalAlbumSearchDesc = stringResource(R.string.settings_global_album_search_desc)
+        val showGlobalAlbumSearch = behaviorSectionMatch || matches(globalAlbumSearchTitle, globalAlbumSearchDesc)
+        val showHiddenItemsTitle = stringResource(R.string.settings_show_hidden_items_title)
+        val showHiddenItemsDesc = stringResource(R.string.settings_show_hidden_items_desc)
+        val showHiddenItemsToggle = behaviorSectionMatch || matches(showHiddenItemsTitle, showHiddenItemsDesc)
         val startupTabTitle = stringResource(R.string.settings_startup_tab)
-        val showStartupTab = behaviorSectionMatch || matches(startupTabTitle, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr)
+        val showStartupTab = behaviorSectionMatch || matches(startupTabTitle, tabMediaStr, tabAlbumsStr, tabFavoritesStr, tabLibraryStr, tabVaultStr)
         val appLockTitle = stringResource(R.string.settings_app_lock_title)
         val appLockDesc = stringResource(R.string.settings_app_lock_desc)
         val changePinStr = stringResource(R.string.settings_change_pin)
         val bioUnlockTitle = stringResource(R.string.settings_biometric_unlock_title)
         val bioUnlockDesc = stringResource(R.string.settings_biometric_unlock_desc)
-        val showAppLock = behaviorSectionMatch || matches(appLockTitle, appLockDesc, changePinStr, bioUnlockTitle, bioUnlockDesc)
+        val showAppLock = privacySectionMatch || matches(appLockTitle, appLockDesc, changePinStr, bioUnlockTitle, bioUnlockDesc)
         val hideVaultTitle = stringResource(R.string.settings_hide_vault_title)
         val hideVaultDesc = stringResource(R.string.settings_hide_vault_desc)
-        val showHideVault = behaviorSectionMatch || matches(hideVaultTitle, hideVaultDesc)
+        val showHideVault = privacySectionMatch || matches(hideVaultTitle, hideVaultDesc)
         val storageAccessTitle = stringResource(R.string.settings_storage_access_title)
         val storageAccessDescGranted = stringResource(R.string.settings_storage_access_desc_granted)
         val storageAccessDescPrompt = stringResource(R.string.settings_storage_access_desc_prompt)
         val showStorageAccess = Build.VERSION.SDK_INT <= 29 &&
-            (behaviorSectionMatch || matches(storageAccessTitle, storageAccessDescGranted, storageAccessDescPrompt))
+            (privacySectionMatch || matches(storageAccessTitle, storageAccessDescGranted, storageAccessDescPrompt))
         val silentVaultTitle = stringResource(R.string.settings_silent_vault_title)
         val silentVaultDescGranted = stringResource(R.string.settings_silent_vault_desc_granted)
         val silentVaultDescPrompt = stringResource(R.string.settings_silent_vault_desc_prompt)
         val showSilentVault = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && settings.vaultHideFromStorage &&
-            (behaviorSectionMatch || matches(silentVaultTitle, silentVaultDescGranted, silentVaultDescPrompt))
+            (privacySectionMatch || matches(silentVaultTitle, silentVaultDescGranted, silentVaultDescPrompt))
         val vaultBioTitle = stringResource(R.string.settings_vault_biometric_title)
         val vaultBioDesc = stringResource(R.string.settings_vault_biometric_desc)
-        val showVaultBio = behaviorSectionMatch || matches(vaultBioTitle, vaultBioDesc)
+        val showVaultBio = privacySectionMatch || matches(vaultBioTitle, vaultBioDesc)
         val confirmDeleteTitle = stringResource(R.string.settings_confirm_delete_title)
         val confirmDeleteDesc = stringResource(R.string.settings_confirm_delete_desc)
-        val showConfirmDelete = behaviorSectionMatch || matches(confirmDeleteTitle, confirmDeleteDesc)
+        val showConfirmDelete = privacySectionMatch || matches(confirmDeleteTitle, confirmDeleteDesc)
         val deleteModeTitle = stringResource(R.string.settings_delete_mode_title)
         val deleteModeDesc = stringResource(R.string.settings_delete_mode_desc)
         val deleteModeTrash = stringResource(R.string.settings_delete_mode_trash)
         val deleteModePerm = stringResource(R.string.settings_delete_mode_permanent)
         val deleteModeAsk = stringResource(R.string.settings_delete_mode_always_ask)
-        val showDeleteMode = behaviorSectionMatch || matches(deleteModeTitle, deleteModeDesc, deleteModeTrash, deleteModePerm, deleteModeAsk)
+        val showDeleteMode = privacySectionMatch || matches(deleteModeTitle, deleteModeDesc, deleteModeTrash, deleteModePerm, deleteModeAsk)
         val systemTrashTitle = stringResource(R.string.settings_system_trash_title)
         val systemTrashDesc = stringResource(R.string.settings_system_trash_desc)
         val showSystemTrash = Build.VERSION.SDK_INT >= 30 &&
-            (behaviorSectionMatch || matches(systemTrashTitle, systemTrashDesc))
+            (privacySectionMatch || matches(systemTrashTitle, systemTrashDesc))
         val prefEditorTitle = stringResource(R.string.settings_preferred_editor_title)
         val prefEditorDesc = stringResource(R.string.settings_preferred_editor_desc)
         val editorAsk = stringResource(R.string.settings_editor_always_ask)
@@ -462,7 +539,7 @@ fun SettingsScreen(
         val secureSharingTitle = stringResource(R.string.settings_secure_sharing_title)
         val secureSharingModeTitle = stringResource(settings.secureSharingMode.getTitleRes())
         val secureSharingModeDesc = stringResource(settings.secureSharingMode.getDescriptionRes())
-        val showSecureSharing = behaviorSectionMatch || matches(secureSharingTitle, secureSharingModeTitle, secureSharingModeDesc)
+        val showSecureSharing = privacySectionMatch || matches(secureSharingTitle, secureSharingModeTitle, secureSharingModeDesc)
 
         val storageSectionTitle = stringResource(R.string.settings_section_storage)
         val storageSectionMatch = matches(storageSectionTitle)
@@ -480,27 +557,118 @@ fun SettingsScreen(
         val showAboutSection = matches(aboutTitle, aboutSubtitle)
 
         val hasAnyAppearance = showThemeMode || showAmoled || showMaterialYou || showCustomAccents
-        val hasAnyLayout = showCornerStyle || showGridSpacing || showPhotosTileSize || showAlbumsTileSize
+        val hasAnyLayout = showGridLayout || showAnimateGifs || showCornerStyle || showGridSpacing || showPhotosTileSize || showAlbumsTileSize
         val hasAnyBadges = showTimeline || showBadgeDuration || showBadgeFormats || showAlbumCount || showAlbumLabels
         val hasAnyViewer = showViewerHeader || showAutoplay || showLoop || showVideoDoubleTap ||
-            showVideoGestures || showUserComments || showFilmstrip || showPinchRotate || showMultiStageZoom
-        val hasAnyBehavior = showNavTabs || showTiltNavIcons || showAlbumFilters || showStartupTab || showAppLock ||
-            showHideVault || showStorageAccess || showSilentVault || showVaultBio ||
-            showConfirmDelete || showDeleteMode || showSystemTrash || showPreferredEditor ||
-            showOverwrite || showSecureSharing
+            showVideoGestures || showUserComments || showFilmstrip || showPinchRotate || showImageRotateBtn || showMultiStageZoom
+        val hasAnyNavBehavior = showNavTabs || showTiltNavIcons || showNavBarStyle || showNavLabelMode ||
+            showSelectionPillSetting || showAlbumFilters || showGlobalAlbumSearch || showHiddenItemsToggle ||
+            showStartupTab || showPreferredEditor || showOverwrite
+        val hasAnyPrivacySecurity = showAppLock || showHideVault || showStorageAccess || showSilentVault ||
+            showVaultBio || showConfirmDelete || showDeleteMode || showSystemTrash || showSecureSharing
         val hasAnyStorage = showRescanMedia || showExcludedFoldersBtn || showClearCache || showResetAll
         val hasAnyMatches = showLanguageSection || hasAnyAppearance || hasAnyLayout ||
-            hasAnyBadges || hasAnyViewer || showMemories || hasAnyBehavior ||
-            hasAnyStorage || showAboutSection
+            hasAnyBadges || hasAnyViewer || showMemories || hasAnyNavBehavior ||
+            hasAnyPrivacySecurity || hasAnyStorage || showAboutSection
 
-        LazyColumn(
+        val hubAppearanceDesc = stringResource(R.string.settings_hub_appearance_desc)
+        val hubLayoutDesc = stringResource(R.string.settings_hub_layout_desc)
+        val hubBadgesDesc = stringResource(R.string.settings_hub_badges_desc)
+        val hubViewerDesc = stringResource(R.string.settings_hub_viewer_desc)
+        val hubNavBehaviorDesc = stringResource(R.string.settings_hub_nav_behavior_desc)
+        val hubPrivacyDesc = stringResource(R.string.settings_hub_privacy_desc)
+        val hubMemoriesDesc = stringResource(R.string.settings_hub_memories_desc)
+        val hubStorageDesc = stringResource(R.string.settings_hub_storage_desc)
+
+        val showAllForSearch = searchTokens.isNotEmpty()
+        val currentViewKey = if (showAllForSearch) "search" else activeCategory?.name ?: "hub"
+
+        AnimatedContent(
+            targetState = currentViewKey,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-        if (!hasAnyMatches && searchTokens.isNotEmpty()) {
+            transitionSpec = {
+                when {
+                    targetState == "search" || initialState == "search" -> {
+                        fadeIn(tween(150)) togetherWith fadeOut(tween(120))
+                    }
+                    targetState == "hub" -> {
+                        (fadeIn(tween(180)) + slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it / 8 }) togetherWith
+                            (fadeOut(tween(140)) + slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it / 8 })
+                    }
+                    else -> {
+                        (fadeIn(tween(180)) + slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 8 }) togetherWith
+                            (fadeOut(tween(140)) + slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -it / 8 })
+                    }
+                }
+            },
+            label = "settings_navigation"
+        ) { viewKey ->
+            if (viewKey == "hub") {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item(key = "hub_visual") {
+                        SettingsHubGroupCard(
+                            listOf(
+                                SettingsHubEntry(Icons.Outlined.Palette, appearanceSectionTitle, hubAppearanceDesc) {
+                                    activeCategory = SettingsCategory.APPEARANCE
+                                },
+                                SettingsHubEntry(Icons.Outlined.GridView, layoutSectionTitle, hubLayoutDesc) {
+                                    activeCategory = SettingsCategory.LAYOUT
+                                },
+                                SettingsHubEntry(Icons.Outlined.ViewDay, badgesSectionTitle, hubBadgesDesc) {
+                                    activeCategory = SettingsCategory.TIMELINE_BADGES
+                                },
+                                SettingsHubEntry(Icons.Outlined.PlayCircle, viewerSectionTitle, hubViewerDesc) {
+                                    activeCategory = SettingsCategory.VIEWER
+                                },
+                            )
+                        )
+                    }
+                    item(key = "hub_behavior") {
+                        SettingsHubGroupCard(
+                            listOf(
+                                SettingsHubEntry(Icons.Outlined.Dashboard, behaviorSectionTitle, hubNavBehaviorDesc) {
+                                    activeCategory = SettingsCategory.NAVIGATION_BEHAVIOR
+                                },
+                                SettingsHubEntry(Icons.Outlined.Security, privacySectionTitle, hubPrivacyDesc) {
+                                    activeCategory = SettingsCategory.PRIVACY_SECURITY
+                                },
+                                SettingsHubEntry(Icons.Outlined.Notifications, memoriesSectionTitle, hubMemoriesDesc) {
+                                    activeCategory = SettingsCategory.MEMORIES
+                                },
+                            )
+                        )
+                    }
+                    item(key = "hub_system") {
+                        SettingsHubGroupCard(
+                            listOf(
+                                SettingsHubEntry(Icons.Outlined.CleaningServices, storageSectionTitle, hubStorageDesc) {
+                                    activeCategory = SettingsCategory.STORAGE
+                                },
+                                SettingsHubEntry(Icons.Outlined.Language, languageTitle, langLabel, accentSubtitle = true) {
+                                    showLanguageDialog = true
+                                },
+                                SettingsHubEntry(Icons.Outlined.Info, aboutTitle, aboutSubtitle) {
+                                    onOpenAbout()
+                                },
+                            )
+                        )
+                    }
+                }
+            } else {
+                val isSearchView = viewKey == "search"
+                val selectedCategory = if (isSearchView) null else runCatching { SettingsCategory.valueOf(viewKey) }.getOrNull()
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+        if (isSearchView && !hasAnyMatches) {
             item(key = "settings_empty_search") {
                 Column(
                     modifier = Modifier
@@ -526,7 +694,7 @@ fun SettingsScreen(
         }
 
         // Section: Language & Region
-        if (showLanguageSection) {
+        if (isSearchView && showLanguageSection) {
         item {
             SettingsSectionHeader(Icons.Outlined.Language, languageSectionTitle)
         }
@@ -573,9 +741,11 @@ fun SettingsScreen(
         }
 
         // Section 1: Appearance & Theme
-        if (hasAnyAppearance) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.Palette, appearanceSectionTitle)
+        if ((isSearchView && hasAnyAppearance) || selectedCategory == SettingsCategory.APPEARANCE) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.Palette, appearanceSectionTitle)
+            }
         }
 
         item {
@@ -682,9 +852,11 @@ fun SettingsScreen(
         }
 
         // Section 2: Layout & Grid Customization
-        if (hasAnyLayout) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.GridView, layoutSectionTitle)
+        if ((isSearchView && hasAnyLayout) || selectedCategory == SettingsCategory.LAYOUT) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.GridView, layoutSectionTitle)
+            }
         }
 
         item {
@@ -763,6 +935,37 @@ fun SettingsScreen(
             )
 
             val layoutBlocks = buildList<@Composable () -> Unit> {
+                if (showGridLayout) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(gridLayoutTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.photoGridLayout == com.iris.gallery.data.PhotoGridLayout.MOSAIC,
+                                    onClick = { preferences.setPhotoGridLayout(com.iris.gallery.data.PhotoGridLayout.MOSAIC) },
+                                    label = { Text(gridLayoutMosaic, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.photoGridLayout == com.iris.gallery.data.PhotoGridLayout.GRID,
+                                    onClick = { preferences.setPhotoGridLayout(com.iris.gallery.data.PhotoGridLayout.GRID) },
+                                    label = { Text(gridLayoutSquare, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                            }
+                        }
+                    }
+                }
+                if (showAnimateGifs) {
+                    add {
+                        SettingsSwitchRow(
+                            title = animateGifsTitle,
+                            subtitle = animateGifsDesc,
+                            checked = settings.animateGifThumbnails,
+                            onCheckedChange = { preferences.setAnimateGifThumbnails(it) }
+                        )
+                    }
+                }
                 if (showCornerStyle) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1126,9 +1329,11 @@ fun SettingsScreen(
         }
 
         // Section 3: Media Badges & Timeline
-        if (hasAnyBadges) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.ViewDay, badgesSectionTitle)
+        if ((isSearchView && hasAnyBadges) || selectedCategory == SettingsCategory.TIMELINE_BADGES) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.ViewDay, badgesSectionTitle)
+            }
         }
 
         item {
@@ -1281,9 +1486,11 @@ fun SettingsScreen(
         }
 
         // Section 4: Viewer & Playback
-        if (hasAnyViewer) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.PlayCircle, viewerSectionTitle)
+        if ((isSearchView && hasAnyViewer) || selectedCategory == SettingsCategory.VIEWER) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.PlayCircle, viewerSectionTitle)
+            }
         }
 
         item {
@@ -1392,6 +1599,16 @@ fun SettingsScreen(
                         )
                     }
                 }
+                if (showImageRotateBtn) {
+                    add {
+                        SettingsSwitchRow(
+                            title = imageRotateBtnTitle,
+                            subtitle = imageRotateBtnDesc,
+                            checked = settings.showImageRotateButton,
+                            onCheckedChange = { preferences.setShowImageRotateButton(it) }
+                        )
+                    }
+                }
                 if (showMultiStageZoom) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1441,9 +1658,11 @@ fun SettingsScreen(
         }
 
         // Section: Memories & Notifications
-        if (showMemories) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.Notifications, memoriesSectionTitle)
+        if ((isSearchView && showMemories) || selectedCategory == SettingsCategory.MEMORIES) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.Notifications, memoriesSectionTitle)
+            }
         }
 
         item {
@@ -1524,10 +1743,12 @@ fun SettingsScreen(
         }
         }
 
-        // Section 5: Startup & Security
-        if (hasAnyBehavior) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.Dashboard, behaviorSectionTitle)
+        // Section 5: Navigation & Behavior
+        if ((isSearchView && hasAnyNavBehavior) || selectedCategory == SettingsCategory.NAVIGATION_BEHAVIOR) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.Dashboard, behaviorSectionTitle)
+            }
         }
 
         item {
@@ -1607,12 +1828,23 @@ fun SettingsScreen(
                                             settings.showMediaTab -> StartupTab.MEDIA
                                             settings.showAlbumsTab -> StartupTab.ALBUMS
                                             settings.showFavoritesTab -> StartupTab.FAVORITES
+                                            settings.showVaultTab -> StartupTab.VAULT
                                             else -> StartupTab.MEDIA
                                         }
                                         preferences.setStartupTab(fallback)
                                     }
                                 },
                                 label = { Text(tabLibraryStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                modifier = Modifier.fillMaxWidth(),
+                                selected = settings.showVaultTab,
+                                onClick = {
+                                    preferences.setShowVaultTab(!settings.showVaultTab)
+                                },
+                                label = { Text(tabVaultStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
                     }
@@ -1629,6 +1861,137 @@ fun SettingsScreen(
                         )
                     }
                 }
+                if (showNavBarStyle) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(navBarStyleTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.navBarStyle == NavBarStyle.DOCKED,
+                                    onClick = { preferences.setNavBarStyle(NavBarStyle.DOCKED) },
+                                    label = { Text(navBarDockedStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.navBarStyle == NavBarStyle.FLOATING,
+                                    onClick = { preferences.setNavBarStyle(NavBarStyle.FLOATING) },
+                                    label = { Text(navBarFloatingStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                            }
+                        }
+                    }
+                }
+                if (showNavLabelMode) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(navLabelModeTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.navLabelMode == NavLabelMode.ALWAYS,
+                                    onClick = { preferences.setNavLabelMode(NavLabelMode.ALWAYS) },
+                                    label = { Text(navLabelAlwaysStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                )
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.navLabelMode == NavLabelMode.SELECTED_ONLY,
+                                    onClick = { preferences.setNavLabelMode(NavLabelMode.SELECTED_ONLY) },
+                                    label = { Text(navLabelSelectedStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                )
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.navLabelMode == NavLabelMode.HIDDEN,
+                                    onClick = { preferences.setNavLabelMode(NavLabelMode.HIDDEN) },
+                                    label = { Text(navLabelHiddenStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                )
+                            }
+                        }
+                    }
+                }
+                if (showSelectionPillSetting) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            SettingsSwitchRow(
+                                title = floatingSelectionTitle,
+                                subtitle = floatingSelectionDesc,
+                                checked = settings.useFloatingSelectionToolbar,
+                                onCheckedChange = { preferences.setUseFloatingSelectionToolbar(it) }
+                            )
+                            AnimatedVisibility(
+                                visible = settings.useFloatingSelectionToolbar,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { showSelectionPillCustomizer = true }
+                                            .padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Tune,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text(
+                                                    selectionPillTitle,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                            Text(
+                                                selectionPillDesc,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer
+                                        ) {
+                                            Text(
+                                                text = "${settings.selectionPillActions.size}/${ALL_SELECTION_PILL_ACTIONS.size}",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Icon(
+                                            Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (showAlbumFilters) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1643,12 +2006,31 @@ fun SettingsScreen(
                         }
                     }
                 }
+                if (showGlobalAlbumSearch) {
+                    add {
+                        SettingsSwitchRow(
+                            title = globalAlbumSearchTitle,
+                            subtitle = globalAlbumSearchDesc,
+                            checked = settings.globalAlbumSearch,
+                            onCheckedChange = { preferences.setGlobalAlbumSearch(it) }
+                        )
+                    }
+                }
+                if (showHiddenItemsToggle) {
+                    add {
+                        SettingsSwitchRow(
+                            title = showHiddenItemsTitle,
+                            subtitle = showHiddenItemsDesc,
+                            checked = settings.showHiddenItems,
+                            onCheckedChange = { preferences.setShowHiddenItems(it) }
+                        )
+                    }
+                }
                 if (showStartupTab) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(startupTabTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
-                    // 2x2 grid for symmetrical, perfect alignment
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
@@ -1682,10 +2064,85 @@ fun SettingsScreen(
                                 label = { Text(tabLibraryStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
                             )
                         }
+                        if (settings.showVaultTab) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    selected = settings.startupTab == StartupTab.VAULT,
+                                    enabled = settings.showVaultTab,
+                                    onClick = { preferences.setStartupTab(StartupTab.VAULT) },
+                                    label = { Text(tabVaultStr, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                                )
+                            }
+                        }
                     }
                         }
                     }
                 }
+                if (showPreferredEditor) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            prefEditorTitle,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            prefEditorDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.ALWAYS_ASK) },
+                                label = { Text(editorAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
+                                label = { Text(editorBuiltin, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                            FilterChip(
+                                modifier = Modifier.weight(1f),
+                                selected = settings.preferredEditor == PreferredEditor.EXTERNAL,
+                                onClick = { preferences.setPreferredEditor(PreferredEditor.EXTERNAL) },
+                                label = { Text(editorExternal, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                            )
+                        }
+                    }
+                    }
+                }
+                if (showOverwrite) {
+                    add {
+                        SettingsSwitchRow(
+                            title = overwriteTitle,
+                            subtitle = overwriteDesc,
+                            checked = settings.editorOverwriteOriginal,
+                            onCheckedChange = { preferences.setEditorOverwriteOriginal(it) }
+                        )
+                    }
+                }
+            }
+            SettingsSectionCard(behaviorBlocks)
+        }
+        }
+
+        // Section 5B: Privacy & Security
+        if ((isSearchView && hasAnyPrivacySecurity) || selectedCategory == SettingsCategory.PRIVACY_SECURITY) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.Security, privacySectionTitle)
+            }
+        }
+
+        item {
+            val privacyBlocks = buildList<@Composable () -> Unit> {
                 if (showAppLock) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1919,55 +2376,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-                if (showPreferredEditor) {
-                    add {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            prefEditorTitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            prefEditorDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.ALWAYS_ASK) },
-                                label = { Text(editorAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
-                                label = { Text(editorBuiltin, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.EXTERNAL,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.EXTERNAL) },
-                                label = { Text(editorExternal, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                        }
-                    }
-                    }
-                }
-                if (showOverwrite) {
-                    add {
-                        SettingsSwitchRow(
-                            title = overwriteTitle,
-                            subtitle = overwriteDesc,
-                            checked = settings.editorOverwriteOriginal,
-                            onCheckedChange = { preferences.setEditorOverwriteOriginal(it) }
-                        )
-                    }
-                }
                 if (showSecureSharing) {
                     add {
                         Row(
@@ -2021,14 +2429,16 @@ fun SettingsScreen(
                     }
                 }
             }
-            SettingsSectionCard(behaviorBlocks)
+            SettingsSectionCard(privacyBlocks)
         }
         }
 
         // Section 6: Cache & Reset
-        if (hasAnyStorage) {
-        item {
-            SettingsSectionHeader(Icons.Outlined.CleaningServices, storageSectionTitle)
+        if ((isSearchView && hasAnyStorage) || selectedCategory == SettingsCategory.STORAGE) {
+        if (isSearchView) {
+            item {
+                SettingsSectionHeader(Icons.Outlined.CleaningServices, storageSectionTitle)
+            }
         }
 
         item {
@@ -2087,7 +2497,7 @@ fun SettingsScreen(
         }
 
         // Section 7: About Iris Gallery
-        if (showAboutSection) {
+        if (isSearchView && showAboutSection) {
         item {
             SettingsSectionHeader(Icons.Outlined.Info, aboutTitle)
         }
@@ -2128,7 +2538,17 @@ fun SettingsScreen(
             }
         }
         }
+                }
+            }
+        }
     }
+
+    if (showSelectionPillCustomizer) {
+        SelectionPillCustomizerSheet(
+            selectedActions = settings.selectionPillActions,
+            onSave = { preferences.setSelectionPillActions(it) },
+            onDismiss = { showSelectionPillCustomizer = false }
+        )
     }
 
     if (showSetPinDialog) {
@@ -2716,5 +3136,81 @@ private fun SettingsSwitchRow(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+private data class SettingsHubEntry(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val accentSubtitle: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun SettingsHubGroupCard(entries: List<SettingsHubEntry>) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            entries.forEachIndexed { index, entry ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(start = 68.dp, end = 16.dp)
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = entry.onClick)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = entry.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = entry.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = entry.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (entry.accentSubtitle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
     }
 }

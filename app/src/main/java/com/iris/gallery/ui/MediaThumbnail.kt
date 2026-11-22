@@ -358,6 +358,8 @@ fun MediaThumbnail(
     showVideoDuration: Boolean = true,
     showFormatBadge: Boolean = true,
     isFavorite: Boolean = false,
+    animateGifs: Boolean = false,
+    isScrubbing: Boolean = false,
     onInvalidMedia: ((MediaImage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -435,10 +437,27 @@ fun MediaThumbnail(
         }
     }
 
+    val shouldAnimateGif = animateGifs && image.isGif && !isScrubbing
+
     Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
         bitmap?.let {
             Image(
                 bitmap = it.asImageBitmap(),
+                contentDescription = image.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (shouldAnimateGif) {
+            val animatedRequest = remember(image.uri, targetSizePx) {
+                coil3.request.ImageRequest.Builder(context)
+                    .data(image.uri)
+                    .size(targetSizePx.coerceAtLeast(180), targetSizePx.coerceAtLeast(180))
+                    .precision(coil3.size.Precision.INEXACT)
+                    .build()
+            }
+            coil3.compose.AsyncImage(
+                model = animatedRequest,
                 contentDescription = image.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

@@ -68,6 +68,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val libraryState: StateFlow<LibraryPreferencesState> = libraryPreferences.state
     val vaultMedia: StateFlow<List<MediaImage>> = vaultRepository.vaultMedia
     val trashedMedia: StateFlow<List<MediaImage>> = trashRepository.trashedMedia
+    private val _hiddenMedia = MutableStateFlow<List<MediaImage>>(emptyList())
+    val hiddenMedia: StateFlow<List<MediaImage>> = _hiddenMedia.asStateFlow()
     private val _vaultProgress = MutableStateFlow<VaultOperationProgress?>(null)
     val vaultProgress: StateFlow<VaultOperationProgress?> = _vaultProgress.asStateFlow()
     private val duplicateDetector = DuplicateDetector(application)
@@ -85,6 +87,15 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             settingsPreferences.state.map { it.useSystemTrash }.distinctUntilChanged().drop(1).collect {
                 refreshTrashOnly()
+            }
+        }
+        viewModelScope.launch {
+            settingsPreferences.state.map { it.showHiddenItems }.distinctUntilChanged().collect { showHidden ->
+                if (showHidden) {
+                    refreshHiddenMedia()
+                } else {
+                    _hiddenMedia.value = emptyList()
+                }
             }
         }
         viewModelScope.launch {
@@ -237,9 +248,29 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun setLibraryOrder(order: List<String>) = libraryPreferences.setLibraryOrder(order)
     fun setAlbumMediaSort(sort: com.iris.gallery.data.MediaSort) = libraryPreferences.setAlbumMediaSort(sort)
     fun setAlbumMediaSortOverride(albumId: Long, sort: com.iris.gallery.data.MediaSort?) = libraryPreferences.setAlbumMediaSortOverride(albumId, sort)
+    fun setVaultAlbumSort(sort: AlbumSort) = libraryPreferences.setVaultAlbumSort(sort)
+    fun setVaultMediaSort(sort: com.iris.gallery.data.MediaSort) = libraryPreferences.setVaultMediaSort(sort)
+    fun createAlbumGroup(name: String, albumIds: Collection<Long>) = libraryPreferences.createAlbumGroup(name, albumIds)
+    fun renameAlbumGroup(groupId: String, newName: String) = libraryPreferences.renameAlbumGroup(groupId, newName)
+    fun setAlbumGroupCover(groupId: String, mediaId: Long?) = libraryPreferences.setAlbumGroupCover(groupId, mediaId)
+    fun deleteAlbumGroup(groupId: String) = libraryPreferences.deleteAlbumGroup(groupId)
+    fun setAlbumGroupMembers(groupId: String, albumIds: Collection<Long>) = libraryPreferences.setAlbumGroupMembers(groupId, albumIds)
+    fun addAlbumToGroup(groupId: String, albumId: Long) = libraryPreferences.addAlbumToGroup(groupId, albumId)
+    fun removeAlbumFromGroup(groupId: String, albumId: Long) = libraryPreferences.removeAlbumFromGroup(groupId, albumId)
     fun addExcludedFolder(path: String) = libraryPreferences.addExcludedFolder(path)
     fun removeExcludedFolder(path: String) = libraryPreferences.removeExcludedFolder(path)
     fun setExcludedFolders(folders: Set<String>) = libraryPreferences.setExcludedFolders(folders)
+
+    fun refreshHiddenMedia() {
+        viewModelScope.launch {
+            if (!settingsPreferences.state.value.showHiddenItems) {
+                _hiddenMedia.value = emptyList()
+                return@launch
+            }
+            val loaded = runCatching { repository.loadHiddenImages() }.getOrDefault(emptyList())
+            _hiddenMedia.value = loaded
+        }
+    }
 
     fun toggleFavorite(id: Long) {
         val updated = _favorites.value.toMutableSet().apply {
@@ -597,7 +628,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 if (currVersion != null) repository.saveMediaStoreVersion(currVersion)
 
                 if (!hasCheckedObsolete) {
-                    val knownIds = _uiState.value.images.mapTo(HashSet()) { it.id }
+                    val knownIds = _uiState.value.images.mapNotNullTo(HashSet()) { it.id.takeIf { id -> id > 0 } }
                     val obsolete = runCatching { repository.checkObsoleteContentIds(knownIds) }.getOrDefault(emptySet())
                     hasCheckedObsolete = true
                     if (obsolete.isNotEmpty()) {
@@ -617,8 +648,19 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private var refreshJob: Job? = null
+    private var backgroundRescanJob: Job? = null
 
-    fun refresh(showLoading: Boolean = true, forceClearCache: Boolean = false) {
+    fun rescanNewFilesInBackground() {
+        if (backgroundRescanJob?.isActive == true) return
+        backgroundRescanJob = viewModelScope.launch {
+            val scanned = runCatching { repository.rescanStorage() }.getOrDefault(0)
+            if (scanned > 0) {
+                refresh(showLoading = false, forceClearCache = true)
+            }
+        }
+    }
+
+    fun refresh(showLoading: Boolean = true, forceClearCache: Boolean = false, rescanStorage: Boolean = false) {
         val current = refreshJob
         if (current?.isActive == true) {
             current.cancel()
@@ -642,6 +684,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             trashed = trashList,
                             error = null
                         )
+                    }
+                    if (rescanStorage) {
+                        runCatching { repository.rescanStorage() }
                     }
                     try {
                         repository.setSnapshotComplete(false)
@@ -684,6 +729,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         }
                         if (scanStartVersion != null) {
                             repository.saveMediaStoreVersion(scanStartVersion)
+                        }
+                        if (settingsPreferences.state.value.showHiddenItems) {
+                            refreshHiddenMedia()
                         }
                         if (_duplicateState.value.hasScanned) _duplicateState.value = DuplicateScanState()
                     } catch (e: Exception) {

@@ -855,4 +855,111 @@
     <string name="library_edit_order">Reorder items</string>
     <string name="library_reset_order">Reset order</string>
     <string name="toast_press_back_again_to_exit">Press back again to exit</string>
+
+    <string name="tab_vault">Vault</string>
+    <string name="vault_unlock_title">Unlock Vault</string>
+    <string name="vault_unlock_subtitle">Authenticate to view your locked media</string>
+    <string name="vault_locked_title">Vault is locked</string>
+    <string name="action_unlock_folder">Unlock</string>
+    <string name="search_vault_placeholder">Search locked folder…</string>
+
+    <string name="settings_grid_layout_title">Photo grid layout</string>
+    <string name="settings_grid_layout_mosaic">Mosaic</string>
+    <string name="settings_grid_layout_square">Square grid</string>
+    <string name="layout_mosaic_mode">Mosaic layout</string>
+    <string name="settings_animate_gif_thumbs_title">Animate GIF thumbnails</string>
+    <string name="settings_animate_gif_thumbs_desc">Play GIF animations directly in the grid (uses more battery)</string>
+
+    <string name="filter_show_hidden_items">Show hidden items</string>
+    <string name="settings_show_hidden_items_title">Show hidden items</string>
+    <string name="settings_show_hidden_items_desc">Include dot-prefixed files and .nomedia folders in the gallery</string>
+    <string name="hidden_items_permission_title">All files access needed</string>
+    <string name="hidden_items_permission_desc">Android restricts hidden dot-files and .nomedia folders to apps with All Files Access. Grant access in system settings to view them.</string>
+
+    <string name="settings_global_album_search_title">Global search in Albums</string>
+    <string name="settings_global_album_search_desc">Show matching photos and videos from all albums when searching on the Albums tab</string>
+    <string name="search_albums_and_media_placeholder">Search %1$d albums &amp; media…</string>
+    <string name="global_search_media_header">Matching media (%1$d)</string>
+
+    <string name="albums_view_options_title">View options</string>
+    <string name="albums_view_type_label">View type</string>
+    <string name="albums_group_subfolders">Group direct subfolders</string>
+    <string name="albums_group_subfolders_desc">Combine child folders under their parent folder tile</string>
+    <string name="albums_hierarchy_depth_title">Auto-group by folder depth</string>
+    <string name="albums_hierarchy_depth_desc">Merge nested folders into their parent directory at the chosen level</string>
+    <string name="albums_hierarchy_depth_off">Off</string>
+    <string name="albums_hierarchy_depth_level">Level %1$d</string>
+    <string name="album_subfolders_count">%1$d folders</string>
+    <string name="album_group_count">%1$d albums</string>
+
+    <string name="action_reorder_albums">Reorder albums</string>
+    <string name="albums_drag_reorder_hint">Long-press and drag albums or drag the handle to reorder</string>
+    <string name="pin_album_desc">Keep this album at the top of the list</string>
+    <string name="unpin_album_desc">Return this album to its normal sorted position</string>
+
+    <string name="action_create_album_group">Create album group</string>
+    <string name="action_edit_group">Edit group</string>
+    <string name="action_rename_group">Rename group</string>
+    <string name="rename_group_desc">Change the display name of this album group</string>
+    <string name="action_ungroup_albums">Ungroup albums</string>
+    <string name="ungroup_albums_desc">Dissolve this group without deleting any albums or media</string>
+    <string name="action_add_to_group">Add to group</string>
+    <string name="add_to_group_desc">Organize this album inside a custom group</string>
+    <string name="action_remove_from_group">Remove from %1$s</string>
+    <string name="remove_from_group_desc">Move this album back to the main Albums screen</string>
+    <string name="album_group_name_hint">Group name</string>
+    <string name="album_group_select_albums">Select albums (%1$d selected)</string>
+    <string name="action_set_group_cover">Set group cover</string>
+    <string name="set_group_cover_desc">Choose a custom photo or video as this group\'s cover</string>
+    <string name="action_reset_group_cover">Reset to collage</string>
+    <string name="reset_group_cover_desc">Restore the automatic multi-album collage cover</string>
+    <string name="dialog_pick_group_cover_title">Choose group cover</string>
+
+    <string name="action_delete_album">Delete album</string>
+    <string name="delete_album_desc">Remove this album and all photos and videos inside it</string>
+    <string name="delete_album_dialog_title">Delete \"%1$s\"?</string>
+    <string name="delete_album_trash_desc">This will move all %1$d items in \"%2$s\" to Trash.</string>
+    <string name="delete_album_permanent_desc">This will permanently delete all %1$d items in \"%2$s\". This action cannot be undone.</string>
+
+    <string name="editor_perspective_vertical">Vertical</string>
+    <string name="editor_perspective_horizontal">Horizontal</string>
+
+    <string name="settings_image_rotate_button_title">Screen rotation button</string>
+    <string name="settings_image_rotate_button_desc">Show a quick rotate screen button in the photo viewer</string>
+
+    <string name="settings_nav_bar_style_title">Navigation bar style</string>
+    <string name="settings_nav_bar_docked">Docked</string>
+    <string name="settings_nav_bar_floating">Floating</string>
+    <string name="settings_nav_label_mode_title">Navigation tab labels</string>
+    <string name="settings_nav_label_always">Always</string>
+    <string name="settings_nav_label_selected">Selected</string>
+    <string name="settings_nav_label_hidden">Hidden</string>
+
+    <string name="settings_floating_selection_toolbar_title">Floating selection toolbar</string>
+    <string name="settings_floating_selection_toolbar_desc">Show multi-select actions in a customizable pill at the bottom</string>
+    <string name="settings_selection_pill_title">Selection toolbar actions</string>
+    <string name="settings_selection_pill_desc">Choose and reorder actions shown in the floating selection bar</string>
+    <string name="action_customize_toolbar">Customize toolbar</string>
+    <string name="dialog_customize_toolbar_title">Customize selection toolbar</string>
+    <string name="dialog_customize_toolbar_desc">Toggle and reorder actions in the bottom selection bar. Hidden actions stay in the overflow menu.</string>
+    <string name="action_reset_defaults">Reset</string>
+    <string name="selection_action_share">Share</string>
+    <string name="selection_action_move">Move to album</string>
+    <string name="selection_action_copy">Copy to album</string>
+    <string name="selection_action_favorite">Favorite</string>
+    <string name="selection_action_lock">Move to Vault</string>
+    <string name="selection_action_delete">Delete</string>
+    <string name="selection_action_delete_permanent">Delete permanently</string>
+    <string name="selection_action_select_all">Select all</string>
+
+    <string name="settings_section_nav_behavior">Navigation &amp; Behavior</string>
+    <string name="settings_section_privacy_security">Privacy &amp; Security</string>
+    <string name="settings_hub_appearance_desc">Theme, AMOLED black, Material You, accents</string>
+    <string name="settings_hub_layout_desc">Mosaic or square grid, corners, spacing, tile size</string>
+    <string name="settings_hub_badges_desc">Timeline headers, date formats, media badges</string>
+    <string name="settings_hub_viewer_desc">Header style, video playback, gestures, zoom</string>
+    <string name="settings_hub_nav_behavior_desc">Tabs, floating bar, selection toolbar, editor</string>
+    <string name="settings_hub_privacy_desc">App lock, Vault, delete mode, secure sharing</string>
+    <string name="settings_hub_memories_desc">Memories notifications and reminder schedule</string>
+    <string name="settings_hub_storage_desc">Rescan media, excluded folders, cache, reset</string>
 </resources>

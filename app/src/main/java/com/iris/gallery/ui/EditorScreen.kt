@@ -152,6 +152,12 @@ enum class PrivacySubMode {
     PIXELATE
 }
 
+enum class TransformSliderMode {
+    STRAIGHTEN,
+    VERTICAL,
+    HORIZONTAL
+}
+
 enum class AdjustKind(
     val defaultValue: Float,
     val valueRange: ClosedFloatingPointRange<Float>
@@ -244,6 +250,9 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
     var flipHorizontal by remember { mutableStateOf(false) }
     var flipVertical by remember { mutableStateOf(false) }
     var straightenAngle by remember { mutableFloatStateOf(0f) }
+    var perspectiveV by remember { mutableFloatStateOf(0f) }
+    var perspectiveH by remember { mutableFloatStateOf(0f) }
+    var transformSliderMode by remember { mutableStateOf(TransformSliderMode.STRAIGHTEN) }
     var isStraightening by remember { mutableStateOf(false) }
     var canvasZoom by remember { mutableFloatStateOf(1f) }
     var canUndo by remember { mutableStateOf(false) }
@@ -451,7 +460,7 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                             EditorCanvasView(it).also { view ->
                                 editorView = view
                                 view.onTextSelected = { overlay ->
-                                    selectedOverlay = overlay
+                                    selectedOverlay = overlay?.copy()
                                 }
                                 view.onTextTransformed = { overlay ->
                                     selectedOverlay = overlay.copy()
@@ -468,6 +477,8 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                         update = { view ->
                             view.setSource(transformedPreview)
                             view.straightenAngle = straightenAngle
+                            view.perspectiveV = perspectiveV
+                            view.perspectiveH = perspectiveH
                             view.isStraightening = isStraightening
                             view.tool = activeTool
                             view.brushRadius = when (activeTool) {
@@ -556,18 +567,26 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                                     flipH = flipHorizontal,
                                     flipV = flipVertical,
                                     straightenAngle = straightenAngle,
+                                    perspectiveV = perspectiveV,
+                                    perspectiveH = perspectiveH,
+                                    sliderMode = transformSliderMode,
+                                    onSliderModeChange = { transformSliderMode = it },
                                     cropPreset = cropPreset,
                                     onRotateLeft = { rotation = (rotation - 90 + 360) % 360 },
                                     onRotateRight = { rotation = (rotation + 90) % 360 },
                                     onToggleFlipH = { flipHorizontal = !flipHorizontal },
                                     onToggleFlipV = { flipVertical = !flipVertical },
                                     onStraightenChange = { straightenAngle = it },
+                                    onPerspectiveVChange = { perspectiveV = it },
+                                    onPerspectiveHChange = { perspectiveH = it },
                                     onStraightenActive = { isStraightening = it },
                                     onReset = {
                                         rotation = 0
                                         flipHorizontal = false
                                         flipVertical = false
                                         straightenAngle = 0f
+                                        perspectiveV = 0f
+                                        perspectiveH = 0f
                                     },
                                     onSelectCropAspect = { label, aspect ->
                                         cropPreset = label
@@ -618,14 +637,17 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                                     selectedOverlay = selectedOverlay,
                                     onAddOrUpdateText = { text, color, bg, size ->
                                         if (selectedOverlay != null) {
-                                             editorView?.updateSelectedText(text, color, bg, size)
-                                            selectedOverlay = editorView?.session?.textOverlays?.find { it.id == selectedOverlay?.id }
+                                            editorView?.updateSelectedText(text, color, bg, size)
+                                            selectedOverlay = editorView?.session?.textOverlays?.find { it.id == selectedOverlay?.id }?.copy()
                                         } else {
                                             val newOverlay = editorView?.addTextOverlay(text, color, bg, size)
-                                            selectedOverlay = newOverlay
+                                            selectedOverlay = newOverlay?.copy()
                                         }
                                     },
-                                    onTextRotated = { deg -> editorView?.setSelectedTextRotation(deg) },
+                                    onTextRotated = { deg ->
+                                        editorView?.setSelectedTextRotation(deg)
+                                        selectedOverlay = editorView?.session?.textOverlays?.find { it.id == selectedOverlay?.id }?.copy()
+                                    },
                                     onDeleteText = {
                                         editorView?.removeSelectedText()
                                         selectedOverlay = null
@@ -712,6 +734,8 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                             renderEditedBitmapToBytes(
                                 context, image, rotation, flipHorizontal, flipVertical,
                                 straightenAngle = straightenAngle,
+                                perspectiveH = perspectiveH,
+                                perspectiveV = perspectiveV,
                                 brightness = brightness, saturation = saturation, contrast = contrast, warmth = warmth,
                                 crop = crop,
                                 requestedWidth = if (isCustomResized) resizeWidth.toIntOrNull() else null,
@@ -768,6 +792,8 @@ fun EditorScreen(image: MediaImage, onClose: () -> Unit, onSaved: (saved: Boolea
                             saveEditedCopy(
                                 context, image, rotation, flipHorizontal, flipVertical,
                                 straightenAngle = straightenAngle,
+                                perspectiveH = perspectiveH,
+                                perspectiveV = perspectiveV,
                                 brightness = brightness, saturation = saturation, contrast = contrast, warmth = warmth,
                                 crop = crop,
                                 requestedWidth = if (isCustomResized) resizeWidth.toIntOrNull() else null,
@@ -931,17 +957,25 @@ private fun TransformControls(
     flipH: Boolean,
     flipV: Boolean,
     straightenAngle: Float,
+    perspectiveV: Float,
+    perspectiveH: Float,
+    sliderMode: TransformSliderMode,
+    onSliderModeChange: (TransformSliderMode) -> Unit,
     cropPreset: String,
     onRotateLeft: () -> Unit,
     onRotateRight: () -> Unit,
     onToggleFlipH: () -> Unit,
     onToggleFlipV: () -> Unit,
     onStraightenChange: (Float) -> Unit,
+    onPerspectiveVChange: (Float) -> Unit,
+    onPerspectiveHChange: (Float) -> Unit,
     onStraightenActive: (Boolean) -> Unit,
     onReset: () -> Unit,
     onSelectCropAspect: (String, Float?) -> Unit,
     onOpenResize: () -> Unit,
 ) {
+    val anyTransformModified = rotation != 0 || flipH || flipV ||
+        straightenAngle != 0f || perspectiveV != 0f || perspectiveH != 0f
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -999,7 +1033,7 @@ private fun TransformControls(
                 modifier = Modifier.size(20.dp)
             )
         }
-        if (rotation != 0 || flipH || flipV) {
+        if (anyTransformModified) {
             FilledTonalIconButton(
                 onClick = onReset,
                 modifier = Modifier.weight(1f).height(46.dp)
@@ -1013,6 +1047,21 @@ private fun TransformControls(
         }
     }
 
+    val activeValue = when (sliderMode) {
+        TransformSliderMode.STRAIGHTEN -> straightenAngle
+        TransformSliderMode.VERTICAL -> perspectiveV
+        TransformSliderMode.HORIZONTAL -> perspectiveH
+    }
+    val onActiveValueChange: (Float) -> Unit = when (sliderMode) {
+        TransformSliderMode.STRAIGHTEN -> onStraightenChange
+        TransformSliderMode.VERTICAL -> onPerspectiveVChange
+        TransformSliderMode.HORIZONTAL -> onPerspectiveHChange
+    }
+    val activeRange = when (sliderMode) {
+        TransformSliderMode.STRAIGHTEN -> -45f..45f
+        TransformSliderMode.VERTICAL, TransformSliderMode.HORIZONTAL -> -35f..35f
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1023,24 +1072,49 @@ private fun TransformControls(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    stringResource(R.string.editor_straighten),
-                    style = MaterialTheme.typography.titleSmall
+                FilterChip(
+                    selected = sliderMode == TransformSliderMode.STRAIGHTEN,
+                    onClick = { onSliderModeChange(TransformSliderMode.STRAIGHTEN) },
+                    label = {
+                        Text(
+                            if (straightenAngle != 0f) "${stringResource(R.string.editor_straighten)} ${straightenAngle.roundToInt()}°"
+                            else stringResource(R.string.editor_straighten),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 )
-                val angleDisplay = (straightenAngle * 10).roundToInt() / 10f
-                Text(
-                    text = "${if (angleDisplay > 0) "+" else ""}${angleDisplay}°",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
+                FilterChip(
+                    selected = sliderMode == TransformSliderMode.VERTICAL,
+                    onClick = { onSliderModeChange(TransformSliderMode.VERTICAL) },
+                    label = {
+                        Text(
+                            if (perspectiveV != 0f) "${stringResource(R.string.editor_perspective_vertical)} ${perspectiveV.roundToInt()}°"
+                            else stringResource(R.string.editor_perspective_vertical),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                )
+                FilterChip(
+                    selected = sliderMode == TransformSliderMode.HORIZONTAL,
+                    onClick = { onSliderModeChange(TransformSliderMode.HORIZONTAL) },
+                    label = {
+                        Text(
+                            if (perspectiveH != 0f) "${stringResource(R.string.editor_perspective_horizontal)} ${perspectiveH.roundToInt()}°"
+                            else stringResource(R.string.editor_perspective_horizontal),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 )
             }
-            if (straightenAngle != 0f) {
+            if (activeValue != 0f) {
                 TextButton(
-                    onClick = { onStraightenChange(0f) },
+                    onClick = { onActiveValueChange(0f) },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(stringResource(R.string.editor_reset_adjustments), style = MaterialTheme.typography.bodySmall)
@@ -1048,19 +1122,34 @@ private fun TransformControls(
             }
         }
 
-        Slider(
-            value = straightenAngle,
-            onValueChange = { angle ->
-                onStraightenActive(true)
-                val snapped = if (angle in -0.75f..0.75f) 0f else angle
-                onStraightenChange(snapped)
-            },
-            onValueChangeFinished = {
-                onStraightenActive(false)
-            },
-            valueRange = -45f..45f,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Slider(
+                value = activeValue,
+                onValueChange = { value ->
+                    onStraightenActive(true)
+                    val snapped = if (value in -0.75f..0.75f) 0f else value
+                    onActiveValueChange(snapped)
+                },
+                onValueChangeFinished = {
+                    onStraightenActive(false)
+                },
+                valueRange = activeRange,
+                modifier = Modifier.weight(1f)
+            )
+            val displayDeg = (activeValue * 10).roundToInt() / 10f
+            Text(
+                text = "${if (displayDeg > 0) "+" else ""}${displayDeg}°",
+                modifier = Modifier.width(48.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (activeValue != 0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.End
+            )
+        }
     }
 
     Row(
@@ -1948,7 +2037,7 @@ private fun TextControls(
                 onAddOrUpdateText(textInput, textColor, computedBgColor, it)
             }
         },
-        valueRange = 0.02f..0.12f
+        valueRange = 0.02f..0.24f
     )
 
     Row(
@@ -2223,6 +2312,8 @@ private suspend fun renderEditedBitmapToBytes(
     flipH: Boolean,
     flipV: Boolean,
     straightenAngle: Float = 0f,
+    perspectiveH: Float = 0f,
+    perspectiveV: Float = 0f,
     brightness: Float,
     saturation: Float,
     contrast: Float,
@@ -2291,21 +2382,26 @@ private suspend fun renderEditedBitmapToBytes(
         rawSource
     }
 
-    if (straightenAngle != 0f) {
-        val rad = Math.toRadians(kotlin.math.abs(straightenAngle).toDouble())
-        val r = source.width.toFloat() / source.height.toFloat().coerceAtLeast(1f)
-        val maxR = maxOf(r, 1f / r)
-        val scale = (Math.cos(rad) + Math.sin(rad) * maxR).toFloat()
-        val strMatrix = Matrix().apply {
-            postRotate(straightenAngle, source.width / 2f, source.height / 2f)
-            postScale(scale, scale, source.width / 2f, source.height / 2f)
+    if (straightenAngle != 0f || perspectiveH != 0f || perspectiveV != 0f) {
+        val geomMatrix = Matrix()
+        if (straightenAngle != 0f) {
+            val rad = Math.toRadians(kotlin.math.abs(straightenAngle).toDouble())
+            val r = source.width.toFloat() / source.height.toFloat().coerceAtLeast(1f)
+            val maxR = maxOf(r, 1f / r)
+            val scale = (Math.cos(rad) + Math.sin(rad) * maxR).toFloat()
+            geomMatrix.postRotate(straightenAngle, source.width / 2f, source.height / 2f)
+            geomMatrix.postScale(scale, scale, source.width / 2f, source.height / 2f)
         }
-        val straightened = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
-        Canvas(straightened).drawBitmap(source, strMatrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        if (perspectiveH != 0f || perspectiveV != 0f) {
+            val rect = RectF(0f, 0f, source.width.toFloat(), source.height.toFloat())
+            geomMatrix.postConcat(buildPerspectiveMatrix(rect, perspectiveH, perspectiveV))
+        }
+        val transformed = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        Canvas(transformed).drawBitmap(source, geomMatrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
         if (source !== rawSource) {
             source.recycle()
         }
-        source = straightened
+        source = transformed
     }
 
     val left = (crop.left * source.width).toInt().coerceIn(0, source.width - 1)
@@ -2397,6 +2493,8 @@ private suspend fun saveEditedCopy(
     flipH: Boolean,
     flipV: Boolean,
     straightenAngle: Float = 0f,
+    perspectiveH: Float = 0f,
+    perspectiveV: Float = 0f,
     brightness: Float,
     saturation: Float,
     contrast: Float,
@@ -2411,7 +2509,7 @@ private suspend fun saveEditedCopy(
 ) = withContext(Dispatchers.IO) {
     val bytes = renderEditedBitmapToBytes(
         context, image, rotation, flipH, flipV,
-        straightenAngle, brightness, saturation, contrast, warmth,
+        straightenAngle, perspectiveH, perspectiveV, brightness, saturation, contrast, warmth,
         crop, requestedWidth, requestedHeight, strokes, textOverlays,
         targetMaxBytes, format
     )
@@ -2653,8 +2751,9 @@ private fun renderTextOverlays(target: Bitmap, overlays: List<TextOverlay>, crop
         }
         val bounds = android.graphics.Rect()
         textPaint.getTextBounds(overlay.text, 0, overlay.text.length, bounds)
-        val paddingX = pxSize * 0.4f
-        val paddingY = pxSize * 0.25f
+        val actualPxSize = textPaint.textSize
+        val paddingX = actualPxSize * 0.4f
+        val paddingY = actualPxSize * 0.25f
         val bgRect = RectF(
             x - bounds.width() / 2f - paddingX,
             y - bounds.height() / 2f - paddingY,
@@ -2668,7 +2767,7 @@ private fun renderTextOverlays(target: Bitmap, overlays: List<TextOverlay>, crop
                 color = overlay.bgColor
                 style = Paint.Style.FILL
             }
-            canvas.drawRoundRect(bgRect, pxSize * 0.25f, pxSize * 0.25f, bgPaint)
+            canvas.drawRoundRect(bgRect, actualPxSize * 0.25f, actualPxSize * 0.25f, bgPaint)
         }
         val textY = y + bounds.height() / 2f - bounds.bottom
         canvas.drawText(overlay.text, x, textY, textPaint)

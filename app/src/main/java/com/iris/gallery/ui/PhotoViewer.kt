@@ -5,6 +5,7 @@ package com.iris.gallery.ui
 import android.app.Activity
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -67,6 +68,7 @@ import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.outlined.BlurOff
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.AutoFixHigh
@@ -116,7 +118,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -209,6 +213,7 @@ internal fun PhotoViewer(
     dismissedFilmstripTip: Boolean = false,
     onDismissFilmstripTip: () -> Unit = {},
     pinchToRotate: Boolean = true,
+    showImageRotateButton: Boolean = false,
     dismissedRotateTip: Boolean = false,
     onDismissRotateTip: () -> Unit = {},
     doubleTapZoomLevel: Float = 2.5f,
@@ -245,6 +250,7 @@ internal fun PhotoViewer(
     onCopyToAlbum: (List<MediaImage>, File, String, (AlbumOperationResult) -> Unit) -> Unit = { _, _, _, _ -> },
     getAlbumDir: (MediaAlbum) -> File = { File("") },
     createAlbumDir: (String) -> File = { File("") },
+    resolveTargetRect: ((Long) -> androidx.compose.ui.geometry.Rect?)? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) {
@@ -585,18 +591,38 @@ internal fun PhotoViewer(
     }
 
     var isDismissing by remember { mutableStateOf(false) }
+    var viewerWidthPx by remember { mutableFloatStateOf(context.resources.displayMetrics.widthPixels.toFloat()) }
     var viewerHeightPx by remember { mutableFloatStateOf(context.resources.displayMetrics.heightPixels.toFloat()) }
+    var viewerOriginInRoot by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val initialOrientation = remember { context.resources.configuration.orientation }
+    val dismissReturnProgress = remember { Animatable(0f) }
+    var dismissTargetRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var dismissStartY by remember { mutableFloatStateOf(0f) }
+    var dismissStartScale by remember { mutableFloatStateOf(1f) }
+    var dismissStartBgAlpha by remember { mutableFloatStateOf(1f) }
     val dismissThresholdPx = remember(context) { 120f * context.resources.displayMetrics.density }
     val flingThresholdPx = remember(context) { 30f * context.resources.displayMetrics.density }
 
     fun triggerAnimatedDismiss(velocity: Float = 0f) {
         if (isDismissing) return
+        val startY = dismissOffsetY.value
+        val startProgress = (startY / 350f).coerceIn(0f, 1f)
+        dismissStartY = startY
+        dismissStartScale = 1f - (startProgress * 0.12f)
+        dismissStartBgAlpha = (1f - startProgress).coerceIn(0f, 1f)
+        val sameOrientation = context.resources.configuration.orientation == initialOrientation
+        val target = if (sameOrientation) resolveTargetRect?.invoke(current.id) else null
+        dismissTargetRect = target
         isDismissing = true
         videoEngine.player.pause()
         coroutineScope.launch {
-            dismissOffsetY.animateTo(
-                targetValue = viewerHeightPx,
-                animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+            dismissReturnProgress.snapTo(0f)
+            dismissReturnProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = if (target != null) 240 else 200,
+                    easing = FastOutSlowInEasing
+                )
             )
             handleClose()
         }
@@ -630,14 +656,70 @@ internal fun PhotoViewer(
     }
 
     val dismissProgress = (dismissOffsetY.value / 350f).coerceIn(0f, 1f)
-    val contentScale = 1f - (dismissProgress * 0.12f)
-    val bgAlpha = (1f - dismissProgress).coerceIn(0f, 1f)
-    val controlsDismissAlpha = (1f - (dismissOffsetY.value / 100f)).coerceIn(0f, 1f)
+    val dragScale = 1f - (dismissProgress * 0.12f)
+    val dragBgAlpha = (1f - dismissProgress).coerceIn(0f, 1f)
+
+    val returnT = dismissReturnProgress.value
+    val targetRect = dismissTargetRect
+    val quarterTurn = ((current.orientation % 360) + 360) % 360 in setOf(90, 270)
+    val mediaW = (if (quarterTurn) current.height else current.width).toFloat()
+    val mediaH = (if (quarterTurn) current.width else current.height).toFloat()
+    val fitW: Float
+    val fitH: Float
+    if (mediaW > 0f && mediaH > 0f && viewerWidthPx > 0f && viewerHeightPx > 0f) {
+        val fitScale = minOf(viewerWidthPx / mediaW, viewerHeightPx / mediaH)
+        fitW = (mediaW * fitScale).coerceAtLeast(1f)
+        fitH = (mediaH * fitScale).coerceAtLeast(1f)
+    } else {
+        fitW = viewerWidthPx.coerceAtLeast(1f)
+        fitH = viewerHeightPx.coerceAtLeast(1f)
+    }
+
+    val effectiveTranslationX: Float
+    val effectiveTranslationY: Float
+    val effectiveScale: Float
+    val effectiveContentAlpha: Float
+    val bgAlpha: Float
+    val controlsDismissAlpha: Float
+
+    if (isDismissing) {
+        bgAlpha = (dismissStartBgAlpha * (1f - returnT)).coerceIn(0f, 1f)
+        controlsDismissAlpha = 0f
+        if (targetRect != null && targetRect.width > 1f && targetRect.height > 1f) {
+            val targetCenterX = targetRect.center.x - viewerOriginInRoot.x
+            val targetCenterY = targetRect.center.y - viewerOriginInRoot.y
+            val endTx = targetCenterX - (viewerWidthPx / 2f)
+            val endTy = targetCenterY - (viewerHeightPx / 2f)
+            val targetScale = maxOf(targetRect.width / fitW, targetRect.height / fitH).coerceIn(0.08f, 1f)
+            effectiveTranslationX = endTx * returnT
+            effectiveTranslationY = dismissStartY + (endTy - dismissStartY) * returnT
+            effectiveScale = dismissStartScale + (targetScale - dismissStartScale) * returnT
+            effectiveContentAlpha = if (returnT > 0.82f) ((1f - returnT) / 0.18f).coerceIn(0f, 1f) else 1f
+        } else {
+            effectiveTranslationX = 0f
+            effectiveTranslationY = dismissStartY + returnT * 120f
+            effectiveScale = dismissStartScale * (1f - 0.18f * returnT)
+            effectiveContentAlpha = (1f - returnT).coerceIn(0f, 1f)
+        }
+    } else {
+        effectiveTranslationX = 0f
+        effectiveTranslationY = dismissOffsetY.value
+        effectiveScale = dragScale
+        effectiveContentAlpha = 1f
+        bgAlpha = dragBgAlpha
+        controlsDismissAlpha = (1f - (dismissOffsetY.value / 100f)).coerceIn(0f, 1f)
+    }
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .onSizeChanged { if (it.height > 0) viewerHeightPx = it.height.toFloat() },
+            .onGloballyPositioned { coords ->
+                viewerOriginInRoot = coords.positionInRoot()
+            }
+            .onSizeChanged {
+                if (it.width > 0) viewerWidthPx = it.width.toFloat()
+                if (it.height > 0) viewerHeightPx = it.height.toFloat()
+            },
         color = Color.Black.copy(alpha = bgAlpha)
     ) {
       Box(Modifier.fillMaxSize()) {
@@ -645,9 +727,11 @@ internal fun PhotoViewer(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    translationY = dismissOffsetY.value
-                    scaleX = contentScale
-                    scaleY = contentScale
+                    translationX = effectiveTranslationX
+                    translationY = effectiveTranslationY
+                    scaleX = effectiveScale
+                    scaleY = effectiveScale
+                    alpha = effectiveContentAlpha
                 }
         ) {
           HorizontalPager(
@@ -663,6 +747,7 @@ internal fun PhotoViewer(
                     engine = videoEngine,
                     active = page == pagerState.currentPage,
                     controlsVisible = controlsVisible,
+                    isDismissing = isDismissing,
                     autoPlay = autoPlay,
                     loop = loop,
                     doubleTapToZoom = videoDoubleTapToZoom,
@@ -824,6 +909,18 @@ internal fun PhotoViewer(
                 if (secondaryHeaderText.isNotBlank()) {
                     Text(secondaryHeaderText, color = Color.White.copy(alpha = .75f),
                         style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (showImageRotateButton && !current.isVideo) {
+                IconButton(onClick = {
+                    val isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    activity?.requestedOrientation = if (isLandscape) {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    }
+                }) {
+                    Icon(Icons.Outlined.ScreenRotation, stringResource(R.string.action_rotate_screen), tint = Color.White)
                 }
             }
             IconButton(onClick = { showInfo = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.details_title), tint = Color.White) }

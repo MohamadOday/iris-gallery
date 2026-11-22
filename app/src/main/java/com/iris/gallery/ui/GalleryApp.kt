@@ -308,21 +308,24 @@ internal fun GalleryApp(
         }
     }
     var lockedAuthorized by remember { mutableStateOf(false) }
-    var lastBackgroundTimestamp by remember { mutableStateOf(0L) }
+    var isVaultAuthInProgress by remember { mutableStateOf(false) }
     var isAppUnlocked by remember {
         mutableStateOf(!settings.appLockEnabled || !settings.hasPin || isSessionAppUnlocked)
     }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentShowHiddenItems by androidx.compose.runtime.rememberUpdatedState(settings.showHiddenItems)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                lastBackgroundTimestamp = System.currentTimeMillis()
+                if (!isVaultAuthInProgress) {
+                    lockedAuthorized = false
+                }
             } else if (event == Lifecycle.Event.ON_RESUME) {
                 if (permitted) {
                     viewModel.checkForChanges()
-                }
-                if (lastBackgroundTimestamp > 0L && System.currentTimeMillis() - lastBackgroundTimestamp > 300_000L) {
-                    lockedAuthorized = false
+                    if (currentShowHiddenItems) {
+                        viewModel.refreshHiddenMedia()
+                    }
                 }
             }
         }
@@ -330,12 +333,14 @@ internal fun GalleryApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val unlockLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        isVaultAuthInProgress = false
         lockedAuthorized = it.resultCode == Activity.RESULT_OK
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val libraryState by viewModel.libraryState.collectAsStateWithLifecycle()
     val vaultMedia by viewModel.vaultMedia.collectAsStateWithLifecycle()
+    val hiddenMedia by viewModel.hiddenMedia.collectAsStateWithLifecycle()
     val vaultProgress by viewModel.vaultProgress.collectAsStateWithLifecycle()
     val duplicateState by viewModel.duplicateState.collectAsStateWithLifecycle()
 
@@ -515,6 +520,7 @@ internal fun GalleryApp(
         if (permitted) {
             viewModel.checkForChanges()
             viewModel.registerObserver()
+            viewModel.rescanNewFilesInBackground()
         }
     }
     LaunchedEffect(Unit) {
@@ -559,6 +565,7 @@ internal fun GalleryApp(
                 dismissedFilmstripTip = settings.dismissedFilmstripTip,
                 onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
                 pinchToRotate = settings.pinchToRotate,
+                showImageRotateButton = settings.showImageRotateButton,
                 dismissedRotateTip = settings.dismissedRotateTip,
                 onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
                 doubleTapZoomLevel = settings.doubleTapZoomLevel,
@@ -627,15 +634,29 @@ internal fun GalleryApp(
                     }
                 )
             } else {
-                val visibleMedia = remember(state.images, requestedType, libraryState.lockedMedia, libraryState.excludedFolders) {
+                val visibleMedia = remember(state.images, hiddenMedia, settings.showHiddenItems, requestedType, libraryState.lockedMedia, libraryState.excludedFolders) {
+                    val merged = if (settings.showHiddenItems && hiddenMedia.isNotEmpty()) {
+                        val existingPaths = state.images.mapTo(HashSet(state.images.size)) { it.path }
+                        val extras = hiddenMedia.filter { it.path.isNotBlank() && it.path !in existingPaths }
+                        if (extras.isEmpty()) state.images
+                        else (state.images + extras).sortedWith(
+                            compareByDescending<MediaImage> { it.dateTaken }
+                                .thenByDescending { it.dateModified }
+                                .thenByDescending { it.dateAdded }
+                                .thenByDescending { it.id }
+                        )
+                    } else {
+                        state.images
+                    }
                     val requested = when {
-                        requestedType?.startsWith("image/") == true -> state.images.filterNot { it.isVideo }
-                        requestedType?.startsWith("video/") == true -> state.images.filter { it.isVideo }
-                        else -> state.images
+                        requestedType?.startsWith("image/") == true -> merged.filterNot { it.isVideo }
+                        requestedType?.startsWith("video/") == true -> merged.filter { it.isVideo }
+                        else -> merged
                     }
                     requested.filterNot { it.id in libraryState.lockedMedia }
                         .filterNot { img -> isPathExcluded(img.path, libraryState.excludedFolders) }
                 }
+                var showHiddenAccessDialog by remember { mutableStateOf(false) }
                 val allLockedMedia = remember(vaultMedia, state.images, libraryState.lockedMedia) {
                     val galleryLocked = state.images.filter { it.id in libraryState.lockedMedia }
                     vaultMedia + galleryLocked
@@ -900,6 +921,9 @@ internal fun GalleryApp(
                         libraryOrder = libraryState.libraryOrder,
                         albumMediaSort = libraryState.albumMediaSort,
                         albumMediaSortOverrides = libraryState.albumMediaSortOverrides,
+                        albumGroups = libraryState.albumGroups,
+                        vaultAlbumSort = libraryState.vaultAlbumSort,
+                        vaultMediaSort = libraryState.vaultMediaSort,
                         lockedAuthorized = lockedAuthorized,
                         onLockVault = { lockedAuthorized = false },
                         loading = state.loading,
@@ -916,6 +940,23 @@ internal fun GalleryApp(
                         onSetLibraryOrder = viewModel::setLibraryOrder,
                         onSetAlbumMediaSort = viewModel::setAlbumMediaSort,
                         onSetAlbumMediaSortOverride = viewModel::setAlbumMediaSortOverride,
+                        onSetVaultAlbumSort = viewModel::setVaultAlbumSort,
+                        onSetVaultMediaSort = viewModel::setVaultMediaSort,
+                        onCreateAlbumGroup = { name, ids -> viewModel.createAlbumGroup(name, ids) },
+                        onRenameAlbumGroup = viewModel::renameAlbumGroup,
+                        onSetAlbumGroupCover = viewModel::setAlbumGroupCover,
+                        onDeleteAlbumGroup = viewModel::deleteAlbumGroup,
+                        onSetAlbumGroupMembers = viewModel::setAlbumGroupMembers,
+                        onAddAlbumToGroup = viewModel::addAlbumToGroup,
+                        onRemoveAlbumFromGroup = viewModel::removeAlbumFromGroup,
+                        onToggleShowHiddenItems = { show ->
+                            if (show && Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
+                                settingsPreferences.setShowHiddenItems(true)
+                                showHiddenAccessDialog = true
+                            } else {
+                                settingsPreferences.setShowHiddenItems(show)
+                            }
+                        },
                         excludedFolders = libraryState.excludedFolders,
                         onAddExcludedFolder = viewModel::addExcludedFolder,
                         onRemoveExcludedFolder = viewModel::removeExcludedFolder,
@@ -924,8 +965,65 @@ internal fun GalleryApp(
                                 lockedAuthorized = true
                             } else {
                                 val keyguard = context.getSystemService(KeyguardManager::class.java)
-                                val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Iris", "View your locked media")
-                                if (intent == null) lockedAuthorized = true else unlockLauncher.launch(intent)
+                                if (keyguard == null || !keyguard.isDeviceSecure) {
+                                    lockedAuthorized = true
+                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    val title = context.getString(R.string.vault_unlock_title)
+                                    val subtitle = context.getString(R.string.vault_unlock_subtitle)
+                                    val launchedBiometric = runCatching {
+                                        val builder = android.hardware.biometrics.BiometricPrompt.Builder(context)
+                                            .setTitle(title)
+                                            .setSubtitle(subtitle)
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                            builder.setAllowedAuthenticators(
+                                                android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                                                    android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                                                    android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                                            )
+                                        } else {
+                                            @Suppress("DEPRECATION")
+                                            builder.setDeviceCredentialAllowed(true)
+                                        }
+                                        val prompt = builder.build()
+                                        isVaultAuthInProgress = true
+                                        prompt.authenticate(
+                                            android.os.CancellationSignal(),
+                                            context.mainExecutor,
+                                            object : android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                                                override fun onAuthenticationSucceeded(result: android.hardware.biometrics.BiometricPrompt.AuthenticationResult?) {
+                                                    isVaultAuthInProgress = false
+                                                    lockedAuthorized = true
+                                                }
+                                                override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                                                    isVaultAuthInProgress = false
+                                                }
+                                            }
+                                        )
+                                        true
+                                    }.getOrDefault(false)
+                                    if (!launchedBiometric) {
+                                        @Suppress("DEPRECATION")
+                                        val intent = keyguard.createConfirmDeviceCredentialIntent(title, subtitle)
+                                        if (intent == null) {
+                                            lockedAuthorized = true
+                                        } else {
+                                            isVaultAuthInProgress = true
+                                            unlockLauncher.launch(intent)
+                                        }
+                                    }
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    val intent = keyguard.createConfirmDeviceCredentialIntent(
+                                        context.getString(R.string.vault_unlock_title),
+                                        context.getString(R.string.vault_unlock_subtitle)
+                                    )
+                                    if (intent == null) {
+                                        lockedAuthorized = true
+                                    } else {
+                                        isVaultAuthInProgress = true
+                                        unlockLauncher.launch(intent)
+                                    }
+                                }
                             }
                         },
                         onPick = onPick,
@@ -1288,7 +1386,7 @@ internal fun GalleryApp(
                         },
                         getAlbumDir = viewModel::getAlbumDirectory,
                         createAlbumDir = viewModel::createNewAlbumDirectory,
-                        onRefresh = { viewModel.refresh(showLoading = true) },
+                        onRefresh = { viewModel.refresh(showLoading = true, forceClearCache = true, rescanStorage = true) },
                         onRenameMedia = { media, newName, callback ->
                             viewModel.renameMedia(media, newName) { updated ->
                                 if (updated != null) {
@@ -1357,6 +1455,35 @@ internal fun GalleryApp(
                             }
                         },
                         confirmButton = { }
+                    )
+                }
+
+                if (showHiddenAccessDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showHiddenAccessDialog = false },
+                        title = { Text(stringResource(R.string.hidden_items_permission_title)) },
+                        text = { Text(stringResource(R.string.hidden_items_permission_desc)) },
+                        confirmButton = {
+                            Button(onClick = {
+                                showHiddenAccessDialog = false
+                                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                runCatching { context.startActivity(intent) }
+                                    .onFailure {
+                                        runCatching {
+                                            context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                        }
+                                    }
+                            }) {
+                                Text(stringResource(R.string.action_grant_access))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showHiddenAccessDialog = false }) {
+                                Text(stringResource(R.string.action_cancel))
+                            }
+                        }
                     )
                 }
 

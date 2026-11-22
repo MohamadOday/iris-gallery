@@ -1,8 +1,12 @@
 package com.iris.gallery.ui
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
+import java.util.Locale
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,26 +61,56 @@ import com.iris.gallery.data.SUPPORTED_LANGUAGES
 import com.iris.gallery.data.detectBestLanguage
 import com.iris.gallery.data.getSystemDefaultLocale
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 /**
- * Applies the selected language code across the app using modern Android LocaleManager / AppCompatDelegate.
+ * Wraps a base Context with the persisted locale on Android 12 and below (API < 33),
+ * where ComponentActivity does not apply AppCompatDelegate application locales.
  */
-fun setAppLanguage(context: Context, languageCode: String) {
+fun wrapContextWithLanguage(base: Context, languageCode: String): Context {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return base
+    val tag = languageCode.trim()
+    if (tag.isEmpty() || tag == "system") return base
+    val locale = Locale.forLanguageTag(tag)
+    Locale.setDefault(locale)
+    val config = Configuration(base.resources.configuration)
+    config.setLocale(locale)
+    config.setLocales(LocaleList(locale))
+    return base.createConfigurationContext(config)
+}
+
+/**
+ * Applies the selected language code across the app using LocaleManager (API 33+)
+ * or locale configuration wrapping + activity recreate (API 26-32).
+ */
+fun setAppLanguage(context: Context, languageCode: String, recreateIfNeeded: Boolean = true) {
     val tag = languageCode.trim()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         val localeManager = context.getSystemService(android.app.LocaleManager::class.java)
-        localeManager?.applicationLocales = if (tag.isEmpty() || tag == "system") {
+        val targetList = if (tag.isEmpty() || tag == "system") {
             LocaleList.getEmptyLocaleList()
         } else {
             LocaleList.forLanguageTags(tag)
         }
+        if (localeManager != null && localeManager.applicationLocales != targetList) {
+            localeManager.applicationLocales = targetList
+        }
     } else {
-        AppCompatDelegate.setApplicationLocales(
-            if (tag.isEmpty() || tag == "system") {
-                LocaleListCompat.getEmptyLocaleList()
-            } else {
-                LocaleListCompat.forLanguageTags(tag)
-            }
-        )
+        if (tag.isEmpty() || tag == "system") {
+            Locale.setDefault(getSystemDefaultLocale())
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+        } else {
+            val locale = Locale.forLanguageTag(tag)
+            Locale.setDefault(locale)
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+        }
+        if (recreateIfNeeded) {
+            context.findActivity()?.recreate()
+        }
     }
 }
 

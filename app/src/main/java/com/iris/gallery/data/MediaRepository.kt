@@ -317,6 +317,153 @@ class MediaRepository(private val context: Context) {
         scannedCount
     }
 
+    /**
+     * Discovers dot-prefixed hidden media files (e.g. `.image.jpg`) and media inside hidden
+     * directories or `.nomedia` folders, while strictly skipping system trash/pending/cache dirs.
+     */
+    suspend fun loadHiddenImages(): List<MediaImage> = withContext(Dispatchers.IO) {
+        val imageExtensions = setOf(
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg",
+            "cr2", "nef", "arw", "rw2", "orf", "pef", "raf"
+        )
+        val videoExtensions = setOf(
+            "mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts", "m4v", "wmv"
+        )
+        val allExtensions = imageExtensions + videoExtensions
+
+        val storageRoots = mutableListOf<File>()
+        runCatching {
+            val primary = android.os.Environment.getExternalStorageDirectory()
+            if (primary != null && primary.exists()) storageRoots.add(primary)
+        }
+        runCatching {
+            context.getExternalFilesDirs(null).forEach { dir ->
+                if (dir != null) {
+                    val path = dir.absolutePath
+                    val rootPath = path.substringBefore("/Android/data")
+                    if (rootPath.isNotBlank() && rootPath != path) {
+                        val rootFile = File(rootPath)
+                        if (rootFile.exists() && rootFile !in storageRoots) {
+                            storageRoots.add(rootFile)
+                        }
+                    }
+                }
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            runCatching {
+                val sm = context.getSystemService(Context.STORAGE_SERVICE) as? android.os.storage.StorageManager
+                sm?.storageVolumes?.forEach { vol ->
+                    val dir = vol.directory
+                    if (dir != null && dir.exists() && dir !in storageRoots) {
+                        storageRoots.add(dir)
+                    }
+                }
+            }
+        }
+
+        val appPrivatePrefix = context.filesDir.absolutePath
+        val excludedDirNames = setOf(
+            "android", "lost.dir", ".thumbnails", ".trash", ".trashes", ".recycle", ".recyclebin",
+            ".cache", ".face", ".estrongs", ".database_uuid"
+        )
+        val results = mutableListOf<MediaImage>()
+        val seenPaths = HashSet<String>()
+
+        fun scanDir(dir: File, inHiddenSubtree: Boolean, depth: Int) {
+            if (depth > 10) return
+            val children = runCatching { dir.listFiles() }.getOrNull() ?: return
+            val hasNoMedia = children.any { it.isFile && it.name.equals(".nomedia", ignoreCase = true) }
+            val effectiveHidden = inHiddenSubtree || hasNoMedia
+            for (child in children) {
+                val childName = child.name
+                val childPath = child.absolutePath
+                if (childPath.startsWith(appPrivatePrefix)) continue
+                if (child.isDirectory) {
+                    val lower = childName.lowercase(java.util.Locale.ROOT)
+                    if (lower in excludedDirNames) continue
+                    if (childPath.contains("/Android/data", ignoreCase = true) ||
+                        childPath.contains("/Android/obb", ignoreCase = true)
+                    ) continue
+                    val dirIsHidden = effectiveHidden || childName.startsWith(".")
+                    scanDir(child, dirIsHidden, depth + 1)
+                } else if (child.isFile) {
+                    val isDotFile = childName.startsWith(".")
+                    if (!effectiveHidden && !isDotFile) continue
+                    if (childName.equals(".nomedia", ignoreCase = true)) continue
+                    if (childName.startsWith(".trashed-", ignoreCase = true) ||
+                        childName.startsWith(".pending-", ignoreCase = true) ||
+                        childName.endsWith(".iris_tmp", ignoreCase = true)
+                    ) continue
+                    val ext = child.extension.lowercase(java.util.Locale.ROOT)
+                    if (ext !in allExtensions) continue
+                    val sizeBytes = child.length()
+                    if (sizeBytes <= 0L) continue
+                    if (!seenPaths.add(childPath)) continue
+
+                    val isVideo = ext in videoExtensions
+                    val mimeType = android.webkit.MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(ext)
+                        ?: if (isVideo) "video/mp4" else "image/jpeg"
+                    val lastMod = child.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
+                    val parentFile = child.parentFile
+                    val parentPath = parentFile?.absolutePath.orEmpty()
+                    val bucketName = parentFile?.name?.ifBlank { "Hidden" } ?: "Hidden"
+                    val bucketId = resolveBucketId(0L, parentPath)
+
+                    var width = 0
+                    var height = 0
+                    if (!isVideo && ext != "svg") {
+                        runCatching {
+                            val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            android.graphics.BitmapFactory.decodeFile(childPath, opts)
+                            if (opts.outWidth > 0 && opts.outHeight > 0) {
+                                width = opts.outWidth
+                                height = opts.outHeight
+                            }
+                        }
+                    }
+
+                    val stableHash = childPath.hashCode().toLong() and 0x7FFFFFFFL
+                    val syntheticId = -2_000_000_000_000L - stableHash
+
+                    results.add(
+                        MediaImage(
+                            id = syntheticId,
+                            uri = android.net.Uri.fromFile(child),
+                            name = childName,
+                            dateTaken = lastMod,
+                            width = width,
+                            height = height,
+                            path = childPath,
+                            bucketId = bucketId,
+                            bucketName = bucketName,
+                            isVideo = isVideo,
+                            durationMs = 0L,
+                            mimeType = mimeType,
+                            sizeBytes = sizeBytes,
+                            orientation = 0,
+                            title = "",
+                            description = "",
+                            dateModified = lastMod,
+                            dateAdded = lastMod,
+                        )
+                    )
+                }
+            }
+        }
+
+        for (root in storageRoots) {
+            scanDir(root, inHiddenSubtree = false, depth = 0)
+        }
+
+        results.sortedWith(
+            compareByDescending<MediaImage> { it.dateTaken }
+                .thenByDescending { it.dateModified }
+                .thenByDescending { it.id }
+        )
+    }
+
     suspend fun loadImages(trashed: Boolean = false, ids: Collection<Long>? = null): List<MediaImage> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         recentMovedOrDeletedIds.entries.removeIf { now - it.value > TOMBSTONE_TTL_MS }

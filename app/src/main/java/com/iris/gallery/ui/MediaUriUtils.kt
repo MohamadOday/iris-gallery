@@ -95,12 +95,14 @@ internal fun canonicalMediaUri(item: MediaImage): Uri {
 }
 
 internal fun getShareUri(context: android.content.Context, item: MediaImage): Uri {
-    return if (item.path.startsWith(context.filesDir.absolutePath)) {
-        androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            java.io.File(item.path)
-        )
+    return if (item.path.startsWith(context.filesDir.absolutePath) || item.uri.scheme == "file") {
+        runCatching {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(item.path)
+            )
+        }.getOrElse { item.uri }
     } else {
         item.uri
     }

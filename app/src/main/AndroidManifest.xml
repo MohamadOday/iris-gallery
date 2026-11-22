@@ -47,6 +47,14 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="image/avif" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="image/avif-sequence" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
         </intent>
         <intent>
@@ -110,10 +118,41 @@
                 <action android:name="com.android.camera.action.REVIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="image/avif" />
+                <data android:mimeType="image/avif-sequence" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="video/*" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.avif" />
+                <data android:pathPattern=".*\\..*\\.avif" />
+                <data android:pathPattern=".*\\..*\\..*\\.avif" />
+                <data android:pathPattern=".*\\.AVIF" />
+                <data android:pathPattern=".*\\.avifs" />
+                <data android:pathPattern=".*\\..*\\.avifs" />
+                <data android:pathPattern=".*\\.AVIFS" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.avif" />
+                <data android:pathPattern=".*\\..*\\.avif" />
+                <data android:pathPattern=".*\\..*\\..*\\.avif" />
+                <data android:pathPattern=".*\\.AVIF" />
+                <data android:pathPattern=".*\\.avifs" />
+                <data android:pathPattern=".*\\..*\\.avifs" />
+                <data android:pathPattern=".*\\.AVIFS" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.EDIT" />

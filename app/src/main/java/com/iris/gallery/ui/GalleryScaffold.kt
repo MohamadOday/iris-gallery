@@ -18,6 +18,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +89,8 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.automirrored.outlined.ViewList
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Map
@@ -185,7 +190,16 @@ import com.iris.gallery.data.StartupTab
 import com.iris.gallery.data.ThemeMode
 import com.iris.gallery.ui.SettingsScreen
 import com.iris.gallery.ui.AboutScreen
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import com.iris.gallery.data.NavBarStyle
+import com.iris.gallery.data.NavLabelMode
+import com.iris.gallery.data.ALL_SELECTION_PILL_ACTIONS
+import com.iris.gallery.data.DEFAULT_SELECTION_PILL_ACTIONS
 import androidx.compose.material.icons.filled.Check
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -207,12 +221,33 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 import com.iris.gallery.data.AlbumAction
+import com.iris.gallery.data.AlbumGroup
 import com.iris.gallery.data.AlbumOperationResult
 import com.iris.gallery.data.AlbumPickerSort
 import com.iris.gallery.data.AlbumSort
+import com.iris.gallery.data.AlbumsViewMode
+import com.iris.gallery.data.PhotoGridLayout
 import com.iris.gallery.ui.AlbumPickerSheet
 import com.iris.gallery.R
 import java.io.File
+
+internal fun filterMediaList(list: List<MediaImage>, query: String): List<MediaImage> {
+    if (query.isBlank()) return list
+    val q = query.trim()
+    val qLower = q.lowercase()
+    return list.filter { item ->
+        item.name.contains(q, ignoreCase = true) ||
+            item.title.contains(q, ignoreCase = true) ||
+            item.bucketName.contains(q, ignoreCase = true) ||
+            item.path.contains(q, ignoreCase = true) ||
+            ((qLower == "video" || qLower == "videos" || qLower == ".mp4" || qLower == ".mkv" || qLower == ".mov" || qLower == ".webm" || qLower == ".3gp") && item.isVideo) ||
+            ((qLower == "photo" || qLower == "photos" || qLower == "image" || qLower == "images" || qLower == ".jpg" || qLower == ".jpeg" || qLower == ".png" || qLower == ".webp" || qLower == ".heic") && !item.isVideo) ||
+            ((qLower == "gif" || qLower == "gifs" || qLower == ".gif") && item.isGif) ||
+            ((qLower == "raw" || qLower == ".dng" || qLower == ".cr2" || qLower == ".nef" || qLower == ".arw") && item.isRaw) ||
+            ((qLower == "motion" || qLower == "live") && item.isMotionPhoto) ||
+            ((qLower == "pano" || qLower == "panorama") && item.isPanorama)
+    }
+}
 
 private enum class MediaFormatFilter(val label: String) {
     ALL("All"),
@@ -301,6 +336,7 @@ private enum class GalleryTab(
     ALBUMS(1, R.string.tab_albums, Icons.Outlined.PhotoAlbum),
     FAVORITES(2, R.string.tab_favorites, Icons.Outlined.FavoriteBorder),
     LIBRARY(3, R.string.tab_library, Icons.Outlined.Dashboard),
+    VAULT(4, R.string.tab_vault, Icons.Outlined.Lock),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -321,6 +357,9 @@ internal fun GalleryScaffold(
     libraryOrder: List<String> = com.iris.gallery.data.DEFAULT_LIBRARY_ORDER,
     albumMediaSort: com.iris.gallery.data.MediaSort = com.iris.gallery.data.MediaSort.DATE_DESC,
     albumMediaSortOverrides: Map<Long, com.iris.gallery.data.MediaSort> = emptyMap(),
+    albumGroups: List<AlbumGroup> = emptyList(),
+    vaultAlbumSort: AlbumSort = AlbumSort.NEWEST,
+    vaultMediaSort: MediaSort = MediaSort.DATE_DESC,
     lockedAuthorized: Boolean,
     onLockVault: () -> Unit = {},
     loading: Boolean,
@@ -337,6 +376,16 @@ internal fun GalleryScaffold(
     onSetLibraryOrder: (List<String>) -> Unit = {},
     onSetAlbumMediaSort: (com.iris.gallery.data.MediaSort) -> Unit = {},
     onSetAlbumMediaSortOverride: (Long, com.iris.gallery.data.MediaSort?) -> Unit = { _, _ -> },
+    onSetVaultAlbumSort: (AlbumSort) -> Unit = {},
+    onSetVaultMediaSort: (MediaSort) -> Unit = {},
+    onCreateAlbumGroup: (String, List<Long>) -> Unit = { _, _ -> },
+    onRenameAlbumGroup: (String, String) -> Unit = { _, _ -> },
+    onSetAlbumGroupCover: (String, Long?) -> Unit = { _, _ -> },
+    onDeleteAlbumGroup: (String) -> Unit = {},
+    onSetAlbumGroupMembers: (String, List<Long>) -> Unit = { _, _ -> },
+    onAddAlbumToGroup: (String, Long) -> Unit = { _, _ -> },
+    onRemoveAlbumFromGroup: (String, Long) -> Unit = { _, _ -> },
+    onToggleShowHiddenItems: (Boolean) -> Unit = {},
     onRequestUnlock: () -> Unit,
     onPick: ((MediaImage) -> Unit)?,
     onTrash: (List<MediaImage>, onConfirmed: (() -> Unit)?) -> Unit,
@@ -365,12 +414,13 @@ internal fun GalleryScaffold(
     onInvalidMedia: ((MediaImage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val visibleTabs = remember(settings.showMediaTab, settings.showAlbumsTab, settings.showFavoritesTab, settings.showLibraryTab) {
+    val visibleTabs = remember(settings.showMediaTab, settings.showAlbumsTab, settings.showFavoritesTab, settings.showLibraryTab, settings.showVaultTab) {
         val list = mutableListOf<GalleryTab>()
         if (settings.showMediaTab) list.add(GalleryTab.MEDIA)
         if (settings.showAlbumsTab) list.add(GalleryTab.ALBUMS)
         if (settings.showFavoritesTab) list.add(GalleryTab.FAVORITES)
         if (settings.showLibraryTab) list.add(GalleryTab.LIBRARY)
+        if (settings.showVaultTab) list.add(GalleryTab.VAULT)
         if (list.isEmpty()) listOf(GalleryTab.MEDIA) else list
     }
     val initialTargetTab = if (initialMemories) {
@@ -381,6 +431,7 @@ internal fun GalleryScaffold(
             StartupTab.ALBUMS -> GalleryTab.ALBUMS
             StartupTab.FAVORITES -> GalleryTab.FAVORITES
             StartupTab.LIBRARY -> GalleryTab.LIBRARY
+            StartupTab.VAULT -> if (settings.showVaultTab) GalleryTab.VAULT else GalleryTab.MEDIA
         }
     }
     val initialPageIndex = visibleTabs.indexOf(initialTargetTab).let { if (it >= 0) it else 0 }
@@ -404,21 +455,46 @@ internal fun GalleryScaffold(
     var externalMedia by remember { mutableStateOf<MediaImage?>(null) }
     var viewerImages by remember { mutableStateOf<List<MediaImage>?>(null) }
     var selectedAlbumId by remember { mutableStateOf<Long?>(null) }
+    var selectedAlbumGroupId by remember { mutableStateOf<String?>(null) }
+    var selectedFolderClusterPath by remember { mutableStateOf<String?>(null) }
+    var showAlbumsViewOptionsDialog by remember { mutableStateOf(false) }
+    var showCreateAlbumGroupDialog by remember { mutableStateOf(false) }
+    var showEditGroupMembersDialog by remember { mutableStateOf(false) }
+    var showGroupCoverPickerSheet by remember { mutableStateOf(false) }
+    var pendingDeleteAlbum by remember { mutableStateOf<MediaAlbum?>(null) }
     var selectedLockedAlbum by remember { mutableStateOf<String?>(null) }
+    var vaultTab by remember { mutableIntStateOf(0) }
+    var vaultSearchQuery by remember { mutableStateOf("") }
+    var isVaultSearching by remember { mutableStateOf(false) }
+    val vaultSearchFocus = remember { FocusRequester() }
+    var vaultSortMenuExpanded by remember { mutableStateOf(false) }
     var librarySection by remember { mutableStateOf<String?>(if (initialMemories) "memories" else null) }
     var editorImage by remember { mutableStateOf<MediaImage?>(null) }
     var isEditingAlbumOrder by remember { mutableStateOf(false) }
     var isEditingLibraryOrder by remember { mutableStateOf(false) }
+    val boundsResolvers = remember { mutableMapOf<String, (Long) -> androidx.compose.ui.geometry.Rect?>() }
+    var activeViewerSourceKey by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(destination, librarySection) {
-        if (destination == 3 && librarySection == "locked") {
+    val isVaultActive = destination == 4 || (destination == 3 && librarySection == "locked")
+
+    LaunchedEffect(isVaultActive) {
+        if (isVaultActive) {
             onEnterVault()
             if (!lockedAuthorized) {
                 onRequestUnlock()
             }
         } else {
             onLockVault()
+            selectedLockedAlbum = null
+            if (isVaultSearching) {
+                isVaultSearching = false
+                vaultSearchQuery = ""
+            }
+            vaultSortMenuExpanded = false
         }
+    }
+
+    LaunchedEffect(destination, librarySection, selectedAlbumId) {
         if (destination != 3 || librarySection != null) {
             isEditingLibraryOrder = false
         }
@@ -535,23 +611,31 @@ internal fun GalleryScaffold(
         settingsPreferences.setAlbumGridSize(newSize.value)
     }
     val favoriteImages = remember(images, favorites) { images.filter { it.id in favorites } }
-    // Keep only the album identity as state. Its contents are derived atomically
-    // from the current library, so deletion/locking cannot expose a stale list.
-    val selectedAlbum = remember(images, selectedAlbumId, albumCovers) {
-        selectedAlbumId?.let { albumId ->
-            val albumImages = images.filter { it.bucketId == albumId }
-            albumImages.firstOrNull()?.let { first ->
-                val samplePath = albumImages.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
-                val isSd = samplePath.isNotBlank() && !samplePath.startsWith("/storage/emulated/0") && !samplePath.startsWith("/data/")
-                MediaAlbum(
-                    id = albumId,
-                    name = first.bucketName,
-                    cover = albumImages.firstOrNull { it.id == albumCovers[albumId] } ?: first,
-                    images = albumImages,
-                    isSdCard = isSd,
-                    storageLabel = if (isSd) "SD Card" else ""
-                )
-            }
+    val allHierarchyAlbums = remember(images, albumCovers, settings.albumHierarchyDepth) {
+        buildMediaAlbums(images, albumCovers, settings.albumHierarchyDepth)
+    }
+    val selectedAlbum = remember(allHierarchyAlbums, selectedAlbumId) {
+        selectedAlbumId?.let { albumId -> allHierarchyAlbums.firstOrNull { it.id == albumId } }
+    }
+    val activeAlbumGroup = remember(albumGroups, selectedAlbumGroupId) {
+        selectedAlbumGroupId?.let { id -> albumGroups.firstOrNull { it.id == id } }
+    }
+    val activeFolderCluster = remember(allHierarchyAlbums, pinnedAlbums, selectedFolderClusterPath) {
+        selectedFolderClusterPath?.let { clusterId ->
+            groupAlbumsIntoSubfolderClusters(allHierarchyAlbums, pinnedAlbums)
+                .filterIsInstance<AlbumDisplayItem.SubfolderGroup>()
+                .firstOrNull { it.cluster.id == clusterId }
+                ?.cluster
+        }
+    }
+    LaunchedEffect(activeAlbumGroup, selectedAlbumGroupId) {
+        if (selectedAlbumGroupId != null && activeAlbumGroup == null) {
+            selectedAlbumGroupId = null
+        }
+    }
+    LaunchedEffect(activeFolderCluster, selectedFolderClusterPath) {
+        if (selectedFolderClusterPath != null && activeFolderCluster == null) {
+            selectedFolderClusterPath = null
         }
     }
     var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
@@ -563,8 +647,18 @@ internal fun GalleryScaffold(
     val fileSearchFocus = remember { FocusRequester() }
     val albumSearchFocus = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val albumCount = remember(images) { images.mapTo(HashSet(images.size)) { it.bucketId }.size }
+    val albumCount = remember(allHierarchyAlbums) { allHierarchyAlbums.size }
     val isAlbumsRoot = destination == 1 && selectedAlbumId == null
+
+    LaunchedEffect(isVaultSearching) {
+        if (isVaultSearching) {
+            vaultSortMenuExpanded = false
+            withFrameNanos { }
+            kotlinx.coroutines.delay(80)
+            runCatching { vaultSearchFocus.requestFocus() }
+            keyboardController?.show()
+        }
+    }
 
     LaunchedEffect(isFileSearching) {
         if (isFileSearching) {
@@ -602,24 +696,6 @@ internal fun GalleryScaffold(
         }
     }
 
-    fun filterMediaList(list: List<MediaImage>, query: String): List<MediaImage> {
-        if (query.isBlank()) return list
-        val q = query.trim()
-        val qLower = q.lowercase()
-        return list.filter { item ->
-            item.name.contains(q, ignoreCase = true) ||
-            item.title.contains(q, ignoreCase = true) ||
-            item.bucketName.contains(q, ignoreCase = true) ||
-            item.path.contains(q, ignoreCase = true) ||
-            ((qLower == "video" || qLower == "videos" || qLower == ".mp4" || qLower == ".mkv" || qLower == ".mov" || qLower == ".webm" || qLower == ".3gp") && item.isVideo) ||
-            ((qLower == "photo" || qLower == "photos" || qLower == "image" || qLower == "images" || qLower == ".jpg" || qLower == ".jpeg" || qLower == ".png" || qLower == ".webp" || qLower == ".heic") && !item.isVideo) ||
-            ((qLower == "gif" || qLower == "gifs" || qLower == ".gif") && item.isGif) ||
-            ((qLower == "raw" || qLower == ".dng" || qLower == ".cr2" || qLower == ".nef" || qLower == ".arw") && item.isRaw) ||
-            ((qLower == "motion" || qLower == "live") && item.isMotionPhoto) ||
-            ((qLower == "pano" || qLower == "panorama") && item.isPanorama)
-        }
-    }
-
     val displayedFavoritePhotos = remember(favoriteImages, fileSearchQuery) { filterMediaList(favoriteImages, fileSearchQuery) }
     val displayedMedia = remember(images, fileSearchQuery) { filterMediaList(images, fileSearchQuery) }
     val displayedPhotos = remember(images, fileSearchQuery) {
@@ -652,14 +728,22 @@ internal fun GalleryScaffold(
             }
         } ?: emptyList()
     }
+    val activeVaultMedia = remember(lockedMedia, selectedLockedAlbum, vaultSearchQuery, vaultMediaSort) {
+        val scoped = if (selectedLockedAlbum != null) {
+            lockedMedia.filter { it.bucketName.ifBlank { "Locked" } == selectedLockedAlbum }
+        } else {
+            lockedMedia
+        }
+        filterMediaList(sortVaultMediaList(scoped, vaultMediaSort), vaultSearchQuery)
+    }
     val activeMedia = when {
         destination == 3 && librarySection == "trash" -> trashed
-        destination == 3 && librarySection == "locked" -> lockedMedia
+        isVaultActive -> activeVaultMedia
         destination == 1 && selectedAlbum != null -> displayedAlbumPhotos
         destination == 2 -> displayedFavoritePhotos
         else -> displayedItems
     }
-    val isLockedActive = destination == 3 && librarySection == "locked"
+    val isLockedActive = isVaultActive
     DisposableEffect(isLockedActive) {
         val window = (context as? android.app.Activity)?.window
         if (isLockedActive) {
@@ -774,9 +858,16 @@ internal fun GalleryScaffold(
                 fileSearchQuery = ""
             }
             if (current == index) {
-                if (targetTab == GalleryTab.ALBUMS) selectedAlbumId = null
+                if (targetTab == GalleryTab.ALBUMS) {
+                    selectedAlbumId = null
+                    selectedAlbumGroupId = null
+                    selectedFolderClusterPath = null
+                }
                 if (targetTab == GalleryTab.LIBRARY) {
                     librarySection = null
+                    selectedLockedAlbum = null
+                }
+                if (targetTab == GalleryTab.VAULT) {
                     selectedLockedAlbum = null
                 }
             } else if (kotlin.math.abs(current - index) > 1) {
@@ -787,7 +878,69 @@ internal fun GalleryScaffold(
         }
     }
 
-    val showFloatingBar = isLandscape && selectedIds.isEmpty() && selectedId == null && editorImage == null && activeOverlayScreen == null && externalMedia == null
+    var showSelectionPillCustomizer by remember { mutableStateOf(false) }
+    val useFloatingNavBar = isLandscape || settings.navBarStyle == NavBarStyle.FLOATING
+    val showFloatingBar = useFloatingNavBar && selectedIds.isEmpty() && selectedId == null && editorImage == null && activeOverlayScreen == null && externalMedia == null
+    val showSelectionPill = settings.useFloatingSelectionToolbar && selectedIds.isNotEmpty() && selectedId == null && editorImage == null && activeOverlayScreen == null && externalMedia == null
+
+    val isTrashSelection = destination == 3 && librarySection == "trash"
+    val allSelectedAreFavorites = selectedIds.isNotEmpty() && selectedIds.all { it in favorites }
+    val executeSelectionAction: (String) -> Unit = { actionKey ->
+        when (actionKey) {
+            "share" -> shareSelection()
+            "move" -> {
+                val selected = activeMedia.filter { it.id in selectedIds }
+                if (selected.isNotEmpty()) {
+                    pendingAlbumMedia = selected
+                    albumPickerAction = AlbumAction.MOVE
+                }
+            }
+            "copy" -> {
+                val selected = activeMedia.filter { it.id in selectedIds }
+                if (selected.isNotEmpty()) {
+                    pendingAlbumMedia = selected
+                    albumPickerAction = AlbumAction.COPY
+                }
+            }
+            "favorite" -> {
+                val makeFavorite = !allSelectedAreFavorites
+                selectedIds.forEach { id -> if ((id in favorites) != makeFavorite) onToggleFavorite(id) }
+                clearSelection()
+            }
+            "lock" -> {
+                val selected = activeMedia.filter { it.id in selectedIds }
+                if (selected.isNotEmpty()) {
+                    clearSelection()
+                    onLockMedia(selected, null)
+                }
+            }
+            "delete" -> {
+                val selected = activeMedia.filter { it.id in selectedIds }
+                if (selected.isNotEmpty()) {
+                    if (isTrashSelection || isVaultActive) {
+                        pendingDeleteItems = selected
+                    } else if (settings.deleteMode == DeleteMode.ALWAYS_ASK || settings.confirmDelete) {
+                        pendingDeleteItems = selected
+                    } else if (settings.deleteMode == DeleteMode.PERMANENT) {
+                        clearSelection()
+                        handleDeletePermanently(selected)
+                    } else {
+                        clearSelection()
+                        handleTrash(selected)
+                    }
+                }
+            }
+            "delete_permanent" -> {
+                val selected = activeMedia.filter { it.id in selectedIds }
+                if (selected.isNotEmpty()) {
+                    pendingPermanentDeleteItems = selected
+                }
+            }
+            "select_all" -> {
+                selectedIds = activeMedia.mapTo(mutableSetOf()) { it.id }
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -796,7 +949,41 @@ internal fun GalleryScaffold(
             val canSearchOnScreen = destination == 0 || destination == 2 || (destination == 1 && selectedAlbum != null)
             TopAppBar(
                 title = {
-                    if (isAlbumSearching && isAlbumsRoot) {
+                    if (isVaultSearching && isVaultActive && lockedAuthorized) {
+                        OutlinedTextField(
+                            value = vaultSearchQuery,
+                            onValueChange = { vaultSearchQuery = it },
+                            modifier = Modifier.fillMaxWidth().focusRequester(vaultSearchFocus),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.search_vault_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            trailingIcon = {
+                                if (vaultSearchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { vaultSearchQuery = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.clear_search))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    } else if (isAlbumSearching && isAlbumsRoot) {
                         OutlinedTextField(
                             value = albumSearchQuery,
                             onValueChange = { albumSearchQuery = it },
@@ -806,7 +993,11 @@ internal fun GalleryScaffold(
                             ),
                             placeholder = {
                                 Text(
-                                    text = stringResource(R.string.search_albums_placeholder, albumCount),
+                                    text = stringResource(
+                                        if (settings.globalAlbumSearch) R.string.search_albums_and_media_placeholder
+                                        else R.string.search_albums_placeholder,
+                                        albumCount
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
                                     softWrap = false,
@@ -878,8 +1069,10 @@ internal fun GalleryScaffold(
                         val count = if (selectedIds.isNotEmpty()) stringResource(R.string.selected_count, selectedIds.size)
                             else when {
                                 destination == 1 && selectedAlbum != null -> selectedAlbum!!.name
+                                destination == 1 && activeAlbumGroup != null -> activeAlbumGroup.name
+                                destination == 1 && activeFolderCluster != null -> activeFolderCluster.name
                                 destination == 3 && librarySection == "trash" -> stringResource(R.string.section_trash)
-                                destination == 3 && librarySection == "locked" -> if (selectedLockedAlbum != null) selectedLockedAlbum!! else stringResource(R.string.section_locked)
+                                isVaultActive -> if (selectedLockedAlbum != null) selectedLockedAlbum!! else stringResource(R.string.section_locked)
                                 destination == 3 && librarySection == "duplicates" -> stringResource(R.string.section_duplicates)
                                 destination == 3 && librarySection == "memories" -> stringResource(R.string.section_memories)
                                 destination == 3 && librarySection == "formats" -> stringResource(R.string.library_formats_title)
@@ -901,7 +1094,15 @@ internal fun GalleryScaffold(
                     }
                 },
                 navigationIcon = {
-                    if (isAlbumSearching && isAlbumsRoot) {
+                    if (isVaultSearching && isVaultActive) {
+                        IconButton(onClick = {
+                            keyboardController?.hide()
+                            isVaultSearching = false
+                            vaultSearchQuery = ""
+                        }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.clear_search))
+                        }
+                    } else if (isAlbumSearching && isAlbumsRoot) {
                         IconButton(onClick = {
                             keyboardController?.hide()
                             isAlbumSearching = false
@@ -920,7 +1121,12 @@ internal fun GalleryScaffold(
                             selectedAlbumId = null
                             if (isFileSearching) { isFileSearching = false; fileSearchQuery = "" }
                         }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, albumsTabLabel) }
-                    } else if (destination == 3 && librarySection == "locked" && selectedLockedAlbum != null) {
+                    } else if (destination == 1 && (activeAlbumGroup != null || activeFolderCluster != null)) {
+                        IconButton(onClick = {
+                            selectedAlbumGroupId = null
+                            selectedFolderClusterPath = null
+                        }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, albumsTabLabel) }
+                    } else if (isVaultActive && selectedLockedAlbum != null) {
                         IconButton(onClick = { selectedLockedAlbum = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.section_locked)) }
                     } else if (destination == 3 && librarySection != null) {
                         IconButton(onClick = {
@@ -932,118 +1138,119 @@ internal fun GalleryScaffold(
                 },
                 actions = {
                     if (selectedIds.isNotEmpty()) {
-                        if (destination == 3 && librarySection == "trash") {
-                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; handleRestore(selected) { clearSelection() } }) {
-                                Icon(Icons.Outlined.RestoreFromTrash, stringResource(R.string.action_restore))
-                            }
-                        }
-                        if (destination == 3 && librarySection == "locked") {
-                            IconButton(onClick = { val selected = activeMedia.filter { it.id in selectedIds }; clearSelection(); onUnlockMedia(selected, null) }) {
-                                Icon(Icons.Outlined.LockOpen, stringResource(R.string.action_remove_from_locked))
-                            }
-                        }
-                        IconButton(onClick = ::shareSelection) { Icon(Icons.Outlined.Share, stringResource(R.string.action_share)) }
-                        IconButton(onClick = {
-                            val selected = activeMedia.filter { it.id in selectedIds }
-                            if (selected.isNotEmpty()) {
-                                if (destination == 3 && (librarySection == "trash" || librarySection == "locked")) {
-                                    pendingDeleteItems = selected
-                                } else if (settings.deleteMode == DeleteMode.ALWAYS_ASK || settings.confirmDelete) {
-                                    pendingDeleteItems = selected
-                                } else if (settings.deleteMode == DeleteMode.PERMANENT) {
-                                    clearSelection()
-                                    handleDeletePermanently(selected)
-                                } else {
-                                    clearSelection()
-                                    handleTrash(selected)
-                                }
-                            }
-                        }) { Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.action_delete)) }
-                        Box {
-                            IconButton(onClick = { selectionMenuExpanded = true }) {
-                                Icon(Icons.Outlined.MoreVert, stringResource(R.string.action_more))
-                            }
-                            DropdownMenu(selectionMenuExpanded, onDismissRequest = { selectionMenuExpanded = false }) {
-                                DropdownMenuItem(text = { Text(stringResource(R.string.action_select_all)) }, leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
-                                    onClick = { selectionMenuExpanded = false; selectedIds = activeMedia.mapTo(mutableSetOf()) { it.id } })
-                                if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_set_album_cover)) }, leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
-                                        onClick = { selectionMenuExpanded = false; onSetAlbumCover(selectedAlbum!!.id, selectedIds.first()); clearSelection() })
-                                }
-                                if (!(destination == 3 && (librarySection == "trash" || librarySection == "locked"))) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.action_move_to_album)) },
-                                        leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null) },
-                                        onClick = {
-                                            selectionMenuExpanded = false
-                                            val selected = activeMedia.filter { it.id in selectedIds }
-                                            pendingAlbumMedia = selected
-                                            albumPickerAction = AlbumAction.MOVE
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.action_copy_to_album)) },
-                                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
-                                        onClick = {
-                                            selectionMenuExpanded = false
-                                            val selected = activeMedia.filter { it.id in selectedIds }
-                                            pendingAlbumMedia = selected
-                                            albumPickerAction = AlbumAction.COPY
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.action_delete_permanently), color = MaterialTheme.colorScheme.error) },
-                                        leadingIcon = { Icon(Icons.Outlined.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
-                                        onClick = {
-                                            selectionMenuExpanded = false
-                                            val selected = activeMedia.filter { it.id in selectedIds }
-                                            if (selected.isNotEmpty()) {
-                                                pendingPermanentDeleteItems = selected
-                                            }
-                                        }
-                                    )
-                                }
-                                if (destination == 3 && librarySection == "locked") {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_remove_from_locked)) }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
-                                        onClick = {
-                                            selectionMenuExpanded = false
-                                            val selected = activeMedia.filter { it.id in selectedIds }
-                                            clearSelection()
-                                            onUnlockMedia(selected, null)
-                                        })
-                                } else if (!(destination == 3 && librarySection == "trash")) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.action_move_to_locked)) }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
-                                        onClick = {
-                                            selectionMenuExpanded = false
-                                            val selected = activeMedia.filter { it.id in selectedIds }
-                                            clearSelection()
-                                            onLockMedia(selected, null)
-                                        })
-                                }
-                                 val allSelectedAreFavorites = selectedIds.isNotEmpty() && selectedIds.all { it in favorites }
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            stringResource(
-                                                if (allSelectedAreFavorites) R.string.action_unfavorite
-                                                else R.string.action_favorite
-                                            )
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (allSelectedAreFavorites) {
-                                            Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.primary)
-                                        } else {
-                                            Icon(Icons.Outlined.FavoriteBorder, null)
-                                        }
-                                    },
-                                    onClick = {
-                                        selectionMenuExpanded = false
-                                        val makeFavorite = !allSelectedAreFavorites
-                                        selectedIds.forEach { id -> if ((id in favorites) != makeFavorite) onToggleFavorite(id) }
-                                        clearSelection()
-                                    }
+                        if (settings.useFloatingSelectionToolbar) {
+                            val allSelected = activeMedia.isNotEmpty() && selectedIds.size >= activeMedia.size
+                            IconButton(onClick = {
+                                if (allSelected) clearSelection()
+                                else selectedIds = activeMedia.mapTo(mutableSetOf()) { it.id }
+                            }) {
+                                Icon(
+                                    Icons.Outlined.SelectAll,
+                                    contentDescription = stringResource(
+                                        if (allSelected) R.string.action_clear_selection else R.string.action_select_all
+                                    ),
+                                    tint = if (allSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
+                            }
+                        } else {
+                            if (isTrashSelection) {
+                                IconButton(onClick = {
+                                    val selected = activeMedia.filter { it.id in selectedIds }
+                                    handleRestore(selected) { clearSelection() }
+                                }) {
+                                    Icon(Icons.Outlined.RestoreFromTrash, stringResource(R.string.action_restore))
+                                }
+                            }
+                            if (isVaultActive) {
+                                IconButton(onClick = {
+                                    val selected = activeMedia.filter { it.id in selectedIds }
+                                    clearSelection()
+                                    onUnlockMedia(selected, null)
+                                }) {
+                                    Icon(Icons.Outlined.LockOpen, stringResource(R.string.action_remove_from_locked))
+                                }
+                            }
+                            IconButton(onClick = { executeSelectionAction("share") }) {
+                                Icon(Icons.Outlined.Share, stringResource(R.string.action_share))
+                            }
+                            IconButton(onClick = { executeSelectionAction("delete") }) {
+                                Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.action_delete))
+                            }
+                            Box {
+                                IconButton(onClick = { selectionMenuExpanded = true }) {
+                                    Icon(Icons.Outlined.MoreVert, stringResource(R.string.action_more))
+                                }
+                                DropdownMenu(selectionMenuExpanded, onDismissRequest = { selectionMenuExpanded = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_select_all)) },
+                                        leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
+                                        onClick = { selectionMenuExpanded = false; executeSelectionAction("select_all") }
+                                    )
+                                    if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_set_album_cover)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
+                                            onClick = {
+                                                selectionMenuExpanded = false
+                                                onSetAlbumCover(selectedAlbum!!.id, selectedIds.first())
+                                                clearSelection()
+                                            }
+                                        )
+                                    }
+                                    if (!isTrashSelection && !isVaultActive) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_move_to_album)) },
+                                            leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null) },
+                                            onClick = { selectionMenuExpanded = false; executeSelectionAction("move") }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_copy_to_album)) },
+                                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                                            onClick = { selectionMenuExpanded = false; executeSelectionAction("copy") }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_delete_permanently), color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Outlined.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { selectionMenuExpanded = false; executeSelectionAction("delete_permanent") }
+                                        )
+                                    }
+                                    if (isVaultActive) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_remove_from_locked)) },
+                                            leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
+                                            onClick = {
+                                                selectionMenuExpanded = false
+                                                val selected = activeMedia.filter { it.id in selectedIds }
+                                                clearSelection()
+                                                onUnlockMedia(selected, null)
+                                            }
+                                        )
+                                    } else if (!isTrashSelection) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_move_to_locked)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                            onClick = { selectionMenuExpanded = false; executeSelectionAction("lock") }
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(
+                                                    if (allSelectedAreFavorites) R.string.action_unfavorite
+                                                    else R.string.action_favorite
+                                                )
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            if (allSelectedAreFavorites) {
+                                                Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.primary)
+                                            } else {
+                                                Icon(Icons.Outlined.FavoriteBorder, null)
+                                            }
+                                        },
+                                        onClick = { selectionMenuExpanded = false; executeSelectionAction("favorite") }
+                                    )
+                                }
                             }
                         }
                     } else if (!isFileSearching || !canSearchOnScreen) {
@@ -1118,6 +1325,38 @@ internal fun GalleryScaffold(
                                         }
                                     )
                                 }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.filter_show_hidden_items)) },
+                                    trailingIcon = {
+                                        Switch(
+                                            checked = settings.showHiddenItems,
+                                            onCheckedChange = null,
+                                            modifier = Modifier.scale(0.8f)
+                                        )
+                                    },
+                                    onClick = {
+                                        mediaFilterMenuExpanded = false
+                                        onToggleShowHiddenItems(!settings.showHiddenItems)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.layout_mosaic_mode)) },
+                                    trailingIcon = {
+                                        Switch(
+                                            checked = settings.photoGridLayout == PhotoGridLayout.MOSAIC,
+                                            onCheckedChange = null,
+                                            modifier = Modifier.scale(0.8f)
+                                        )
+                                    },
+                                    onClick = {
+                                        mediaFilterMenuExpanded = false
+                                        settingsPreferences.setPhotoGridLayout(
+                                            if (settings.photoGridLayout == PhotoGridLayout.MOSAIC) PhotoGridLayout.GRID
+                                            else PhotoGridLayout.MOSAIC
+                                        )
+                                    }
+                                )
                             }
                         }
                         if (destination == 1 && selectedAlbum != null) {
@@ -1238,13 +1477,104 @@ internal fun GalleryScaffold(
                                             onTogglePinnedAlbum(selectedAlbum!!.id)
                                         }
                                     )
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(R.string.action_delete_album),
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.DeleteOutline, null, tint = MaterialTheme.colorScheme.error)
+                                        },
+                                        onClick = {
+                                            albumOptionsMenuExpanded = false
+                                            pendingDeleteAlbum = selectedAlbum
+                                        }
+                                    )
                                 }
                             }
                         }
-                        val inSubpage = (destination == 1 && selectedAlbum != null) || (destination == 3 && librarySection != null)
+                        val inSubpage = (destination == 1 && (selectedAlbum != null || activeAlbumGroup != null || activeFolderCluster != null)) ||
+                            (destination == 3 && librarySection != null) ||
+                            (destination == 4 && selectedLockedAlbum != null)
+                        if (isVaultActive && lockedAuthorized && !isVaultSearching) {
+                            IconButton(onClick = { isVaultSearching = true }) {
+                                Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                            }
+                            Box {
+                                IconButton(onClick = { vaultSortMenuExpanded = true }) {
+                                    Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.action_sort))
+                                }
+                                DropdownMenu(
+                                    expanded = vaultSortMenuExpanded,
+                                    onDismissRequest = { vaultSortMenuExpanded = false }
+                                ) {
+                                    if (selectedLockedAlbum == null && vaultTab == 0) {
+                                        listOf(
+                                            AlbumSort.NEWEST to R.string.sort_recent,
+                                            AlbumSort.OLDEST to R.string.sort_date_asc,
+                                            AlbumSort.NAME to R.string.sort_name,
+                                            AlbumSort.ITEM_COUNT to R.string.sort_size,
+                                        ).forEach { (sortOpt, labelRes) ->
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(labelRes)) },
+                                                trailingIcon = if (vaultAlbumSort == sortOpt) {
+                                                    { Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
+                                                } else null,
+                                                onClick = {
+                                                    vaultSortMenuExpanded = false
+                                                    onSetVaultAlbumSort(sortOpt)
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        listOf(
+                                            MediaSort.DATE_DESC to R.string.sort_date_desc,
+                                            MediaSort.DATE_ASC to R.string.sort_date_asc,
+                                            MediaSort.NAME_ASC to R.string.sort_name_asc,
+                                            MediaSort.NAME_DESC to R.string.sort_name_desc,
+                                            MediaSort.SIZE_DESC to R.string.sort_size_desc,
+                                            MediaSort.SIZE_ASC to R.string.sort_size_asc,
+                                        ).forEach { (sortOpt, labelRes) ->
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(labelRes)) },
+                                                trailingIcon = if (vaultMediaSort == sortOpt) {
+                                                    { Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
+                                                } else null,
+                                                onClick = {
+                                                    vaultSortMenuExpanded = false
+                                                    onSetVaultMediaSort(sortOpt)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if (isAlbumsRoot && !isAlbumSearching) {
                             IconButton(onClick = { isAlbumSearching = true }) {
                                 Icon(Icons.Outlined.Search, stringResource(R.string.action_search))
+                            }
+                            if (activeAlbumGroup == null && activeFolderCluster == null) {
+                                IconButton(onClick = { showAlbumsViewOptionsDialog = true }) {
+                                    Icon(
+                                        if (settings.albumsViewMode == AlbumsViewMode.LIST) Icons.AutoMirrored.Outlined.ViewList
+                                        else Icons.Outlined.GridView,
+                                        stringResource(R.string.albums_view_options_title)
+                                    )
+                                }
+                                IconButton(onClick = { showCreateAlbumGroupDialog = true }) {
+                                    Icon(Icons.Outlined.CreateNewFolder, stringResource(R.string.action_create_album_group))
+                                }
+                            } else if (activeAlbumGroup != null) {
+                                IconButton(onClick = { showGroupCoverPickerSheet = true }) {
+                                    Icon(Icons.Outlined.Wallpaper, stringResource(R.string.action_set_group_cover))
+                                }
+                                IconButton(onClick = { showEditGroupMembersDialog = true }) {
+                                    Icon(Icons.Outlined.Edit, stringResource(R.string.action_edit_group))
+                                }
                             }
                             AlbumSortChip(
                                 sort = albumSort,
@@ -1254,10 +1584,16 @@ internal fun GalleryScaffold(
                                     albumSortMenuExpanded = false
                                     onSetAlbumSort(value)
                                 },
-                                compact = true
+                                compact = true,
+                                onStartReorder = if (activeAlbumGroup == null && activeFolderCluster == null) {
+                                    {
+                                        onSetAlbumSort(AlbumSort.CUSTOM)
+                                        isEditingAlbumOrder = true
+                                    }
+                                } else null
                             )
                         }
-                        if (destination == 1 && selectedAlbum == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM) {
+                        if (destination == 1 && selectedAlbum == null && activeAlbumGroup == null && activeFolderCluster == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM) {
                             IconButton(onClick = { isEditingAlbumOrder = !isEditingAlbumOrder }) {
                                 Icon(
                                     if (isEditingAlbumOrder) Icons.Filled.Check else Icons.Outlined.Edit,
@@ -1293,7 +1629,9 @@ internal fun GalleryScaffold(
           }
         },
         bottomBar = {
-          if (!isLandscape && selectedIds.isEmpty()) {
+          if (!useFloatingNavBar && selectedIds.isEmpty()) {
+            val showDockedLabels = settings.navLabelMode != NavLabelMode.HIDDEN
+            val alwaysShowDockedLabels = settings.navLabelMode == NavLabelMode.ALWAYS
             Surface(
                 color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth()
@@ -1307,7 +1645,9 @@ internal fun GalleryScaffold(
                     NavigationBar(
                         containerColor = Color.Transparent,
                         windowInsets = WindowInsets(0, 0, 0, 0),
-                        modifier = Modifier.widthIn(max = 560.dp)
+                        modifier = Modifier
+                            .widthIn(max = 560.dp)
+                            .then(if (!showDockedLabels) Modifier.height(64.dp) else Modifier)
                     ) {
                         visibleTabs.forEachIndexed { index, tab ->
                             val isSelected = navVisibleTab == tab
@@ -1317,8 +1657,12 @@ internal fun GalleryScaffold(
                                 selected = isSelected,
                                 onClick = { handleTabSelected(index) },
                                 icon = { AnimatedNavigationIcon(icon, isSelected, label, tiltEnabled = settings.tiltNavIcons) },
-                                label = { Text(label) },
-                                alwaysShowLabel = true,
+                                label = if (showDockedLabels) {
+                                    { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                } else {
+                                    null
+                                },
+                                alwaysShowLabel = alwaysShowDockedLabels,
                             )
                         }
                     }
@@ -1328,17 +1672,24 @@ internal fun GalleryScaffold(
         },
     ) { scaffoldPadding ->
       val navBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-      val floatingBarBottomPadding = 74.dp + navBarsBottom
+      val floatingShowsLabels = !isLandscape && settings.navLabelMode != NavLabelMode.HIDDEN
+      val floatingBarBottomPadding = (if (floatingShowsLabels) 92.dp else 84.dp) + navBarsBottom
+      val selectionPillBottomPadding = 86.dp + navBarsBottom
       val layoutDirection = LocalLayoutDirection.current
-      val padding = if (isLandscape && selectedIds.isEmpty()) {
-          PaddingValues(
+      val padding = when {
+          useFloatingNavBar && selectedIds.isEmpty() -> PaddingValues(
               start = scaffoldPadding.calculateStartPadding(layoutDirection),
               top = scaffoldPadding.calculateTopPadding(),
               end = scaffoldPadding.calculateEndPadding(layoutDirection),
               bottom = floatingBarBottomPadding
           )
-      } else {
-          scaffoldPadding
+          settings.useFloatingSelectionToolbar && selectedIds.isNotEmpty() -> PaddingValues(
+              start = scaffoldPadding.calculateStartPadding(layoutDirection),
+              top = scaffoldPadding.calculateTopPadding(),
+              end = scaffoldPadding.calculateEndPadding(layoutDirection),
+              bottom = selectionPillBottomPadding
+          )
+          else -> scaffoldPadding
       }
       // The pager starts under the transparent top bar. Pull-to-refresh lives at
       // the top of the content, so move it down by the top bar inset and drop the
@@ -1355,8 +1706,13 @@ internal fun GalleryScaffold(
         error != null && images.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(error) }
         else -> HorizontalPager(
           state = tabPagerState,
-          beyondViewportPageCount = (visibleTabs.size - 1).coerceIn(0, 3),
-          userScrollEnabled = selectedIds.isEmpty() && selectedAlbum == null && (destination != 3 || librarySection == null),
+          beyondViewportPageCount = (visibleTabs.size - 1).coerceIn(0, 4),
+          userScrollEnabled = selectedIds.isEmpty() &&
+              selectedAlbum == null &&
+              selectedAlbumGroupId == null &&
+              selectedFolderClusterPath == null &&
+              (!isVaultActive || selectedLockedAlbum == null) &&
+              (destination != 3 || librarySection == null),
           modifier = Modifier.fillMaxSize(),
         ) { page ->
           val activeTab = visibleTabs.getOrElse(page) { GalleryTab.MEDIA }
@@ -1383,6 +1739,8 @@ internal fun GalleryScaffold(
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                   if (displayedItems.isNotEmpty()) PhotoGrid(
                     displayedItems, gridPadding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                    layoutMode = settings.photoGridLayout,
+                    animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1401,7 +1759,8 @@ internal fun GalleryScaffold(
                     onSetBatchSelection = if (onPick == null) ::setBatchSelection else null,
                     onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                     onInvalidMedia = onInvalidMedia,
-                  ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedItems; selectedId = it.id } }
+                    onRegisterBoundsResolver = { boundsResolvers["media"] = it },
+                  ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { activeViewerSourceKey = "media"; viewerImages = displayedItems; selectedId = it.id } }
                   else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), gridPadding)
                   else EmptyState(
                       stringResource(
@@ -1438,6 +1797,8 @@ internal fun GalleryScaffold(
                   if (selectedAlbum != null) {
                     if (displayedAlbumPhotos.isNotEmpty()) PhotoGrid(
                       displayedAlbumPhotos, gridPadding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                      layoutMode = settings.photoGridLayout,
+                      animateGifThumbnails = settings.animateGifThumbnails,
                       showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                       timelineDateFormat = settings.timelineDateFormat,
                       customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1455,7 +1816,8 @@ internal fun GalleryScaffold(
                       onSetSelection = if (onPick == null) ::setSelection else null,
                       onSetBatchSelection = if (onPick == null) ::setBatchSelection else null,
                       onSetDateSelection = if (onPick == null) ::setDateSelection else null,
-                    ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedAlbumPhotos; selectedId = it.id } }
+                      onRegisterBoundsResolver = { boundsResolvers["album"] = it },
+                    ) { if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { activeViewerSourceKey = "album"; viewerImages = displayedAlbumPhotos; selectedId = it.id } }
                     else if (fileSearchQuery.isNotBlank()) EmptyState(stringResource(R.string.empty_search_files, fileSearchQuery), gridPadding)
                     else EmptyState(stringResource(R.string.empty_photos), gridPadding)
                   } else AlbumsGrid(
@@ -1465,6 +1827,10 @@ internal fun GalleryScaffold(
                     padding = gridPadding,
                     state = albumGridState,
                     cellSize = customAlbumCellSize,
+                    viewMode = settings.albumsViewMode,
+                    groupDirectSubfolders = settings.groupDirectSubfolders,
+                    hierarchyDepth = settings.albumHierarchyDepth,
+                    globalAlbumSearch = settings.globalAlbumSearch,
                     showFilterChips = settings.showAlbumFilterChips,
                     onCellSizeChange = onAlbumCellSizeChange,
                     cornerStyle = settings.cornerStyle,
@@ -1475,7 +1841,10 @@ internal fun GalleryScaffold(
                     covers = albumCovers,
                     sort = albumSort,
                     customOrder = albumOrder,
-                    isEditingOrder = isEditingAlbumOrder && destination == 1 && selectedAlbumId == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM,
+                    isEditingOrder = isEditingAlbumOrder && destination == 1 && selectedAlbumId == null && activeAlbumGroup == null && activeFolderCluster == null && albumSort == com.iris.gallery.data.AlbumSort.CUSTOM,
+                    albumGroups = albumGroups,
+                    activeGroup = activeAlbumGroup,
+                    activeCluster = activeFolderCluster,
                     onTogglePinned = onTogglePinnedAlbum,
                     onOrderChanged = onSetAlbumOrder,
                     onLockAlbum = { album -> onLockMedia(album.images, null) },
@@ -1485,6 +1854,26 @@ internal fun GalleryScaffold(
                         if (folderPath.isNotBlank()) {
                             onAddExcludedFolder(folderPath)
                             Toast.makeText(context, R.string.toast_folder_excluded, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onDeleteAlbum = { album -> pendingDeleteAlbum = album },
+                    onOpenFolderCluster = { cluster -> selectedFolderClusterPath = cluster.id },
+                    onOpenAlbumGroup = { group -> selectedAlbumGroupId = group.id },
+                    onCreateAlbumGroup = onCreateAlbumGroup,
+                    onAddAlbumToGroup = onAddAlbumToGroup,
+                    onRemoveAlbumFromGroup = onRemoveAlbumFromGroup,
+                    onRenameAlbumGroup = onRenameAlbumGroup,
+                    onSetAlbumGroupCover = onSetAlbumGroupCover,
+                    onDeleteAlbumGroup = { groupId ->
+                        if (selectedAlbumGroupId == groupId) selectedAlbumGroupId = null
+                        onDeleteAlbumGroup(groupId)
+                    },
+                    onOpenGlobalSearchMedia = { media, list ->
+                        if (onPick != null) onPick(media)
+                        else {
+                            activeViewerSourceKey = null
+                            viewerImages = list
+                            selectedId = media.id
                         }
                     },
                   ) { selectedAlbumId = it.id }
@@ -1499,6 +1888,8 @@ internal fun GalleryScaffold(
                             gridState = libraryGridState,
                             cellSize = photoCellSize,
                             onCellSizeChange = onCellSizeChange,
+                            layoutMode = settings.photoGridLayout,
+                            animateGifThumbnails = settings.animateGifThumbnails,
                             cornerStyle = settings.cornerStyle,
                             gridSpacing = settings.gridSpacing,
                             showVideoDuration = settings.showVideoDurationBadge,
@@ -1509,210 +1900,45 @@ internal fun GalleryScaffold(
                             onToggleSelection = ::toggleSelection,
                             onSetSelection = ::setSelection,
                             onSetBatchSelection = ::setBatchSelection,
+                            onRegisterBoundsResolver = { boundsResolvers["trash"] = it },
                         ) {
                             if (selectedIds.isNotEmpty()) toggleSelection(it.id)
                             else {
+                                activeViewerSourceKey = "trash"
                                 viewerImages = trashed
                                 selectedId = it.id
                             }
                         }
-                        "locked" -> if (!lockedAuthorized) {
-                            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Lock,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                    Text(
-                                        stringResource(R.string.empty_locked_locked_state),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Button(onClick = onRequestUnlock) {
-                                        Text(stringResource(R.string.action_unlock))
-                                    }
-                                }
-                            }
-                        } else {
-                            val locked = lockedMedia
-                            val lockedAlbumList = remember(locked) {
-                                locked.groupBy { it.bucketName.ifBlank { "Locked" } }
-                                    .map { (name, items) ->
-                                        MediaAlbum(
-                                            id = items.firstOrNull()?.bucketId ?: name.hashCode().toLong(),
-                                            name = name,
-                                            images = items,
-                                            cover = items.first(),
-                                            isSdCard = false
-                                        )
-                                    }.sortedWith(compareByDescending<MediaAlbum> { it.images.size }.thenBy { it.name.lowercase() })
-                            }
-                            if (locked.isEmpty()) {
-                                LaunchedEffect(Unit) { selectedLockedAlbum = null }
-                                EmptyState(stringResource(R.string.empty_locked), padding)
-                            } else if (selectedLockedAlbum != null) {
-                                val albumImages = remember(locked, selectedLockedAlbum) {
-                                    locked.filter { it.bucketName.ifBlank { "Locked" } == selectedLockedAlbum }
-                                }
-                                LaunchedEffect(albumImages.isEmpty()) {
-                                    if (albumImages.isEmpty()) {
-                                        selectedLockedAlbum = null
-                                    }
-                                }
-                                PhotoGrid(
-                                    images = albumImages,
-                                    padding = padding,
-                                    gridState = libraryGridState,
-                                    cellSize = photoCellSize,
-                                    onCellSizeChange = onCellSizeChange,
-                                    cornerStyle = settings.cornerStyle,
-                                    gridSpacing = settings.gridSpacing,
-                                    showVideoDuration = settings.showVideoDurationBadge,
-                                    showFormatBadge = settings.showMediaFormatBadge,
-                                    selectedIds = selectedIds,
-                                    favorites = favorites,
-                                    onToggleSelection = ::toggleSelection,
-                                    onSetSelection = ::setSelection,
-                                    onSetBatchSelection = ::setBatchSelection,
-                                ) {
-                                    if (selectedIds.isNotEmpty()) toggleSelection(it.id)
-                                    else {
-                                        viewerImages = albumImages
-                                        selectedId = it.id
-                                    }
-                                }
-                            } else if (lockedAlbumList.size > 1) {
-                                var vaultTab by remember { mutableIntStateOf(0) }
-                                Column(Modifier.fillMaxSize().padding(padding)) {
-                                    TabRow(
-                                        selectedTabIndex = vaultTab,
-                                        containerColor = Color.Transparent,
-                                        contentColor = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                                    ) {
-                                        Tab(
-                                            selected = vaultTab == 0,
-                                            onClick = { vaultTab = 0 },
-                                            text = { Text(stringResource(R.string.vault_tab_albums) + " (${lockedAlbumList.size})") }
-                                        )
-                                        Tab(
-                                            selected = vaultTab == 1,
-                                            onClick = { vaultTab = 1 },
-                                            text = { Text(stringResource(R.string.vault_tab_all_photos) + " (${locked.size})") }
-                                        )
-                                    }
-                                    if (vaultTab == 0) {
-                                        LazyVerticalGrid(
-                                            columns = GridCells.Adaptive(140.dp),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
-                                            verticalArrangement = Arrangement.spacedBy(settings.gridSpacing.dp.dp),
-                                            modifier = Modifier.fillMaxSize()
-                                        ) {
-                                            items(lockedAlbumList, key = { it.name }) { album ->
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .combinedClickable(
-                                                            onClick = { selectedLockedAlbum = album.name },
-                                                            onLongClick = { pendingRestoreAlbum = album }
-                                                        )
-                                                ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .aspectRatio(1f)
-                                                    ) {
-                                                        Card(
-                                                            shape = RoundedCornerShape(settings.cornerStyle.dp.dp),
-                                                            modifier = Modifier.fillMaxSize()
-                                                        ) {
-                                                            MediaThumbnail(
-                                                                album.cover,
-                                                                modifier = Modifier.fillMaxSize(),
-                                                                targetSizePx = 256
-                                                            )
-                                                        }
-                                                    }
-                                                    Column(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(top = 6.dp, start = 2.dp, end = 2.dp),
-                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = album.name,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                        Text(
-                                                            text = stringResource(R.string.album_items_count, album.images.size),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        PhotoGrid(
-                                            images = locked,
-                                            padding = PaddingValues(0.dp),
-                                            gridState = libraryGridState,
-                                            cellSize = photoCellSize,
-                                            onCellSizeChange = onCellSizeChange,
-                                            cornerStyle = settings.cornerStyle,
-                                            gridSpacing = settings.gridSpacing,
-                                            showVideoDuration = settings.showVideoDurationBadge,
-                                            showFormatBadge = settings.showMediaFormatBadge,
-                                             selectedIds = selectedIds,
-                                            favorites = favorites,
-                                            onToggleSelection = ::toggleSelection,
-                                            onSetSelection = ::setSelection,
-                                            onSetBatchSelection = ::setBatchSelection,
-                                        ) {
-                                            if (selectedIds.isNotEmpty()) toggleSelection(it.id)
-                                            else {
-                                                viewerImages = locked
-                                                selectedId = it.id
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                PhotoGrid(
-                                    images = locked,
-                                    padding = padding,
-                                    gridState = libraryGridState,
-                                    cellSize = photoCellSize,
-                                    onCellSizeChange = onCellSizeChange,
-                                    cornerStyle = settings.cornerStyle,
-                                    gridSpacing = settings.gridSpacing,
-                                    showVideoDuration = settings.showVideoDurationBadge,
-                                    showFormatBadge = settings.showMediaFormatBadge,
-                                    selectedIds = selectedIds,
-                                    favorites = favorites,
-                                    onToggleSelection = ::toggleSelection,
-                                    onSetSelection = ::setSelection,
-                                    onSetBatchSelection = ::setBatchSelection,
-                                ) {
-                                    if (selectedIds.isNotEmpty()) toggleSelection(it.id)
-                                    else {
-                                        viewerImages = locked
-                                        selectedId = it.id
-                                    }
-                                }
-                            }
-                        }
+                        "locked" -> VaultContent(
+                            lockedAuthorized = lockedAuthorized,
+                            lockedMedia = lockedMedia,
+                            vaultTab = vaultTab,
+                            onVaultTabChange = { vaultTab = it },
+                            selectedLockedAlbum = selectedLockedAlbum,
+                            onSelectLockedAlbum = { selectedLockedAlbum = it },
+                            searchQuery = vaultSearchQuery,
+                            onClearSearch = { vaultSearchQuery = "" },
+                            vaultAlbumSort = vaultAlbumSort,
+                            vaultMediaSort = vaultMediaSort,
+                            settings = settings,
+                            padding = padding,
+                            gridState = libraryGridState,
+                            cellSize = photoCellSize,
+                            onCellSizeChange = onCellSizeChange,
+                            selectedIds = selectedIds,
+                            favorites = favorites,
+                            onToggleSelection = ::toggleSelection,
+                            onSetSelection = ::setSelection,
+                            onSetBatchSelection = ::setBatchSelection,
+                            onSetDateSelection = ::setDateSelection,
+                            onRequestUnlock = onRequestUnlock,
+                            onRegisterBoundsResolver = { boundsResolvers["vault"] = it },
+                            onOpenMedia = { media, list ->
+                                activeViewerSourceKey = "vault"
+                                viewerImages = list
+                                selectedId = media.id
+                            },
+                        )
                         "memories" -> {
                             val today = LocalDate.now()
                             val memories = remember(images, today) { images.filter {
@@ -1775,6 +2001,8 @@ internal fun GalleryScaffold(
 
                                 if (memories.isEmpty()) EmptyState(stringResource(R.string.empty_memories), PaddingValues(0.dp)) else PhotoGrid(
                                     memories, PaddingValues(0.dp), libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+                                    layoutMode = settings.photoGridLayout,
+                                    animateGifThumbnails = settings.animateGifThumbnails,
                                     timelineDateFormat = settings.timelineDateFormat,
                                     customTimelineDateFormat = settings.customTimelineDateFormat,
                                     useRelativeDates = settings.useRelativeDates,
@@ -1788,9 +2016,10 @@ internal fun GalleryScaffold(
                                     onToggleSelection = ::toggleSelection,
                                     onSetSelection = ::setSelection,
                                     onSetBatchSelection = ::setBatchSelection,
+                                    onRegisterBoundsResolver = { boundsResolvers["memories"] = it },
                                 ) {
                                     if (selectedIds.isNotEmpty()) toggleSelection(it.id)
-                                    else { viewerImages = memories; selectedId = it.id }
+                                    else { activeViewerSourceKey = "memories"; viewerImages = memories; selectedId = it.id }
                                 }
                             }
                         }
@@ -1818,7 +2047,10 @@ internal fun GalleryScaffold(
                             } else {
                                 Column(Modifier.fillMaxSize().padding(padding)) {
                                     LazyRow(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .nestedScroll(ConsumeHorizontalNestedScroll)
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         item {
@@ -1873,19 +2105,22 @@ internal fun GalleryScaffold(
                                             gridState = libraryGridState,
                                             cellSize = photoCellSize,
                                             onCellSizeChange = onCellSizeChange,
+                                            layoutMode = settings.photoGridLayout,
+                                            animateGifThumbnails = settings.animateGifThumbnails,
                                             cornerStyle = settings.cornerStyle,
                                             gridSpacing = settings.gridSpacing,
                                             showVideoDuration = settings.showVideoDurationBadge,
-                                             showFormatBadge = settings.showMediaFormatBadge,
+                                            showFormatBadge = settings.showMediaFormatBadge,
                                             selectedIds = selectedIds,
                                             favorites = favorites,
                                             onToggleSelection = if (onPick == null) ::toggleSelection else null,
                                             onSetSelection = if (onPick == null) ::setSelection else null,
                                             onSetBatchSelection = if (onPick == null) ::setBatchSelection else null,
+                                            onRegisterBoundsResolver = { boundsResolvers["formats"] = it },
                                         ) {
                                             if (selectedIds.isNotEmpty()) toggleSelection(it.id)
                                             else if (onPick != null) onPick(it)
-                                            else { viewerImages = currentFiltered; selectedId = it.id }
+                                            else { activeViewerSourceKey = "formats"; viewerImages = currentFiltered; selectedId = it.id }
                                         }
                                     }
                                 }
@@ -1952,6 +2187,8 @@ internal fun GalleryScaffold(
                     gridState = favoriteGridState,
                     cellSize = photoCellSize,
                     onCellSizeChange = onCellSizeChange,
+                    layoutMode = settings.photoGridLayout,
+                    animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
@@ -1969,21 +2206,56 @@ internal fun GalleryScaffold(
                     onSetBatchSelection = if (onPick == null) ::setBatchSelection else null,
                     onSetDateSelection = if (onPick == null) ::setDateSelection else null,
                     onInvalidMedia = onInvalidMedia,
+                    onRegisterBoundsResolver = { boundsResolvers["favorites"] = it },
                 ) {
-                    if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { viewerImages = displayedFavoritePhotos; selectedId = it.id }
+                    if (selectedIds.isNotEmpty()) toggleSelection(it.id) else if (onPick != null) onPick(it) else { activeViewerSourceKey = "favorites"; viewerImages = displayedFavoritePhotos; selectedId = it.id }
                 }
+            }
+            GalleryTab.VAULT -> {
+                VaultContent(
+                    lockedAuthorized = lockedAuthorized,
+                    lockedMedia = lockedMedia,
+                    vaultTab = vaultTab,
+                    onVaultTabChange = { vaultTab = it },
+                    selectedLockedAlbum = selectedLockedAlbum,
+                    onSelectLockedAlbum = { selectedLockedAlbum = it },
+                    searchQuery = vaultSearchQuery,
+                    onClearSearch = { vaultSearchQuery = "" },
+                    vaultAlbumSort = vaultAlbumSort,
+                    vaultMediaSort = vaultMediaSort,
+                    settings = settings,
+                    padding = padding,
+                    gridState = libraryGridState,
+                    cellSize = photoCellSize,
+                    onCellSizeChange = onCellSizeChange,
+                    selectedIds = selectedIds,
+                    favorites = favorites,
+                    onToggleSelection = ::toggleSelection,
+                    onSetSelection = ::setSelection,
+                    onSetBatchSelection = ::setBatchSelection,
+                    onSetDateSelection = ::setDateSelection,
+                    onRequestUnlock = onRequestUnlock,
+                    onRegisterBoundsResolver = { boundsResolvers["vault_tab"] = it },
+                    onOpenMedia = { media, list ->
+                        activeViewerSourceKey = "vault_tab"
+                        viewerImages = list
+                        selectedId = media.id
+                    },
+                )
             }
           }
         }
       }
     }
 
+    val floatingNavShowsLabels = !isLandscape && settings.navLabelMode != NavLabelMode.HIDDEN
+    val floatingNavAlwaysShowLabels = floatingNavShowsLabels && settings.navLabelMode == NavLabelMode.ALWAYS
     AnimatedVisibility(
         visible = showFloatingBar,
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .navigationBarsPadding()
-            .padding(bottom = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         enter = fadeIn(tween(180)) + slideInVertically(
             animationSpec = tween(220, easing = FastOutSlowInEasing),
             initialOffsetY = { it }
@@ -1994,8 +2266,9 @@ internal fun GalleryScaffold(
         )
     ) {
         Surface(
-            color = if (isAmoled) Color.Black.copy(alpha = 0.90f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
-            shape = RoundedCornerShape(28.dp),
+            color = if (isAmoled) Color.Black.copy(alpha = 0.92f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = RoundedCornerShape(32.dp),
             shadowElevation = 8.dp,
             tonalElevation = 4.dp,
             border = BorderStroke(
@@ -2007,7 +2280,9 @@ internal fun GalleryScaffold(
             NavigationBar(
                 containerColor = Color.Transparent,
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                modifier = Modifier.height(60.dp)
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .height(if (floatingNavShowsLabels) 72.dp else 64.dp)
             ) {
                 visibleTabs.forEachIndexed { index, tab ->
                     val isSelected = navVisibleTab == tab
@@ -2017,12 +2292,220 @@ internal fun GalleryScaffold(
                         selected = isSelected,
                         onClick = { handleTabSelected(index) },
                         icon = { AnimatedNavigationIcon(icon, isSelected, label, tiltEnabled = settings.tiltNavIcons) },
-                        label = null,
-                        alwaysShowLabel = false,
+                        label = if (floatingNavShowsLabels) {
+                            { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        } else {
+                            null
+                        },
+                        alwaysShowLabel = floatingNavAlwaysShowLabels,
                     )
                 }
             }
         }
+    }
+
+    AnimatedVisibility(
+        visible = showSelectionPill,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        enter = fadeIn(tween(180)) + slideInVertically(
+            animationSpec = tween(220, easing = FastOutSlowInEasing),
+            initialOffsetY = { it }
+        ),
+        exit = fadeOut(tween(150)) + slideOutVertically(
+            animationSpec = tween(180, easing = FastOutSlowInEasing),
+            targetOffsetY = { it }
+        )
+    ) {
+        val pillActions = remember(settings.selectionPillActions) {
+            settings.selectionPillActions
+                .filter { it in ALL_SELECTION_PILL_ACTIONS }
+                .distinct()
+                .ifEmpty { DEFAULT_SELECTION_PILL_ACTIONS }
+        }
+        val overflowActions = remember(pillActions) {
+            ALL_SELECTION_PILL_ACTIONS.filterNot { it in pillActions }
+        }
+        Surface(
+            color = if (isAmoled) Color(0xFF141414).copy(alpha = 0.96f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = RoundedCornerShape(32.dp),
+            shadowElevation = 8.dp,
+            tonalElevation = 6.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isAmoled) 0.45f else 0.30f)
+            ),
+            modifier = Modifier.widthIn(max = 520.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                when {
+                    isTrashSelection -> {
+                        IconButton(onClick = {
+                            val selected = activeMedia.filter { it.id in selectedIds }
+                            handleRestore(selected) { clearSelection() }
+                        }) {
+                            Icon(
+                                Icons.Outlined.RestoreFromTrash,
+                                stringResource(R.string.action_restore),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = ::shareSelection) {
+                            Icon(
+                                Icons.Outlined.Share,
+                                stringResource(R.string.action_share),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = { executeSelectionAction("delete") }) {
+                            Icon(
+                                Icons.Outlined.DeleteForever,
+                                stringResource(R.string.action_delete_permanently),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        IconButton(onClick = { executeSelectionAction("select_all") }) {
+                            Icon(
+                                Icons.Outlined.SelectAll,
+                                stringResource(R.string.action_select_all),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    isVaultActive -> {
+                        IconButton(onClick = {
+                            val selected = activeMedia.filter { it.id in selectedIds }
+                            clearSelection()
+                            onUnlockMedia(selected, null)
+                        }) {
+                            Icon(
+                                Icons.Outlined.LockOpen,
+                                stringResource(R.string.action_remove_from_locked),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = ::shareSelection) {
+                            Icon(
+                                Icons.Outlined.Share,
+                                stringResource(R.string.action_share),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = { executeSelectionAction("delete") }) {
+                            Icon(
+                                Icons.Outlined.DeleteOutline,
+                                stringResource(R.string.action_delete),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        IconButton(onClick = { executeSelectionAction("select_all") }) {
+                            Icon(
+                                Icons.Outlined.SelectAll,
+                                stringResource(R.string.action_select_all),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    else -> {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .horizontalScroll(rememberScrollState())
+                                .nestedScroll(ConsumeHorizontalNestedScroll),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            pillActions.forEach { actionKey ->
+                                val icon = selectionActionIcon(actionKey, allSelectedAreFavorites)
+                                val label = stringResource(selectionActionLabelRes(actionKey, allSelectedAreFavorites))
+                                val tint = when {
+                                    actionKey == "delete_permanent" -> MaterialTheme.colorScheme.error
+                                    actionKey == "favorite" && allSelectedAreFavorites -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                                IconButton(onClick = { executeSelectionAction(actionKey) }) {
+                                    Icon(icon, contentDescription = label, tint = tint)
+                                }
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { selectionMenuExpanded = true }) {
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    stringResource(R.string.action_more),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = selectionMenuExpanded,
+                                onDismissRequest = { selectionMenuExpanded = false }
+                            ) {
+                                if (destination == 1 && selectedAlbum != null && selectedIds.size == 1) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_set_album_cover)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            onSetAlbumCover(selectedAlbum!!.id, selectedIds.first())
+                                            clearSelection()
+                                        }
+                                    )
+                                }
+                                overflowActions.forEach { actionKey ->
+                                    val icon = selectionActionIcon(actionKey, allSelectedAreFavorites)
+                                    val label = stringResource(selectionActionLabelRes(actionKey, allSelectedAreFavorites))
+                                    val isDestructive = actionKey == "delete_permanent"
+                                    val tint = when {
+                                        isDestructive -> MaterialTheme.colorScheme.error
+                                        actionKey == "favorite" && allSelectedAreFavorites -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                label,
+                                                color = if (isDestructive) MaterialTheme.colorScheme.error else Color.Unspecified
+                                            )
+                                        },
+                                        leadingIcon = { Icon(icon, null, tint = tint) },
+                                        onClick = {
+                                            selectionMenuExpanded = false
+                                            executeSelectionAction(actionKey)
+                                        }
+                                    )
+                                }
+                                if (overflowActions.isNotEmpty() || (destination == 1 && selectedAlbum != null && selectedIds.size == 1)) {
+                                    HorizontalDivider()
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.action_customize_toolbar)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Tune, null) },
+                                    onClick = {
+                                        selectionMenuExpanded = false
+                                        showSelectionPillCustomizer = true
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showSelectionPillCustomizer) {
+        SelectionPillCustomizerSheet(
+            selectedActions = settings.selectionPillActions,
+            onSave = { settingsPreferences.setSelectionPillActions(it) },
+            onDismiss = { showSelectionPillCustomizer = false }
+        )
     }
 
     if (confirmEmptyTrash) {
@@ -2076,9 +2559,148 @@ internal fun GalleryScaffold(
         )
     }
 
+    if (showAlbumsViewOptionsDialog) {
+        AlbumsViewOptionsDialog(
+            viewMode = settings.albumsViewMode,
+            groupDirectSubfolders = settings.groupDirectSubfolders,
+            hierarchyDepth = settings.albumHierarchyDepth,
+            onViewModeChange = { settingsPreferences.setAlbumsViewMode(it) },
+            onGroupDirectSubfoldersChange = {
+                settingsPreferences.setGroupDirectSubfolders(it)
+                if (!it) selectedFolderClusterPath = null
+            },
+            onHierarchyDepthChange = {
+                settingsPreferences.setAlbumHierarchyDepth(it)
+                selectedAlbumId = null
+                selectedFolderClusterPath = null
+            },
+            onDismiss = { showAlbumsViewOptionsDialog = false }
+        )
+    }
+
+    if (showCreateAlbumGroupDialog) {
+        AlbumGroupEditorDialog(
+            title = stringResource(R.string.action_create_album_group),
+            initialName = "",
+            allAlbums = allHierarchyAlbums,
+            initialSelectedIds = emptySet(),
+            onConfirm = { name, ids ->
+                showCreateAlbumGroupDialog = false
+                onCreateAlbumGroup(name, ids)
+            },
+            onDismiss = { showCreateAlbumGroupDialog = false }
+        )
+    }
+
+    if (showEditGroupMembersDialog && activeAlbumGroup != null) {
+        val editingGroup = activeAlbumGroup
+        AlbumGroupEditorDialog(
+            title = stringResource(R.string.action_edit_group),
+            initialName = editingGroup.name,
+            allAlbums = allHierarchyAlbums,
+            initialSelectedIds = editingGroup.albumIds.toSet(),
+            onConfirm = { newName, ids ->
+                showEditGroupMembersDialog = false
+                onRenameAlbumGroup(editingGroup.id, newName)
+                onSetAlbumGroupMembers(editingGroup.id, ids)
+            },
+            onDismiss = { showEditGroupMembersDialog = false }
+        )
+    }
+
+    if (showGroupCoverPickerSheet && activeAlbumGroup != null) {
+        val targetGroup = activeAlbumGroup
+        val memberIds = remember(targetGroup.albumIds) { targetGroup.albumIds.toSet() }
+        val groupImages = remember(allHierarchyAlbums, memberIds) {
+            allHierarchyAlbums.filter { it.id in memberIds }.flatMap { it.images }.sortedByDescending { it.dateTaken }
+        }
+        AlbumGroupCoverPickerSheet(
+            groupName = targetGroup.name,
+            mediaItems = groupImages,
+            currentCoverMediaId = targetGroup.coverMediaId,
+            onSelectCover = { mediaId ->
+                showGroupCoverPickerSheet = false
+                onSetAlbumGroupCover(targetGroup.id, mediaId)
+            },
+            onResetCover = {
+                showGroupCoverPickerSheet = false
+                onSetAlbumGroupCover(targetGroup.id, null)
+            },
+            onDismiss = { showGroupCoverPickerSheet = false }
+        )
+    }
+
+    pendingDeleteAlbum?.let { album ->
+        val isPermanentDefault = settings.deleteMode == DeleteMode.PERMANENT
+        var deleteAlbumPermanently by remember(album.id) { mutableStateOf(isPermanentDefault) }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAlbum = null },
+            title = { Text(stringResource(R.string.delete_album_dialog_title, album.name)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isPermanentDefault || deleteAlbumPermanently) {
+                            stringResource(R.string.delete_album_permanent_desc, album.images.size, album.name)
+                        } else {
+                            stringResource(R.string.delete_album_trash_desc, album.images.size, album.name)
+                        }
+                    )
+                    if (!isPermanentDefault) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { deleteAlbumPermanently = !deleteAlbumPermanently }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = deleteAlbumPermanently,
+                                onCheckedChange = { deleteAlbumPermanently = it }
+                            )
+                            Text(
+                                text = stringResource(R.string.delete_permanently_checkbox),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val targetAlbum = album
+                    val permanent = isPermanentDefault || deleteAlbumPermanently
+                    pendingDeleteAlbum = null
+                    val onConfirmed = {
+                        if (selectedAlbumId == targetAlbum.id) {
+                            selectedAlbumId = null
+                        }
+                    }
+                    if (permanent) {
+                        handleDeletePermanently(targetAlbum.images, onConfirmed)
+                    } else {
+                        handleTrash(targetAlbum.images, onConfirmed)
+                    }
+                }) {
+                    Text(
+                        if (isPermanentDefault || deleteAlbumPermanently) stringResource(R.string.action_delete_permanently)
+                        else stringResource(R.string.action_delete_album),
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteAlbum = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
+
     pendingDeleteItems?.let { items ->
         val isInTrash = destination == 3 && librarySection == "trash"
-        val isLockedSection = destination == 3 && librarySection == "locked"
+        val isLockedSection = isVaultActive
         val isPermanentMode = isInTrash || isLockedSection || settings.deleteMode == DeleteMode.PERMANENT
         var deletePermanently by remember { mutableStateOf(isPermanentMode) }
         AlertDialog(
@@ -2270,7 +2892,11 @@ internal fun GalleryScaffold(
             selectedIds.isEmpty() &&
             !isFileSearching &&
             !isAlbumSearching &&
+            !isVaultSearching &&
             selectedAlbum == null &&
+            activeAlbumGroup == null &&
+            activeFolderCluster == null &&
+            selectedLockedAlbum == null &&
             librarySection == null &&
             !isEditingAlbumOrder &&
             !isEditingLibraryOrder
@@ -2290,7 +2916,11 @@ internal fun GalleryScaffold(
             ).also { it.show() }
         }
     }
-    BackHandler(enabled = !isFileSearching && selectedIds.isNotEmpty()) { clearSelection() }
+    BackHandler(enabled = !isFileSearching && !isVaultSearching && selectedIds.isNotEmpty()) { clearSelection() }
+    BackHandler(enabled = selectedIds.isEmpty() && isVaultActive && isVaultSearching) {
+        isVaultSearching = false
+        vaultSearchQuery = ""
+    }
     BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum == null && isAlbumSearching) {
         isAlbumSearching = false
         albumSearchQuery = ""
@@ -2305,10 +2935,14 @@ internal fun GalleryScaffold(
         selectedAlbumId = null
         if (isFileSearching) { isFileSearching = false; fileSearchQuery = "" }
     }
-    BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection == "locked" && selectedLockedAlbum != null && !isFileSearching) {
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 1 && selectedAlbum == null && (activeAlbumGroup != null || activeFolderCluster != null)) {
+        selectedAlbumGroupId = null
+        selectedFolderClusterPath = null
+    }
+    BackHandler(enabled = selectedIds.isEmpty() && isVaultActive && selectedLockedAlbum != null && !isVaultSearching) {
         selectedLockedAlbum = null
     }
-    BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection != null && (librarySection != "locked" || selectedLockedAlbum == null) && !isFileSearching) {
+    BackHandler(enabled = selectedIds.isEmpty() && destination == 3 && librarySection != null && (librarySection != "locked" || selectedLockedAlbum == null) && !isFileSearching && !isVaultSearching) {
         librarySection = null
         selectedLockedAlbum = null
         if (isFileSearching) { isFileSearching = false; fileSearchQuery = "" }
@@ -2337,6 +2971,7 @@ internal fun GalleryScaffold(
             dismissedFilmstripTip = settings.dismissedFilmstripTip,
             onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
             pinchToRotate = settings.pinchToRotate,
+            showImageRotateButton = settings.showImageRotateButton,
             dismissedRotateTip = settings.dismissedRotateTip,
             onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
@@ -2413,7 +3048,7 @@ internal fun GalleryScaffold(
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
         val index = activeImages.indexOfFirst { it.id == id }
-        val isViewingLocked = destination == 3 && librarySection == "locked"
+        val isViewingLocked = isVaultActive
         val isViewingTrash = destination == 3 && librarySection == "trash"
         val removeViewerItemAndAdvance: (MediaImage) -> Unit = { media ->
             val activeList = viewerImages ?: images
@@ -2442,6 +3077,7 @@ internal fun GalleryScaffold(
             dismissedFilmstripTip = settings.dismissedFilmstripTip,
             onDismissFilmstripTip = { settingsPreferences.setDismissedFilmstripTip(true) },
             pinchToRotate = settings.pinchToRotate,
+            showImageRotateButton = settings.showImageRotateButton,
             dismissedRotateTip = settings.dismissedRotateTip,
             onDismissRotateTip = { settingsPreferences.setDismissedRotateTip(true) },
             doubleTapZoomLevel = settings.doubleTapZoomLevel,
@@ -2465,7 +3101,7 @@ internal fun GalleryScaffold(
             albumPickerSort = settings.albumPickerSort,
             onSetAlbumPickerSort = { settingsPreferences.setAlbumPickerSort(it) },
             onToggleFavorite = onToggleFavorite,
-            onClose = { selectedId = null; viewerImages = null },
+            onClose = { selectedId = null; viewerImages = null; activeViewerSourceKey = null },
             onPageChanged = { selectedId = it },
             onRename = { media, newName ->
                 onRenameMedia(media, newName) { updated ->
@@ -2537,6 +3173,7 @@ internal fun GalleryScaffold(
             },
             getAlbumDir = getAlbumDir,
             createAlbumDir = createAlbumDir,
+            resolveTargetRect = { mediaId -> activeViewerSourceKey?.let { boundsResolvers[it]?.invoke(mediaId) } },
         )
     }
     AnimatedVisibility(
@@ -2732,5 +3369,187 @@ private fun AnimatedNavigationIcon(
 private fun EmptyState(message: String, padding: PaddingValues) {
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
         Text(message, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+internal fun selectionActionIcon(
+    actionKey: String,
+    allSelectedAreFavorites: Boolean = false
+): androidx.compose.ui.graphics.vector.ImageVector = when (actionKey) {
+    "share" -> Icons.Outlined.Share
+    "move" -> Icons.Outlined.DriveFileMove
+    "copy" -> Icons.Outlined.ContentCopy
+    "favorite" -> if (allSelectedAreFavorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder
+    "lock" -> Icons.Outlined.Lock
+    "delete" -> Icons.Outlined.DeleteOutline
+    "delete_permanent" -> Icons.Outlined.DeleteForever
+    "select_all" -> Icons.Outlined.SelectAll
+    else -> Icons.Outlined.MoreVert
+}
+
+internal fun selectionActionLabelRes(
+    actionKey: String,
+    allSelectedAreFavorites: Boolean = false
+): Int = when (actionKey) {
+    "share" -> R.string.selection_action_share
+    "move" -> R.string.selection_action_move
+    "copy" -> R.string.selection_action_copy
+    "favorite" -> if (allSelectedAreFavorites) R.string.action_unfavorite else R.string.selection_action_favorite
+    "lock" -> R.string.selection_action_lock
+    "delete" -> R.string.selection_action_delete
+    "delete_permanent" -> R.string.selection_action_delete_permanent
+    "select_all" -> R.string.selection_action_select_all
+    else -> R.string.action_more
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SelectionPillCustomizerSheet(
+    selectedActions: List<String>,
+    onSave: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val active = remember(selectedActions) {
+        selectedActions.filter { it in ALL_SELECTION_PILL_ACTIONS }.distinct().ifEmpty { DEFAULT_SELECTION_PILL_ACTIONS }
+    }
+    val inactive = remember(active) {
+        ALL_SELECTION_PILL_ACTIONS.filterNot { it in active }
+    }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.dialog_customize_toolbar_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { onSave(DEFAULT_SELECTION_PILL_ACTIONS) }) {
+                    Text(stringResource(R.string.action_reset_defaults))
+                }
+            }
+            Text(
+                text = stringResource(R.string.dialog_customize_toolbar_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            active.forEachIndexed { index, actionKey ->
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = selectionActionIcon(actionKey),
+                            contentDescription = null,
+                            tint = if (actionKey == "delete_permanent") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(selectionActionLabelRes(actionKey)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (index > 0) {
+                                    val mutable = active.toMutableList()
+                                    val item = mutable.removeAt(index)
+                                    mutable.add(index - 1, item)
+                                    onSave(mutable)
+                                }
+                            },
+                            enabled = index > 0
+                        ) {
+                            Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = null)
+                        }
+                        IconButton(
+                            onClick = {
+                                if (index < active.lastIndex) {
+                                    val mutable = active.toMutableList()
+                                    val item = mutable.removeAt(index)
+                                    mutable.add(index + 1, item)
+                                    onSave(mutable)
+                                }
+                            },
+                            enabled = index < active.lastIndex
+                        ) {
+                            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null)
+                        }
+                        Switch(
+                            checked = true,
+                            enabled = active.size > 1,
+                            onCheckedChange = { checked ->
+                                if (!checked && active.size > 1) {
+                                    onSave(active.filterNot { it == actionKey })
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            if (inactive.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                inactive.forEach { actionKey ->
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSave(active + actionKey) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = selectionActionIcon(actionKey),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = stringResource(selectionActionLabelRes(actionKey)),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = false,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        onSave(active + actionKey)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
