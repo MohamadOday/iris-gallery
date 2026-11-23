@@ -281,7 +281,7 @@ private class AnimatedAvifDrawable(
     override fun mutate(): Drawable {
         val copiedInitial = synchronized(frameLock) {
             if (!frontBitmap.isRecycled) {
-                frontBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                frontBitmap.copy(Bitmap.Config.ARGB_8888, true)
             } else {
                 Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888)
             }
