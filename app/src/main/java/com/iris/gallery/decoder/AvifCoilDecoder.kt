@@ -170,7 +170,6 @@ private class AnimatedAvifDrawable(
     private val frameLock = Any()
 
     private var frontBitmap: Bitmap = initialFrame
-    private var backBitmap: Bitmap? = null
     private var playbackJob: Job? = null
     @Volatile
     private var running: Boolean = false
@@ -215,19 +214,15 @@ private class AnimatedAvifDrawable(
                 running = false
                 return@launch
             }
-            val workBitmap = synchronized(frameLock) {
-                backBitmap?.takeIf { !it.isRecycled && it.width == frameWidth && it.height == frameHeight }
-                    ?: Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888).also {
-                        backBitmap = it
-                    }
-            }
+            val spare = ArrayDeque<Bitmap>()
+            repeat(2) { spare.addLast(Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888)) }
             try {
                 // libavif uses negative repetitionCount (-1 unknown, -2 infinite) for endless looping.
                 val infinite = repetitionCount < 0
                 val maxLoops = if (infinite) Int.MAX_VALUE else (repetitionCount + 1).coerceAtLeast(1)
                 var completedLoops = 0
                 var currentFrameIndex = 0
-                var targetBitmap = workBitmap
+                var targetBitmap = spare.removeFirst()
 
                 while (isActive && running && completedLoops < maxLoops) {
                     val delayMs = frameDurationsMs.getOrElse(currentFrameIndex) { 100L }
@@ -257,8 +252,8 @@ private class AnimatedAvifDrawable(
                     synchronized(frameLock) {
                         val previousFront = frontBitmap
                         frontBitmap = targetBitmap
-                        backBitmap = previousFront
-                        targetBitmap = previousFront
+                        spare.addLast(previousFront)
+                        targetBitmap = spare.removeFirst()
                     }
                     currentFrameIndex = nextIndex
                     mainHandler.post {
