@@ -400,14 +400,17 @@ internal fun PhotoGrid(
 
     val isMosaic = layoutMode == PhotoGridLayout.MOSAIC
     val mosaicListState: LazyListState = rememberLazyListState()
+    val mosaicTargetRowHeightPx = remember(cellSize, density) {
+        with(density) { cellSize.roundToPx() }.coerceAtLeast(48)
+    }
 
-    val mosaicEntries = remember(isMosaic, groups, showTimeline, availableWidthPx, photoHeight, spacingPx, headerHeight) {
+    val mosaicEntries = remember(isMosaic, groups, showTimeline, availableWidthPx, mosaicTargetRowHeightPx, spacingPx, headerHeight) {
         if (!isMosaic) emptyList()
         else buildMosaicEntries(
             groups = groups,
             showTimeline = showTimeline,
             availableWidthPx = availableWidthPx,
-            targetRowHeightPx = photoHeight,
+            targetRowHeightPx = mosaicTargetRowHeightPx,
             spacingPx = spacingPx,
             headerHeightPx = headerHeight,
         )
@@ -694,7 +697,9 @@ internal fun PhotoGrid(
                         if (downChanges.size >= 2) {
                             val zoom = event.calculateZoom()
                             if (kotlin.math.abs(zoom - 1f) > 0.001f) {
-                                val nextSize = (currentCellSize.value * zoom).coerceIn(36f, 320f)
+                                val minSize = if (currentIsMosaic) 56f else 36f
+                                val maxSize = if (currentIsMosaic) 260f else 320f
+                                val nextSize = (currentCellSize.value * zoom).coerceIn(minSize, maxSize)
                                 currentOnCellSizeChange?.invoke(nextSize.dp)
                             }
                             event.changes.forEach { it.consume() }

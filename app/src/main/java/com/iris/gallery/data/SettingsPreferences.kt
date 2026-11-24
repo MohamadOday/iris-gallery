@@ -142,6 +142,7 @@ data class SettingsState(
     val animateGifThumbnails: Boolean = false,
     val showHiddenItems: Boolean = false,
     val photoGridSize: Float = 105f,
+    val mosaicRowSize: Float = 120f,
     val albumGridSize: Float = 156f,
     val albumsViewMode: AlbumsViewMode = AlbumsViewMode.GRID,
     val groupDirectSubfolders: Boolean = false,
@@ -237,6 +238,7 @@ class SettingsPreferences(context: Context) {
     fun setAnimateGifThumbnails(enabled: Boolean) = update { copy(animateGifThumbnails = enabled) }
     fun setShowHiddenItems(show: Boolean) = update { copy(showHiddenItems = show) }
     fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
+    fun setMosaicRowSize(size: Float) = update { copy(mosaicRowSize = size.coerceIn(56f, 260f)) }
     fun setAlbumGridSize(size: Float) = update { copy(albumGridSize = size.coerceIn(48f, 450f)) }
     fun setAlbumsViewMode(mode: AlbumsViewMode) = update { copy(albumsViewMode = mode) }
     fun setGroupDirectSubfolders(enabled: Boolean) = update { copy(groupDirectSubfolders = enabled) }
@@ -469,6 +471,7 @@ class SettingsPreferences(context: Context) {
             animateGifThumbnails = prefs.getBoolean("animate_gif_thumbnails", false),
             showHiddenItems = prefs.getBoolean("show_hidden_items", false),
             photoGridSize = prefs.getFloat("photo_grid_size", 105f),
+            mosaicRowSize = prefs.getFloat("mosaic_row_size", 120f).coerceIn(56f, 260f),
             albumGridSize = prefs.getFloat("album_grid_size", 156f),
             albumsViewMode = runCatching {
                 AlbumsViewMode.valueOf(prefs.getString("albums_view_mode", null).orEmpty())
@@ -566,6 +569,7 @@ class SettingsPreferences(context: Context) {
             .putBoolean("animate_gif_thumbnails", state.animateGifThumbnails)
             .putBoolean("show_hidden_items", state.showHiddenItems)
             .putFloat("photo_grid_size", state.photoGridSize)
+            .putFloat("mosaic_row_size", state.mosaicRowSize)
             .putFloat("album_grid_size", state.albumGridSize)
             .putString("albums_view_mode", state.albumsViewMode.name)
             .putBoolean("group_direct_subfolders", state.groupDirectSubfolders)

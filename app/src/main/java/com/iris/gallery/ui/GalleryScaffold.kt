@@ -266,65 +266,87 @@ private fun BoxScope.IrisPullToRefreshIndicator(
     modifier: Modifier = Modifier,
 ) {
     var wasRefreshing by remember { mutableStateOf(false) }
-    var isDismissingInPlace by remember { mutableStateOf(false) }
-    val dismissAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
-    val dismissScale = remember { androidx.compose.animation.core.Animatable(1f) }
+    var isDismissing by remember { mutableStateOf(false) }
+    val dismissScale = remember { Animatable(1f) }
+    val dismissAlpha = remember { Animatable(1f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val thresholdPx = with(density) { PullToRefreshDefaults.PositionalThreshold.toPx() }
 
-    val restingState = remember {
-        object : PullToRefreshState {
-            override val distanceFraction: Float get() = 1f
-            override val isAnimating: Boolean get() = false
-            override suspend fun animateToThreshold() {}
-            override suspend fun animateToHidden() {}
-            override suspend fun snapTo(targetValue: Float) {}
-        }
-    }
+    // Synchronous bridge on the exact frame isRefreshing flips true -> false so there is
+    // zero 1-frame flash of the pull arrow or upward jump before LaunchedEffect runs.
+    val dismissingNow = isDismissing || (wasRefreshing && !isRefreshing)
+    val currentDismissingNow by androidx.compose.runtime.rememberUpdatedState(dismissingNow)
 
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             wasRefreshing = true
-            isDismissingInPlace = false
-            dismissAlpha.snapTo(1f)
+            isDismissing = false
             dismissScale.snapTo(1f)
+            dismissAlpha.snapTo(1f)
         } else if (wasRefreshing) {
+            isDismissing = true
             wasRefreshing = false
-            isDismissingInPlace = true
             try {
+                // Shrink smoothly to 0 around the circle's center while holding opacity crisp
+                // early in the curve so the indicator scales away cleanly instead of vanishing early.
                 kotlinx.coroutines.coroutineScope {
                     launch {
-                        dismissAlpha.animateTo(0f, tween(220, easing = LinearOutSlowInEasing))
+                        dismissScale.animateTo(
+                            targetValue = 0f,
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                        )
                     }
                     launch {
-                        dismissScale.animateTo(0.65f, tween(220, easing = LinearOutSlowInEasing))
+                        dismissAlpha.animateTo(
+                            targetValue = 0f,
+                            animationSpec = tween(
+                                durationMillis = 280,
+                                easing = androidx.compose.animation.core.FastOutLinearInEasing
+                            )
+                        )
                     }
                 }
+                // Cancel any lingering Material3 spring so the arrow never flashes back at the top edge.
+                state.snapTo(0f)
             } finally {
-                isDismissingInPlace = false
-                dismissAlpha.snapTo(1f)
+                isDismissing = false
                 dismissScale.snapTo(1f)
+                dismissAlpha.snapTo(1f)
             }
         }
     }
 
-    if (isDismissingInPlace) {
-        PullToRefreshDefaults.Indicator(
-            state = restingState,
-            isRefreshing = true,
-            modifier = modifier
-                .align(Alignment.TopCenter)
-                .graphicsLayer {
-                    alpha = dismissAlpha.value
+    val effectiveState = remember(state) {
+        object : PullToRefreshState {
+            override val distanceFraction: Float
+                get() = if (currentDismissingNow) 1f else state.distanceFraction
+            override val isAnimating: Boolean
+                get() = if (currentDismissingNow) false else state.isAnimating
+            override suspend fun animateToThreshold() = state.animateToThreshold()
+            override suspend fun animateToHidden() = state.animateToHidden()
+            override suspend fun snapTo(targetValue: Float) = state.snapTo(targetValue)
+        }
+    }
+
+    PullToRefreshDefaults.Indicator(
+        state = effectiveState,
+        isRefreshing = isRefreshing || dismissingNow,
+        modifier = modifier
+            .align(Alignment.TopCenter)
+            .graphicsLayer {
+                if (dismissingNow) {
+                    val pivotY = if (size.height > 0f) {
+                        (thresholdPx - size.height / 2f) / size.height
+                    } else {
+                        1.5f
+                    }
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, pivotY)
                     scaleX = dismissScale.value
                     scaleY = dismissScale.value
+                    alpha = dismissAlpha.value
                 }
-        )
-    } else {
-        PullToRefreshDefaults.Indicator(
-            state = state,
-            isRefreshing = isRefreshing,
-            modifier = modifier.align(Alignment.TopCenter)
-        )
-    }
+            }
+    )
 }
 
 private enum class GalleryTab(
@@ -470,6 +492,8 @@ internal fun GalleryScaffold(
     var vaultSortMenuExpanded by remember { mutableStateOf(false) }
     var librarySection by remember { mutableStateOf<String?>(if (initialMemories) "memories" else null) }
     var editorImage by remember { mutableStateOf<MediaImage?>(null) }
+    var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
+    var viewerSessionId by remember { mutableStateOf(0L) }
     var isEditingAlbumOrder by remember { mutableStateOf(false) }
     var isEditingLibraryOrder by remember { mutableStateOf(false) }
     val boundsResolvers = remember { mutableMapOf<String, (Long) -> androidx.compose.ui.geometry.Rect?>() }
@@ -509,10 +533,13 @@ internal fun GalleryScaffold(
     // so the standalone viewer can be swapped for the regular one (swipe through the library,
     // delete to trash) as soon as the item shows up in [images].
     var pendingExternalUri by remember { mutableStateOf<Uri?>(null) }
-    fun findInLibrary(uri: Uri, path: String): MediaImage? = images.firstOrNull {
-        it.uri == uri ||
-        (path.isNotBlank() && it.path == path) ||
-        it.uri.lastPathSegment == uri.lastPathSegment
+    fun findInLibrary(uri: Uri, path: String): MediaImage? {
+        val isMediaStoreUri = uri.authority == android.provider.MediaStore.AUTHORITY
+        return images.firstOrNull {
+            it.uri == uri ||
+            (path.isNotBlank() && it.path == path) ||
+            (isMediaStoreUri && !uri.lastPathSegment.isNullOrBlank() && it.uri.lastPathSegment == uri.lastPathSegment)
+        }
     }
     LaunchedEffect(initialViewUri, initialEditMode, initialOpenLatest, images, initialIntentGeneration) {
         if (handledIntentGeneration != initialIntentGeneration) {
@@ -522,33 +549,53 @@ internal fun GalleryScaffold(
                 // Mark as handled only after resolving: if [images] changes meanwhile, this effect
                 // is restarted and must not skip the intent.
                 handledIntentGeneration = initialIntentGeneration
+                activeOverlayScreen = null
                 val matched = findInLibrary(initialViewUri, resolved.path)
                 if (matched != null) {
                     if (initialEditMode) {
                         editorImage = matched
                         selectedId = null
                         externalMedia = null
-                    } else {
                         viewerImages = null
+                        activeViewerSourceKey = null
+                    } else {
+                        editorImage = null
+                        viewerImages = null
+                        activeViewerSourceKey = "external_intent"
                         selectedId = matched.id
                         externalMedia = null
+                        viewerSessionId += 1
                     }
                 } else {
                     if (initialEditMode) {
                         editorImage = resolved
                         selectedId = null
                         externalMedia = null
+                        viewerImages = null
+                        activeViewerSourceKey = null
                     } else {
+                        editorImage = null
                         externalMedia = resolved
                         selectedId = null
+                        viewerImages = null
+                        activeViewerSourceKey = "external_intent"
                         pendingExternalUri = initialViewUri
+                        viewerSessionId += 1
                     }
                 }
-            } else if (initialOpenLatest && images.isNotEmpty()) {
+            } else if (initialOpenLatest) {
+                if (images.isNotEmpty()) {
+                    handledIntentGeneration = initialIntentGeneration
+                    activeOverlayScreen = null
+                    editorImage = null
+                    viewerImages = null
+                    activeViewerSourceKey = "external_intent"
+                    selectedId = images.first().id
+                    externalMedia = null
+                    viewerSessionId += 1
+                }
+            } else {
                 handledIntentGeneration = initialIntentGeneration
-                viewerImages = null
-                selectedId = images.first().id
-                externalMedia = null
             }
         } else {
             val pendingUri = pendingExternalUri
@@ -562,19 +609,25 @@ internal fun GalleryScaffold(
                     if (matched != null) {
                         pendingExternalUri = null
                         viewerImages = null
+                        activeViewerSourceKey = "external_intent"
                         selectedId = matched.id
                         externalMedia = null
+                        viewerSessionId += 1
                     }
                 }
             }
         }
     }
     var customCellSize by remember { mutableStateOf(settings.photoGridSize.dp) }
+    var customMosaicRowSize by remember { mutableStateOf(settings.mosaicRowSize.dp) }
     var customAlbumCellSize by remember { mutableStateOf(settings.albumGridSize.dp) }
     val mediaFilter = settings.mediaFilter
 
     LaunchedEffect(settings.photoGridSize) {
         customCellSize = settings.photoGridSize.dp
+    }
+    LaunchedEffect(settings.mosaicRowSize) {
+        customMosaicRowSize = settings.mosaicRowSize.dp
     }
     LaunchedEffect(settings.albumGridSize) {
         customAlbumCellSize = settings.albumGridSize.dp
@@ -606,6 +659,14 @@ internal fun GalleryScaffold(
         customCellSize = newSize
         settingsPreferences.setPhotoGridSize(newSize.value)
     }
+    val mosaicRowSize = customMosaicRowSize
+    val onMosaicRowSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
+        customMosaicRowSize = newSize
+        settingsPreferences.setMosaicRowSize(newSize.value)
+    }
+    val isMosaicLayout = settings.photoGridLayout == com.iris.gallery.data.PhotoGridLayout.MOSAIC
+    val activeGridCellSize = if (isMosaicLayout) mosaicRowSize else photoCellSize
+    val activeOnCellSizeChange = if (isMosaicLayout) onMosaicRowSizeChange else onCellSizeChange
     val onAlbumCellSizeChange: (androidx.compose.ui.unit.Dp) -> Unit = { newSize ->
         customAlbumCellSize = newSize
         settingsPreferences.setAlbumGridSize(newSize.value)
@@ -638,7 +699,6 @@ internal fun GalleryScaffold(
             selectedFolderClusterPath = null
         }
     }
-    var activeOverlayScreen by remember { mutableStateOf<String?>(null) }
     var fileSearchQuery by remember { mutableStateOf("") }
     var isFileSearching by remember { mutableStateOf(false) }
     var albumSearchQuery by remember { mutableStateOf("") }
@@ -1719,11 +1779,6 @@ internal fun GalleryScaffold(
           when (activeTab) {
             GalleryTab.MEDIA -> {
               val pullRefreshState0 = rememberPullToRefreshState()
-              LaunchedEffect(loading) {
-                if (!loading) {
-                  pullRefreshState0.animateToHidden()
-                }
-              }
               PullToRefreshBox(
                 state = pullRefreshState0,
                 isRefreshing = loading,
@@ -1738,7 +1793,7 @@ internal fun GalleryScaffold(
               ) {
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                   if (displayedItems.isNotEmpty()) PhotoGrid(
-                    displayedItems, gridPadding, photoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                    displayedItems, gridPadding, photoGridState, cellSize = activeGridCellSize, onCellSizeChange = activeOnCellSizeChange,
                     layoutMode = settings.photoGridLayout,
                     animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
@@ -1776,11 +1831,6 @@ internal fun GalleryScaffold(
             }
             GalleryTab.ALBUMS -> {
               val pullRefreshState1 = rememberPullToRefreshState()
-              LaunchedEffect(loading) {
-                if (!loading) {
-                  pullRefreshState1.animateToHidden()
-                }
-              }
               PullToRefreshBox(
                 state = pullRefreshState1,
                 isRefreshing = loading,
@@ -1796,7 +1846,7 @@ internal fun GalleryScaffold(
                 CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                   if (selectedAlbum != null) {
                     if (displayedAlbumPhotos.isNotEmpty()) PhotoGrid(
-                      displayedAlbumPhotos, gridPadding, albumPhotoGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                      displayedAlbumPhotos, gridPadding, albumPhotoGridState, cellSize = activeGridCellSize, onCellSizeChange = activeOnCellSizeChange,
                       layoutMode = settings.photoGridLayout,
                       animateGifThumbnails = settings.animateGifThumbnails,
                       showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
@@ -1886,8 +1936,8 @@ internal fun GalleryScaffold(
                             images = trashed,
                             padding = padding,
                             gridState = libraryGridState,
-                            cellSize = photoCellSize,
-                            onCellSizeChange = onCellSizeChange,
+                            cellSize = activeGridCellSize,
+                            onCellSizeChange = activeOnCellSizeChange,
                             layoutMode = settings.photoGridLayout,
                             animateGifThumbnails = settings.animateGifThumbnails,
                             cornerStyle = settings.cornerStyle,
@@ -1923,8 +1973,8 @@ internal fun GalleryScaffold(
                             settings = settings,
                             padding = padding,
                             gridState = libraryGridState,
-                            cellSize = photoCellSize,
-                            onCellSizeChange = onCellSizeChange,
+                            cellSize = activeGridCellSize,
+                            onCellSizeChange = activeOnCellSizeChange,
                             selectedIds = selectedIds,
                             favorites = favorites,
                             onToggleSelection = ::toggleSelection,
@@ -2000,7 +2050,7 @@ internal fun GalleryScaffold(
                                 }
 
                                 if (memories.isEmpty()) EmptyState(stringResource(R.string.empty_memories), PaddingValues(0.dp)) else PhotoGrid(
-                                    memories, PaddingValues(0.dp), libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange, showTimeline = true,
+                                    memories, PaddingValues(0.dp), libraryGridState, cellSize = activeGridCellSize, onCellSizeChange = activeOnCellSizeChange, showTimeline = true,
                                     layoutMode = settings.photoGridLayout,
                                     animateGifThumbnails = settings.animateGifThumbnails,
                                     timelineDateFormat = settings.timelineDateFormat,
@@ -2103,8 +2153,8 @@ internal fun GalleryScaffold(
                                             images = currentFiltered,
                                             padding = PaddingValues(0.dp),
                                             gridState = libraryGridState,
-                                            cellSize = photoCellSize,
-                                            onCellSizeChange = onCellSizeChange,
+                                            cellSize = activeGridCellSize,
+                                            onCellSizeChange = activeOnCellSizeChange,
                                             layoutMode = settings.photoGridLayout,
                                             animateGifThumbnails = settings.animateGifThumbnails,
                                             cornerStyle = settings.cornerStyle,
@@ -2185,8 +2235,8 @@ internal fun GalleryScaffold(
                     images = displayedFavoritePhotos,
                     padding = padding,
                     gridState = favoriteGridState,
-                    cellSize = photoCellSize,
-                    onCellSizeChange = onCellSizeChange,
+                    cellSize = activeGridCellSize,
+                    onCellSizeChange = activeOnCellSizeChange,
                     layoutMode = settings.photoGridLayout,
                     animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
@@ -2226,8 +2276,8 @@ internal fun GalleryScaffold(
                     settings = settings,
                     padding = padding,
                     gridState = libraryGridState,
-                    cellSize = photoCellSize,
-                    onCellSizeChange = onCellSizeChange,
+                    cellSize = activeGridCellSize,
+                    onCellSizeChange = activeOnCellSizeChange,
                     selectedIds = selectedIds,
                     favorites = favorites,
                     onToggleSelection = ::toggleSelection,
@@ -2955,6 +3005,7 @@ internal fun GalleryScaffold(
     BackHandler(enabled = externalMedia != null) { externalMedia = null }
 
     externalMedia?.let { media ->
+        androidx.compose.runtime.key(viewerSessionId, media.uri) {
         PhotoViewer(
             images = listOf(media),
             initialPage = 0,
@@ -3043,13 +3094,16 @@ internal fun GalleryScaffold(
             getAlbumDir = getAlbumDir,
             createAlbumDir = createAlbumDir,
         )
+        }
     }
 
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
         val index = activeImages.indexOfFirst { it.id == id }
-        val isViewingLocked = isVaultActive
-        val isViewingTrash = destination == 3 && librarySection == "trash"
+        val isViewingLocked = activeViewerSourceKey == "vault" || activeViewerSourceKey == "vault_tab" ||
+            (activeViewerSourceKey == null && isVaultActive)
+        val isViewingTrash = activeViewerSourceKey == "trash" ||
+            (activeViewerSourceKey == null && destination == 3 && librarySection == "trash")
         val removeViewerItemAndAdvance: (MediaImage) -> Unit = { media ->
             val activeList = viewerImages ?: images
             val currentIndex = activeList.indexOfFirst { it.id == media.id }
@@ -3061,7 +3115,7 @@ internal fun GalleryScaffold(
             selectedId = nextImage?.id
             viewerImages = viewerImages?.filterNot { it.id == media.id }
         }
-        if (index >= 0 && activeImages.isNotEmpty()) PhotoViewer(
+        if (index >= 0 && activeImages.isNotEmpty()) androidx.compose.runtime.key(viewerSessionId) { PhotoViewer(
             images = activeImages,
             initialPage = index,
             favorites = favorites,
@@ -3174,7 +3228,7 @@ internal fun GalleryScaffold(
             getAlbumDir = getAlbumDir,
             createAlbumDir = createAlbumDir,
             resolveTargetRect = { mediaId -> activeViewerSourceKey?.let { boundsResolvers[it]?.invoke(mediaId) } },
-        )
+        ) }
     }
     AnimatedVisibility(
         visible = editorImage != null,
@@ -3312,6 +3366,7 @@ internal fun GalleryScaffold(
                 onAddExcludedFolder = onAddExcludedFolder,
                 onOpenAbout = { activeOverlayScreen = "about" },
                 onRescanMedia = onRescanMedia,
+                onToggleShowHiddenItems = onToggleShowHiddenItems,
                 onBack = { activeOverlayScreen = null }
             )
         }

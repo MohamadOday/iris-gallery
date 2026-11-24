@@ -669,6 +669,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             repository.clearVerifiedPathsCache()
         }
         refreshJob = viewModelScope.launch {
+            if (showLoading) {
+                _uiState.update { it.copy(loading = true, error = null) }
+            }
             try {
                 kotlinx.coroutines.withTimeout(120_000) {
                     // Index loads touch storage and take the repo index lock, so keep them off the main thread.

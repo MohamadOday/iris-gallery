@@ -176,6 +176,7 @@ fun SettingsScreen(
     onAddExcludedFolder: (String) -> Unit = {},
     onOpenAbout: () -> Unit = {},
     onRescanMedia: () -> Unit = {},
+    onToggleShowHiddenItems: (Boolean) -> Unit = { preferences.setShowHiddenItems(it) },
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -372,7 +373,8 @@ fun SettingsScreen(
         val spacingRelaxed = stringResource(R.string.settings_spacing_relaxed)
         val showGridSpacing = layoutSectionMatch || matches(gridSpacingTitle, spacingCompact, spacingStandard, spacingRelaxed)
         val photosTileTitle = stringResource(R.string.settings_photos_tile_size)
-        val showPhotosTileSize = layoutSectionMatch || matches(photosTileTitle)
+        val showPhotosTileSize = settings.photoGridLayout == com.iris.gallery.data.PhotoGridLayout.GRID &&
+            (layoutSectionMatch || matches(photosTileTitle))
         val albumsTileTitle = stringResource(R.string.settings_albums_tile_size)
         val showAlbumsTileSize = layoutSectionMatch || matches(albumsTileTitle)
 
@@ -2022,7 +2024,7 @@ fun SettingsScreen(
                             title = showHiddenItemsTitle,
                             subtitle = showHiddenItemsDesc,
                             checked = settings.showHiddenItems,
-                            onCheckedChange = { preferences.setShowHiddenItems(it) }
+                            onCheckedChange = onToggleShowHiddenItems
                         )
                     }
                 }

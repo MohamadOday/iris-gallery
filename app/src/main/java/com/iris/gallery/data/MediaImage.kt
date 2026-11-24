@@ -1023,7 +1023,7 @@ fun resolveMediaUri(context: Context, uri: Uri): MediaImage {
     val physicalPath = resolvePhysicalPath(context, uri)
     val physicalFile = physicalPath?.let { File(it) }?.takeIf { it.exists() }
 
-    var mimeType = cr.getType(uri)
+    var mimeType = runCatching { cr.getType(uri) }.getOrNull()
     if (mimeType.isNullOrBlank()) {
         val extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(uri.toString())
             .ifBlank { uri.path.orEmpty().substringAfterLast('.', "") }

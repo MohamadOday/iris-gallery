@@ -505,13 +505,15 @@ internal fun GalleryApp(
     var standaloneExternalMedia by remember { mutableStateOf<MediaImage?>(null) }
     var standaloneEditorMedia by remember { mutableStateOf<MediaImage?>(null) }
 
-    LaunchedEffect(initialViewUri, initialEditMode, permitted) {
+    LaunchedEffect(initialViewUri, initialEditMode, permitted, initialIntentGeneration) {
         if (!permitted && initialViewUri != null) {
             val resolved = withContext(Dispatchers.IO) { resolveMediaUri(context, initialViewUri) }
             if (initialEditMode) {
                 standaloneEditorMedia = resolved
+                standaloneExternalMedia = null
             } else {
                 standaloneExternalMedia = resolved
+                standaloneEditorMedia = null
             }
         }
     }
@@ -545,6 +547,7 @@ internal fun GalleryApp(
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             })
         } else if (standaloneExternalMedia != null) {
+            androidx.compose.runtime.key(standaloneExternalMedia!!.uri, initialIntentGeneration) {
             PhotoViewer(
                 images = listOf(standaloneExternalMedia!!),
                 initialPage = 0,
@@ -602,6 +605,7 @@ internal fun GalleryApp(
                 onMoveToAlbum = { _, _, _, cb -> cb(AlbumOperationResult(0, 0, "", AlbumAction.MOVE)) },
                 onCopyToAlbum = { _, _, _, cb -> cb(AlbumOperationResult(0, 0, "", AlbumAction.COPY)) },
             )
+            }
         } else {
             PermissionScreen { permissionLauncher.launch(permissions) }
         }
@@ -657,6 +661,7 @@ internal fun GalleryApp(
                         .filterNot { img -> isPathExcluded(img.path, libraryState.excludedFolders) }
                 }
                 var showHiddenAccessDialog by remember { mutableStateOf(false) }
+                var awaitingHiddenAllFilesAccessGrant by remember { mutableStateOf(false) }
                 val allLockedMedia = remember(vaultMedia, state.images, libraryState.lockedMedia) {
                     val galleryLocked = state.images.filter { it.id in libraryState.lockedMedia }
                     vaultMedia + galleryLocked
@@ -782,6 +787,13 @@ internal fun GalleryApp(
                                 pendingVaultItems = null
                                 pendingVaultItemsCallback = null
                                 executeVaultMove(pending, cb)
+                            }
+                        }
+                        if (event == Lifecycle.Event.ON_RESUME && awaitingHiddenAllFilesAccessGrant) {
+                            awaitingHiddenAllFilesAccessGrant = false
+                            if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                                settingsPreferences.setShowHiddenItems(true)
+                                viewModel.refreshHiddenMedia()
                             }
                         }
                     }
@@ -951,7 +963,6 @@ internal fun GalleryApp(
                         onRemoveAlbumFromGroup = viewModel::removeAlbumFromGroup,
                         onToggleShowHiddenItems = { show ->
                             if (show && Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
-                                settingsPreferences.setShowHiddenItems(true)
                                 showHiddenAccessDialog = true
                             } else {
                                 settingsPreferences.setShowHiddenItems(show)
@@ -1466,6 +1477,7 @@ internal fun GalleryApp(
                         confirmButton = {
                             Button(onClick = {
                                 showHiddenAccessDialog = false
+                                awaitingHiddenAllFilesAccessGrant = true
                                 val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                                     data = Uri.parse("package:${context.packageName}")
                                 }
