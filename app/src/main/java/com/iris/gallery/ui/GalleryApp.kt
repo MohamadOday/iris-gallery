@@ -320,6 +320,7 @@ internal fun GalleryApp(
                 if (!isVaultAuthInProgress) {
                     lockedAuthorized = false
                 }
+                viewModel.flushPendingAutoBackup()
             } else if (event == Lifecycle.Event.ON_RESUME) {
                 if (permitted) {
                     viewModel.checkForChanges()
@@ -527,6 +528,7 @@ internal fun GalleryApp(
     }
     LaunchedEffect(Unit) {
         MemoriesNotifications.scheduleFromSettings(context)
+        com.iris.gallery.data.AutoBackupScheduler.scheduleFromSettings(context)
         if (settings.memoriesNotificationEnabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
                 Manifest.permission.POST_NOTIFICATIONS) != PermissionChecker.PERMISSION_GRANTED) {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -1398,6 +1400,14 @@ internal fun GalleryApp(
                         getAlbumDir = viewModel::getAlbumDirectory,
                         createAlbumDir = viewModel::createNewAlbumDirectory,
                         onRefresh = { viewModel.refresh(showLoading = true, forceClearCache = true, rescanStorage = true) },
+                        onExportBackupJson = viewModel::exportBackupJson,
+                        onParseBackupPreview = viewModel::parseBackupPreview,
+                        onImportBackupJson = { raw -> viewModel.importBackupJson(raw) },
+                        onRunAutoBackupNow = { viewModel.runAutoBackupNow(force = true) },
+                        vaultFileCount = vaultMedia.size,
+                        vaultTotalBytes = vaultMedia.sumOf { it.sizeBytes },
+                        onExportVaultBackup = viewModel::exportEncryptedVaultBackup,
+                        onImportVaultBackup = viewModel::importEncryptedVaultBackup,
                         onRenameMedia = { media, newName, callback ->
                             viewModel.renameMedia(media, newName) { updated ->
                                 if (updated != null) {

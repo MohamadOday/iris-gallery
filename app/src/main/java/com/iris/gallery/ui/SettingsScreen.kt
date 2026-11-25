@@ -49,18 +49,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.provider.DocumentsContract
 import java.io.File
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.LocationOff
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
@@ -69,7 +72,10 @@ import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.ViewDay
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -80,7 +86,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -177,9 +186,15 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit = {},
     onRescanMedia: () -> Unit = {},
     onToggleShowHiddenItems: (Boolean) -> Unit = { preferences.setShowHiddenItems(it) },
+    backupActions: BackupSettingsActions = BackupSettingsActions(),
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val backupController = rememberBackupSettingsController(
+        settings = settings,
+        preferences = preferences,
+        actions = backupActions,
+    )
     var showResetDialog by remember { mutableStateOf(false) }
     var showSetPinDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
@@ -545,6 +560,20 @@ fun SettingsScreen(
 
         val storageSectionTitle = stringResource(R.string.settings_section_storage)
         val storageSectionMatch = matches(storageSectionTitle)
+        val showBackupRestore = storageSectionMatch || matches(
+            stringResource(R.string.settings_backup_title),
+            stringResource(R.string.settings_backup_desc),
+            stringResource(R.string.settings_backup_export),
+            stringResource(R.string.settings_backup_import),
+            stringResource(R.string.settings_auto_backup_title),
+            stringResource(R.string.settings_auto_backup_desc),
+        )
+        val showVaultBackup = storageSectionMatch || matches(
+            stringResource(R.string.settings_vault_backup_title),
+            stringResource(R.string.settings_vault_backup_desc),
+            stringResource(R.string.settings_vault_backup_export),
+            stringResource(R.string.settings_vault_backup_import),
+        )
         val rescanMediaLabel = stringResource(R.string.settings_rescan_media)
         val excludedFoldersLabel = stringResource(R.string.excluded_folders_title)
         val clearCacheLabel = stringResource(R.string.settings_clear_cache)
@@ -568,7 +597,7 @@ fun SettingsScreen(
             showStartupTab || showPreferredEditor || showOverwrite
         val hasAnyPrivacySecurity = showAppLock || showHideVault || showStorageAccess || showSilentVault ||
             showVaultBio || showConfirmDelete || showDeleteMode || showSystemTrash || showSecureSharing
-        val hasAnyStorage = showRescanMedia || showExcludedFoldersBtn || showClearCache || showResetAll
+        val hasAnyStorage = showBackupRestore || showVaultBackup || showRescanMedia || showExcludedFoldersBtn || showClearCache || showResetAll
         val hasAnyMatches = showLanguageSection || hasAnyAppearance || hasAnyLayout ||
             hasAnyBadges || hasAnyViewer || showMemories || hasAnyNavBehavior ||
             hasAnyPrivacySecurity || hasAnyStorage || showAboutSection
@@ -2443,6 +2472,23 @@ fun SettingsScreen(
             }
         }
 
+        if (showBackupRestore) {
+            item {
+                BackupAndRestoreCard(
+                    settings = settings,
+                    preferences = preferences,
+                    controller = backupController,
+                )
+            }
+        }
+
+        if (showVaultBackup) {
+            item {
+                EncryptedVaultBackupCard(controller = backupController)
+            }
+        }
+
+        if (showRescanMedia || showExcludedFoldersBtn || showClearCache || showResetAll) {
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -2495,6 +2541,7 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
         }
         }
 
@@ -2596,9 +2643,15 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val previousLanguage = settings.language
                         preferences.resetToDefaults()
+                        com.iris.gallery.MemoriesNotifications.scheduleFromSettings(context)
+                        com.iris.gallery.IrisPhotoWidget.refreshAll(context)
                         showResetDialog = false
                         Toast.makeText(context, context.getString(R.string.toast_settings_reset), Toast.LENGTH_SHORT).show()
+                        if (previousLanguage.isNotEmpty()) {
+                            setAppLanguage(context, "")
+                        }
                     }
                 ) {
                     Text(stringResource(R.string.settings_reset_confirm))
@@ -3122,7 +3175,7 @@ private fun SettingsSectionHeader(icon: ImageVector, title: String) {
 }
 
 @Composable
-private fun SettingsSwitchRow(
+internal fun SettingsSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,

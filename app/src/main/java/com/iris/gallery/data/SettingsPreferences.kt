@@ -23,6 +23,7 @@ val ALL_SELECTION_PILL_ACTIONS = listOf("share", "move", "copy", "favorite", "lo
 enum class PreferredEditor { ALWAYS_ASK, BUILT_IN, EXTERNAL }
 enum class DeleteMode { TRASH, PERMANENT, ALWAYS_ASK }
 enum class AlbumPickerSort { FOLLOW_ALBUMS, RECENT, NAME }
+enum class AutoBackupFrequency { ON_CHANGE, DAILY, WEEKLY }
 
 enum class TimelineDateFormat {
     SYSTEM_DEFAULT,
@@ -210,6 +211,15 @@ data class SettingsState(
     val dismissedMemoriesTip: Boolean = false,
     val secureSharingMode: SecureSharingMode = SecureSharingMode.OFF,
     val dismissedSecureSharingTip: Boolean = false,
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupTreeUri: String = "",
+    val autoBackupFolderLabel: String = "",
+    val autoBackupFrequency: AutoBackupFrequency = AutoBackupFrequency.ON_CHANGE,
+    val autoBackupRetention: Int = 1,
+    val lastAutoBackupTimestamp: Long = 0L,
+    val lastAutoBackupError: String = "",
+    val lastAutoBackupHash: String = "",
+    val autoBackupConsecutiveFailures: Int = 0,
 ) {
     val hasPin: Boolean get() = appLockPinHash.isNotEmpty()
 }
@@ -328,6 +338,44 @@ class SettingsPreferences(context: Context) {
     fun setDismissedMemoriesTip(dismissed: Boolean) = update { copy(dismissedMemoriesTip = dismissed) }
     fun setSecureSharingMode(mode: SecureSharingMode) = update { copy(secureSharingMode = mode) }
     fun setDismissedSecureSharingTip(dismissed: Boolean) = update { copy(dismissedSecureSharingTip = dismissed) }
+    fun setAutoBackupEnabled(enabled: Boolean) = update {
+        copy(
+            autoBackupEnabled = enabled,
+            lastAutoBackupError = if (!enabled) "" else lastAutoBackupError,
+            autoBackupConsecutiveFailures = if (!enabled) 0 else autoBackupConsecutiveFailures,
+        )
+    }
+    fun setAutoBackupFolder(treeUri: String, label: String, enableIfBlank: Boolean = true) = update {
+        copy(
+            autoBackupTreeUri = treeUri,
+            autoBackupFolderLabel = label,
+            autoBackupEnabled = if (treeUri.isBlank()) false else (enableIfBlank || autoBackupEnabled),
+            lastAutoBackupError = "",
+            lastAutoBackupHash = "",
+            autoBackupConsecutiveFailures = 0,
+        )
+    }
+    fun setAutoBackupFrequency(frequency: AutoBackupFrequency) = update { copy(autoBackupFrequency = frequency) }
+    fun setAutoBackupRetention(count: Int) = update { copy(autoBackupRetention = count.coerceIn(1, 30)) }
+    fun recordAutoBackupSuccess(timestamp: Long, contentHash: String) = update {
+        copy(
+            lastAutoBackupTimestamp = timestamp,
+            lastAutoBackupError = "",
+            lastAutoBackupHash = contentHash,
+            autoBackupConsecutiveFailures = 0,
+        )
+    }
+    fun recordAutoBackupFailure(error: String): Int {
+        var failures = 0
+        update {
+            failures = autoBackupConsecutiveFailures + 1
+            copy(
+                lastAutoBackupError = error,
+                autoBackupConsecutiveFailures = failures,
+            )
+        }
+        return failures
+    }
 
     /** PBKDF2 iteration count for new PIN hashes. */
     private val pinPbkdf2Iterations = 120_000
@@ -432,14 +480,48 @@ class SettingsPreferences(context: Context) {
 
     fun resetToDefaults() {
         synchronized(sharedLock) {
-            val security = _state.value
+            val current = _state.value
             val reset = SettingsState().copy(
-                appLockPinHash = security.appLockPinHash,
-                appLockPinSalt = security.appLockPinSalt,
-                appLockEnabled = security.appLockEnabled,
+                appLockPinHash = current.appLockPinHash,
+                appLockPinSalt = current.appLockPinSalt,
+                appLockEnabled = current.appLockEnabled,
+                autoBackupEnabled = current.autoBackupEnabled,
+                autoBackupTreeUri = current.autoBackupTreeUri,
+                autoBackupFolderLabel = current.autoBackupFolderLabel,
+                autoBackupFrequency = current.autoBackupFrequency,
+                autoBackupRetention = current.autoBackupRetention,
+                lastAutoBackupTimestamp = current.lastAutoBackupTimestamp,
+                lastAutoBackupError = current.lastAutoBackupError,
+                lastAutoBackupHash = current.lastAutoBackupHash,
+                autoBackupConsecutiveFailures = current.autoBackupConsecutiveFailures,
             )
             _state.value = reset
             write(reset)
+        }
+    }
+
+    fun restoreFromBackup(restored: SettingsState) {
+        synchronized(sharedLock) {
+            val current = _state.value
+            val merged = restored.copy(
+                appLockPinHash = current.appLockPinHash,
+                appLockPinSalt = current.appLockPinSalt,
+                appLockEnabled = current.appLockEnabled,
+                appLockFailedAttempts = current.appLockFailedAttempts,
+                appLockLockoutUntil = current.appLockLockoutUntil,
+                firstLaunchLanguageSetupDone = current.firstLaunchLanguageSetupDone,
+                autoBackupEnabled = current.autoBackupEnabled,
+                autoBackupTreeUri = current.autoBackupTreeUri,
+                autoBackupFolderLabel = current.autoBackupFolderLabel,
+                autoBackupFrequency = current.autoBackupFrequency,
+                autoBackupRetention = current.autoBackupRetention,
+                lastAutoBackupTimestamp = current.lastAutoBackupTimestamp,
+                lastAutoBackupError = current.lastAutoBackupError,
+                lastAutoBackupHash = current.lastAutoBackupHash,
+                autoBackupConsecutiveFailures = current.autoBackupConsecutiveFailures,
+            )
+            _state.value = merged
+            write(merged)
         }
     }
 
@@ -555,6 +637,17 @@ class SettingsPreferences(context: Context) {
             dismissedMemoriesTip = prefs.getBoolean("dismissed_memories_tip", false),
             secureSharingMode = runCatching { SecureSharingMode.valueOf(prefs.getString("secure_sharing_mode", null).orEmpty()) }.getOrDefault(SecureSharingMode.OFF),
             dismissedSecureSharingTip = prefs.getBoolean("dismissed_secure_sharing_tip", false),
+            autoBackupEnabled = prefs.getBoolean("auto_backup_enabled", false),
+            autoBackupTreeUri = prefs.getString("auto_backup_tree_uri", "").orEmpty(),
+            autoBackupFolderLabel = prefs.getString("auto_backup_folder_label", "").orEmpty(),
+            autoBackupFrequency = runCatching {
+                AutoBackupFrequency.valueOf(prefs.getString("auto_backup_frequency", null).orEmpty())
+            }.getOrDefault(AutoBackupFrequency.ON_CHANGE),
+            autoBackupRetention = prefs.getInt("auto_backup_retention", 1).coerceIn(1, 30),
+            lastAutoBackupTimestamp = prefs.getLong("last_auto_backup_timestamp", 0L),
+            lastAutoBackupError = prefs.getString("last_auto_backup_error", "").orEmpty(),
+            lastAutoBackupHash = prefs.getString("last_auto_backup_hash", "").orEmpty(),
+            autoBackupConsecutiveFailures = prefs.getInt("auto_backup_consecutive_failures", 0).coerceAtLeast(0),
         )
     }
 
@@ -637,6 +730,15 @@ class SettingsPreferences(context: Context) {
             .putBoolean("dismissed_memories_tip", state.dismissedMemoriesTip)
             .putString("secure_sharing_mode", state.secureSharingMode.name)
             .putBoolean("dismissed_secure_sharing_tip", state.dismissedSecureSharingTip)
+            .putBoolean("auto_backup_enabled", state.autoBackupEnabled)
+            .putString("auto_backup_tree_uri", state.autoBackupTreeUri)
+            .putString("auto_backup_folder_label", state.autoBackupFolderLabel)
+            .putString("auto_backup_frequency", state.autoBackupFrequency.name)
+            .putInt("auto_backup_retention", state.autoBackupRetention)
+            .putLong("last_auto_backup_timestamp", state.lastAutoBackupTimestamp)
+            .putString("last_auto_backup_error", state.lastAutoBackupError)
+            .putString("last_auto_backup_hash", state.lastAutoBackupHash)
+            .putInt("auto_backup_consecutive_failures", state.autoBackupConsecutiveFailures)
             .apply()
     }
 }

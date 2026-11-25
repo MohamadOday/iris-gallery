@@ -141,5 +141,8 @@ class MemoriesReceiver : BroadcastReceiver() {
 }
 
 class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) = MemoriesNotifications.scheduleFromSettings(context)
+    override fun onReceive(context: Context, intent: Intent) {
+        MemoriesNotifications.scheduleFromSettings(context)
+        com.iris.gallery.data.AutoBackupScheduler.scheduleFromSettings(context)
+    }
 }

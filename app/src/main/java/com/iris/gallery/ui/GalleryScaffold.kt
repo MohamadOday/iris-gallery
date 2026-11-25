@@ -423,6 +423,14 @@ internal fun GalleryScaffold(
     onCancelDuplicateScan: () -> Unit,
     onRefresh: () -> Unit = {},
     onRescanMedia: () -> Unit = {},
+    onExportBackupJson: () -> String = { "" },
+    onParseBackupPreview: (String) -> Result<com.iris.gallery.data.BackupPreview> = { Result.failure(IllegalStateException("Backup unavailable")) },
+    onImportBackupJson: suspend (String) -> Result<com.iris.gallery.data.BackupRestoreSummary> = { Result.failure(IllegalStateException("Backup unavailable")) },
+    onRunAutoBackupNow: suspend () -> Result<String> = { Result.failure(IllegalStateException("Backup unavailable")) },
+    vaultFileCount: Int = 0,
+    vaultTotalBytes: Long = 0L,
+    onExportVaultBackup: suspend (Uri, CharArray, (Int, Int) -> Unit) -> Result<com.iris.gallery.data.VaultBackupExportResult> = { _, _, _ -> Result.failure(IllegalStateException("Vault backup unavailable")) },
+    onImportVaultBackup: suspend (Uri, CharArray, (Int, Int) -> Unit) -> Result<com.iris.gallery.data.VaultBackupImportResult> = { _, _, _ -> Result.failure(IllegalStateException("Vault backup unavailable")) },
     onRenameMedia: (MediaImage, String, (MediaImage?) -> Unit) -> Unit = { _, _, _ -> },
     excludedFolders: Set<String> = emptySet(),
     onAddExcludedFolder: (String) -> Unit = {},
@@ -3367,6 +3375,18 @@ internal fun GalleryScaffold(
                 onOpenAbout = { activeOverlayScreen = "about" },
                 onRescanMedia = onRescanMedia,
                 onToggleShowHiddenItems = onToggleShowHiddenItems,
+                backupActions = BackupSettingsActions(
+                    onExportBackupJson = onExportBackupJson,
+                    onParseBackupPreview = onParseBackupPreview,
+                    onImportBackupJson = onImportBackupJson,
+                    onRunAutoBackupNow = onRunAutoBackupNow,
+                    vaultFileCount = vaultFileCount,
+                    vaultTotalBytes = vaultTotalBytes,
+                    lockedAuthorized = lockedAuthorized,
+                    onRequestUnlock = onRequestUnlock,
+                    onExportVaultBackup = onExportVaultBackup,
+                    onImportVaultBackup = onImportVaultBackup,
+                ),
                 onBack = { activeOverlayScreen = null }
             )
         }

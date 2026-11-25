@@ -191,6 +191,34 @@ class LibraryPreferences(context: Context) {
         }
     }
 
+    fun getAllCustomTitles(): Map<Long, String> = buildMap {
+        for ((key, value) in prefs.all) {
+            if (!key.startsWith("title_")) continue
+            val mediaId = key.removePrefix("title_").toLongOrNull() ?: continue
+            val text = (value as? String)?.trim().orEmpty()
+            if (text.isNotEmpty()) put(mediaId, text)
+        }
+    }
+
+    fun restoreFromBackup(restored: LibraryPreferencesState, customTitles: Map<Long, String>) {
+        val merged = restored.copy(lockedMedia = _state.value.lockedMedia)
+        _state.value = merged
+        val editor = prefs.edit()
+        for (key in prefs.all.keys) {
+            if (key.startsWith("title_")) {
+                editor.remove(key)
+            }
+        }
+        for ((mediaId, title) in customTitles) {
+            val clean = title.trim()
+            if (clean.isNotEmpty()) {
+                editor.putString("title_$mediaId", clean)
+            }
+        }
+        editor.apply()
+        write(merged)
+    }
+
     private fun update(transform: LibraryPreferencesState.() -> LibraryPreferencesState) {
         _state.value = _state.value.transform()
         write(_state.value)

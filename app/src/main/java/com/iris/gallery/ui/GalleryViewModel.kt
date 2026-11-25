@@ -76,6 +76,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private var duplicateJob: Job? = null
     private val _duplicateState = MutableStateFlow(DuplicateScanState())
     val duplicateState: StateFlow<DuplicateScanState> = _duplicateState.asStateFlow()
+    private var autoBackupDebounceJob: Job? = null
+    @Volatile
+    private var autoBackupDirty = false
+    @Volatile
+    private var suppressAutoBackupUntilMs = 0L
 
     init {
         viewModelScope.launch {
@@ -97,6 +102,40 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     _hiddenMedia.value = emptyList()
                 }
             }
+        }
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsPreferences.state.map {
+                    it.copy(
+                        lastAutoBackupTimestamp = 0L,
+                        lastAutoBackupError = "",
+                        lastAutoBackupHash = "",
+                        autoBackupConsecutiveFailures = 0,
+                        appLockFailedAttempts = 0,
+                        appLockLockoutUntil = 0L,
+                        dismissedFilmstripTip = false,
+                        dismissedRotateTip = false,
+                        dismissedMemoriesTip = false,
+                        dismissedSecureSharingTip = false,
+                    )
+                }.distinctUntilChanged(),
+                libraryPreferences.state.map { it.copy(lockedMedia = emptySet()) }.distinctUntilChanged(),
+                _favorites,
+            ) { settings, _, _ -> settings }
+                .drop(1)
+                .collect { settings ->
+                    if (System.currentTimeMillis() < suppressAutoBackupUntilMs) return@collect
+                    if (!settings.autoBackupEnabled || settings.autoBackupTreeUri.isBlank()) return@collect
+                    if (settings.autoBackupFrequency != com.iris.gallery.data.AutoBackupFrequency.ON_CHANGE) return@collect
+                    autoBackupDirty = true
+                    autoBackupDebounceJob?.cancel()
+                    autoBackupDebounceJob = viewModelScope.launch {
+                        delay(6_000)
+                        if (autoBackupDirty) {
+                            runAutoBackupNow(force = false)
+                        }
+                    }
+                }
         }
         viewModelScope.launch {
             // Adopt vault files that were copied but never made it into the index.
@@ -278,6 +317,153 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
         _favorites.value = updated
         preferences.edit().putStringSet("favorites", updated.mapTo(mutableSetOf()) { it.toString() }).apply()
+    }
+
+    suspend fun exportEncryptedVaultBackup(
+        outputUri: Uri,
+        password: CharArray,
+        onProgress: (Int, Int) -> Unit,
+    ): Result<com.iris.gallery.data.VaultBackupExportResult> {
+        return vaultRepository.exportEncryptedBackup(outputUri, password, onProgress)
+    }
+
+    suspend fun importEncryptedVaultBackup(
+        inputUri: Uri,
+        password: CharArray,
+        onProgress: (Int, Int) -> Unit,
+    ): Result<com.iris.gallery.data.VaultBackupImportResult> {
+        return vaultRepository.importEncryptedBackup(inputUri, password, onProgress)
+    }
+
+    fun exportBackupJson(): String {
+        return com.iris.gallery.data.BackupManager.buildBackupJson(
+            settings = settingsPreferences.state.value,
+            library = libraryPreferences.state.value,
+            customTitles = libraryPreferences.getAllCustomTitles(),
+            favorites = _favorites.value,
+            images = _uiState.value.images,
+        )
+    }
+
+    fun parseBackupPreview(rawJson: String): Result<com.iris.gallery.data.BackupPreview> {
+        return com.iris.gallery.data.BackupManager.parseBackupPreview(rawJson)
+    }
+
+    suspend fun importBackupJson(rawJson: String): Result<com.iris.gallery.data.BackupRestoreSummary> = withContext(Dispatchers.Default) {
+        val imagesForMatching = _uiState.value.images.ifEmpty {
+            withContext(Dispatchers.IO) {
+                repository.loadSnapshot().ifEmpty { runCatching { repository.loadImages() }.getOrDefault(emptyList()) }
+            }
+        }
+        val result = com.iris.gallery.data.BackupManager.restoreFromJson(
+            rawJson = rawJson,
+            currentSettings = settingsPreferences.state.value,
+            currentLibrary = libraryPreferences.state.value,
+            images = imagesForMatching,
+            hasAllFilesAccess = hasAllFilesAccess(),
+        )
+        result.map { payload ->
+            suppressAutoBackupUntilMs = System.currentTimeMillis() + 2_000L
+            autoBackupDirty = false
+            autoBackupDebounceJob?.cancel()
+            settingsPreferences.restoreFromBackup(payload.settings)
+            libraryPreferences.restoreFromBackup(payload.library, payload.customTitles)
+            _favorites.value = payload.favorites
+            preferences.edit()
+                .putStringSet("favorites", payload.favorites.mapTo(mutableSetOf()) { it.toString() })
+                .apply()
+            payload.summary
+        }
+    }
+
+    suspend fun runAutoBackupNow(force: Boolean = true): Result<String> = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val settings = settingsPreferences.state.value
+        if (settings.autoBackupTreeUri.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("No backup folder selected"))
+        }
+        val built = com.iris.gallery.data.BackupManager.buildBackup(
+            settings = settings,
+            library = libraryPreferences.state.value,
+            customTitles = libraryPreferences.getAllCustomTitles(),
+            favorites = _favorites.value,
+            images = _uiState.value.images,
+        )
+        val writeResult = com.iris.gallery.data.AutoBackupManager.writeBackupToFolder(
+            context = app,
+            treeUriString = settings.autoBackupTreeUri,
+            json = built.json,
+            retentionCount = settings.autoBackupRetention,
+            contentHash = built.contentHash,
+            previousHash = settings.lastAutoBackupHash,
+            skipIfUnchanged = !force,
+        )
+        writeResult
+            .onSuccess { outcome ->
+                autoBackupDirty = false
+                val timestamp = if (outcome.skippedUnchanged && settings.lastAutoBackupTimestamp > 0L) {
+                    settings.lastAutoBackupTimestamp
+                } else {
+                    System.currentTimeMillis()
+                }
+                settingsPreferences.recordAutoBackupSuccess(
+                    timestamp = timestamp,
+                    contentHash = built.contentHash,
+                )
+            }
+            .onFailure { err ->
+                val failures = settingsPreferences.recordAutoBackupFailure(err.message ?: "Backup failed")
+                com.iris.gallery.data.AutoBackupManager.notifyFailureIfNeeded(app, failures)
+            }
+        writeResult.map { it.fileName }
+    }
+
+    fun flushPendingAutoBackup() {
+        if (!autoBackupDirty) return
+        val settings = settingsPreferences.state.value
+        if (!settings.autoBackupEnabled || settings.autoBackupTreeUri.isBlank()) {
+            autoBackupDirty = false
+            return
+        }
+        autoBackupDebounceJob?.cancel()
+        autoBackupDirty = false
+        val app = getApplication<Application>()
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            val currentSettings = settingsPreferences.state.value
+            if (!currentSettings.autoBackupEnabled || currentSettings.autoBackupTreeUri.isBlank()) return@launch
+            val built = com.iris.gallery.data.BackupManager.buildBackup(
+                settings = currentSettings,
+                library = libraryPreferences.state.value,
+                customTitles = libraryPreferences.getAllCustomTitles(),
+                favorites = _favorites.value,
+                images = _uiState.value.images,
+            )
+            val writeResult = com.iris.gallery.data.AutoBackupManager.writeBackupToFolder(
+                context = app,
+                treeUriString = currentSettings.autoBackupTreeUri,
+                json = built.json,
+                retentionCount = currentSettings.autoBackupRetention,
+                contentHash = built.contentHash,
+                previousHash = currentSettings.lastAutoBackupHash,
+                skipIfUnchanged = true,
+            )
+            writeResult
+                .onSuccess { outcome ->
+                    val timestamp = if (outcome.skippedUnchanged && currentSettings.lastAutoBackupTimestamp > 0L) {
+                        currentSettings.lastAutoBackupTimestamp
+                    } else {
+                        System.currentTimeMillis()
+                    }
+                    settingsPreferences.recordAutoBackupSuccess(
+                        timestamp = timestamp,
+                        contentHash = built.contentHash,
+                    )
+                }
+                .onFailure { err ->
+                    val failures = settingsPreferences.recordAutoBackupFailure(err.message ?: "Backup failed")
+                    com.iris.gallery.data.AutoBackupManager.notifyFailureIfNeeded(app, failures)
+                }
+        }
     }
 
     private var contentObserver: ContentObserver? = null

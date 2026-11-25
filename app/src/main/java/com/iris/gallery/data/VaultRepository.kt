@@ -65,6 +65,17 @@ data class VaultRestoreResult(
     val failed: Int = 0,
 )
 
+data class VaultBackupExportResult(
+    val exportedCount: Int,
+    val totalBytes: Long,
+)
+
+data class VaultBackupImportResult(
+    val importedCount: Int,
+    val skippedDuplicates: Int,
+    val failedCount: Int,
+)
+
 private data class VaultRestoreTarget(val uri: Uri, val path: String, val needsMediaScan: Boolean = false)
 
 private data class VaultRestoreDestination(val volume: String, val relativePath: String)
@@ -638,6 +649,318 @@ class VaultRepository(private val context: Context) {
         }
         writeIndex(currentItems)
         loadVaultItems()
+    }
+
+    suspend fun exportEncryptedBackup(
+        outputUri: Uri,
+        password: CharArray,
+        onProgress: ((Int, Int) -> Unit)? = null,
+    ): Result<VaultBackupExportResult> = withContext(Dispatchers.IO) {
+        val pwCopy = password.copyOf()
+        try {
+            val validEntries = synchronized(indexLock) {
+                val items = readIndexStrict() ?: salvageCorruptIndex()
+                items.mapNotNull { item ->
+                    val diskFile = File(vaultDir, item.vaultFileName)
+                    if (diskFile.exists() && diskFile.length() > 0L) item to diskFile else null
+                }
+            }
+            if (validEntries.isEmpty()) {
+                return@withContext Result.failure(IllegalStateException("Vault is empty"))
+            }
+
+            val total = validEntries.size
+            onProgress?.invoke(0, total)
+
+            val rawOut = context.contentResolver.openOutputStream(outputUri, "wt")
+                ?: context.contentResolver.openOutputStream(outputUri)
+                ?: return@withContext Result.failure(IllegalStateException("Could not open backup destination"))
+
+            var totalPayloadBytes = 0L
+            try {
+                rawOut.use { stream ->
+                    if (stream is FileOutputStream) {
+                        runCatching { stream.channel.truncate(0L) }
+                    }
+                    val buffered = java.io.BufferedOutputStream(stream, 65_536)
+                    ChunkedGcmOutputStream(buffered, pwCopy).use { gcmOut ->
+                        java.util.zip.ZipOutputStream(gcmOut).use { zipOut ->
+                            // Manifest goes first so decryption immediately authenticates the password
+                            // and provides metadata before streaming media entries.
+                            zipOut.setLevel(java.util.zip.Deflater.DEFAULT_COMPRESSION)
+                            val manifestObj = JSONObject().apply {
+                                put("format", "iris-vault-backup")
+                                put("version", 1)
+                                put("exportedAt", System.currentTimeMillis())
+                                put("itemCount", validEntries.size)
+                                val arr = JSONArray()
+                                for ((item, file) in validEntries) {
+                                    arr.put(serializeVaultItem(item, file.length()).apply {
+                                        put("archiveEntry", "media/${item.vaultFileName}")
+                                    })
+                                }
+                                put("items", arr)
+                            }
+                            zipOut.putNextEntry(java.util.zip.ZipEntry("manifest.json"))
+                            zipOut.write(manifestObj.toString(2).toByteArray(Charsets.UTF_8))
+                            zipOut.closeEntry()
+
+                            // Media files are already compressed (JPEG/HEIC/MP4); level 0 avoids CPU waste.
+                            zipOut.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
+                            val copyBuf = ByteArray(65_536)
+                            for ((index, pair) in validEntries.withIndex()) {
+                                val (item, file) = pair
+                                zipOut.putNextEntry(java.util.zip.ZipEntry("media/${item.vaultFileName}"))
+                                file.inputStream().use { fileIn ->
+                                    while (true) {
+                                        val read = fileIn.read(copyBuf)
+                                        if (read <= 0) break
+                                        zipOut.write(copyBuf, 0, read)
+                                        totalPayloadBytes += read
+                                    }
+                                }
+                                zipOut.closeEntry()
+                                onProgress?.invoke(index + 1, total)
+                            }
+                        }
+                    }
+                    if (stream is FileOutputStream) {
+                        runCatching { stream.fd.sync() }
+                    }
+                }
+            } catch (err: Throwable) {
+                runCatching { context.contentResolver.delete(outputUri, null, null) }
+                throw err
+            }
+
+            Result.success(VaultBackupExportResult(exportedCount = total, totalBytes = totalPayloadBytes))
+        } catch (err: Throwable) {
+            Result.failure(err)
+        } finally {
+            pwCopy.fill('\u0000')
+        }
+    }
+
+    suspend fun importEncryptedBackup(
+        inputUri: Uri,
+        password: CharArray,
+        onProgress: ((Int, Int) -> Unit)? = null,
+    ): Result<VaultBackupImportResult> = indexLocked {
+        val pwCopy = password.copyOf()
+        try {
+            val rawIn = context.contentResolver.openInputStream(inputUri)
+                ?: return@indexLocked Result.failure(IllegalStateException("Could not open vault backup file"))
+
+            val currentItems = (readIndexStrict() ?: salvageCorruptIndex()).toMutableList()
+            val existingFingerprints = currentItems.mapTo(mutableSetOf()) {
+                Triple(it.originalName, it.sizeBytes, it.dateTaken)
+            }
+            val existingFileNames = currentItems.mapTo(mutableSetOf()) { it.vaultFileName }
+
+            var importedCount = 0
+            var skippedDuplicates = 0
+            var failedCount = 0
+            val newlyWrittenFiles = mutableListOf<File>()
+
+            try {
+                rawIn.use { stream ->
+                    val buffered = java.io.BufferedInputStream(stream, 65_536)
+                    ChunkedGcmInputStream(buffered, pwCopy).use { gcmIn ->
+                        java.util.zip.ZipInputStream(gcmIn).use { zipIn ->
+                            var manifestByEntry: Map<String, VaultItem>? = null
+                            var totalExpected = 0
+                            var processed = 0
+                            val copyBuf = ByteArray(65_536)
+
+                            while (true) {
+                                val entry = zipIn.nextEntry ?: break
+                                val entryName = entry.name
+                                if (entryName == "manifest.json" && manifestByEntry == null) {
+                                    val manifestBytes = readZipEntryBounded(zipIn, maxBytes = 32 * 1024 * 1024)
+                                    val manifestRoot = JSONObject(String(manifestBytes, Charsets.UTF_8))
+                                    val format = manifestRoot.optString("format", "")
+                                    if (format != "iris-vault-backup") {
+                                        throw VaultInvalidArchiveException("Unrecognized vault manifest format")
+                                    }
+                                    val itemsArr = manifestRoot.optJSONArray("items") ?: JSONArray()
+                                    val parsed = LinkedHashMap<String, VaultItem>()
+                                    for (i in 0 until itemsArr.length()) {
+                                        val obj = itemsArr.optJSONObject(i) ?: continue
+                                        val item = parseVaultItem(obj) ?: continue
+                                        val key = obj.optString("archiveEntry", "media/${item.vaultFileName}")
+                                        parsed[key] = item
+                                    }
+                                    manifestByEntry = parsed
+                                    totalExpected = parsed.size
+                                    onProgress?.invoke(0, totalExpected)
+                                    zipIn.closeEntry()
+                                    continue
+                                }
+
+                                val manifestMap = manifestByEntry
+                                val itemMeta = manifestMap?.get(entryName)
+                                if (itemMeta == null || entry.isDirectory) {
+                                    zipIn.closeEntry()
+                                    continue
+                                }
+
+                                processed++
+                                val fingerprint = Triple(itemMeta.originalName, itemMeta.sizeBytes, itemMeta.dateTaken)
+                                if (fingerprint in existingFingerprints || itemMeta.vaultFileName in existingFileNames) {
+                                    skippedDuplicates++
+                                    zipIn.closeEntry()
+                                    onProgress?.invoke(processed, totalExpected)
+                                    continue
+                                }
+
+                                val uniqueId = generateUniqueId(currentItems)
+                                val prefix = "${uniqueId}_"
+                                val cleanName = truncateToFileSystemLimit(
+                                    prefix,
+                                    sanitizeFileName(itemMeta.originalName.ifBlank { stripVaultPrefix(itemMeta.vaultFileName) })
+                                )
+                                val newVaultFileName = prefix + cleanName
+                                val targetFile = File(vaultDir, newVaultFileName)
+                                val tempFile = File(vaultDir, ".${newVaultFileName}.iris_tmp")
+
+                                val writtenBytes = try {
+                                    var written = 0L
+                                    FileOutputStream(tempFile).use { fileOut ->
+                                        while (true) {
+                                            val read = zipIn.read(copyBuf)
+                                            if (read <= 0) break
+                                            fileOut.write(copyBuf, 0, read)
+                                            written += read
+                                        }
+                                        fileOut.flush()
+                                        runCatching { fileOut.fd.sync() }
+                                    }
+                                    written
+                                } catch (err: Throwable) {
+                                    runCatching { tempFile.delete() }
+                                    throw err
+                                }
+                                zipIn.closeEntry()
+
+                                val finalized = if (writtenBytes > 0L) {
+                                    runCatching {
+                                        if (targetFile.exists()) targetFile.delete()
+                                        if (!tempFile.renameTo(targetFile)) {
+                                            tempFile.copyTo(targetFile, overwrite = true)
+                                            tempFile.delete()
+                                        }
+                                        targetFile.exists() && targetFile.length() == writtenBytes
+                                    }.getOrDefault(false)
+                                } else {
+                                    runCatching { tempFile.delete() }
+                                    false
+                                }
+
+                                if (!finalized) {
+                                    runCatching { tempFile.delete() }
+                                    runCatching { targetFile.delete() }
+                                    failedCount++
+                                    onProgress?.invoke(processed, totalExpected)
+                                    continue
+                                }
+
+                                newlyWrittenFiles.add(targetFile)
+                                val effectiveMod = when {
+                                    itemMeta.dateModified > 0L -> itemMeta.dateModified
+                                    itemMeta.dateTaken > 0L -> itemMeta.dateTaken
+                                    else -> System.currentTimeMillis()
+                                }
+                                runCatching { targetFile.setLastModified(effectiveMod) }
+
+                                val importedItem = itemMeta.copy(
+                                    id = uniqueId,
+                                    vaultFileName = newVaultFileName,
+                                    sizeBytes = writtenBytes,
+                                    dateModified = effectiveMod,
+                                )
+                                currentItems.add(importedItem)
+                                existingFingerprints.add(Triple(importedItem.originalName, importedItem.sizeBytes, importedItem.dateTaken))
+                                existingFileNames.add(newVaultFileName)
+                                importedCount++
+                                onProgress?.invoke(processed, totalExpected)
+                            }
+
+                            if (manifestByEntry == null) {
+                                throw VaultInvalidArchiveException("Vault backup is missing manifest")
+                            }
+                            // Verify the authenticated final GCM chunk while gcmIn is still open.
+                            gcmIn.verifyEndOfStream()
+                        }
+                    }
+                }
+            } catch (err: Throwable) {
+                for (file in newlyWrittenFiles) {
+                    runCatching { file.delete() }
+                }
+                throw err
+            }
+
+            if (importedCount > 0) {
+                if (!persistIndexVerified(currentItems)) {
+                    for (file in newlyWrittenFiles) {
+                        runCatching { file.delete() }
+                    }
+                    return@indexLocked Result.failure(IllegalStateException("Could not save Vault index"))
+                }
+                loadVaultItems()
+            }
+
+            Result.success(
+                VaultBackupImportResult(
+                    importedCount = importedCount,
+                    skippedDuplicates = skippedDuplicates,
+                    failedCount = failedCount,
+                )
+            )
+        } catch (err: Throwable) {
+            loadVaultItems()
+            Result.failure(err)
+        } finally {
+            pwCopy.fill('\u0000')
+        }
+    }
+
+    private fun readZipEntryBounded(zipIn: java.util.zip.ZipInputStream, maxBytes: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = zipIn.read(buf)
+            if (read <= 0) break
+            total += read
+            if (total > maxBytes) {
+                throw VaultInvalidArchiveException("Vault manifest is too large")
+            }
+            out.write(buf, 0, read)
+        }
+        return out.toByteArray()
+    }
+
+    private fun serializeVaultItem(item: VaultItem, actualSize: Long): JSONObject = JSONObject().apply {
+        put("id", item.id)
+        put("vaultFileName", item.vaultFileName)
+        put("originalName", item.originalName)
+        put("originalPath", item.originalPath)
+        put("originalBucketName", item.originalBucketName)
+        put("originalBucketId", item.originalBucketId)
+        put("dateTaken", item.dateTaken)
+        put("dateLocked", item.dateLocked)
+        put("width", item.width)
+        put("height", item.height)
+        put("isVideo", item.isVideo)
+        put("durationMs", item.durationMs)
+        put("mimeType", item.mimeType)
+        put("sizeBytes", if (actualSize > 0L) actualSize else item.sizeBytes)
+        put("orientation", item.orientation)
+        put("title", item.title)
+        put("description", item.description)
+        put("dateModified", item.dateModified)
+        put("dateAdded", item.dateAdded)
     }
 
     private fun restoreFileToStorage(item: VaultItem, vaultFile: File): VaultRestoreTarget? {
