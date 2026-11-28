@@ -25,6 +25,24 @@ enum class DeleteMode { TRASH, PERMANENT, ALWAYS_ASK }
 enum class AlbumPickerSort { FOLLOW_ALBUMS, RECENT, NAME }
 enum class AutoBackupFrequency { ON_CHANGE, DAILY, WEEKLY }
 
+enum class TimelineDateSource {
+    DATE_TAKEN,
+    DATE_MODIFIED,
+    DATE_ADDED;
+
+    fun getTitleRes(): Int = when (this) {
+        DATE_TAKEN -> R.string.settings_timeline_date_source_taken
+        DATE_MODIFIED -> R.string.settings_timeline_date_source_modified
+        DATE_ADDED -> R.string.settings_timeline_date_source_added
+    }
+
+    fun getDescriptionRes(): Int = when (this) {
+        DATE_TAKEN -> R.string.settings_timeline_date_source_taken_desc
+        DATE_MODIFIED -> R.string.settings_timeline_date_source_modified_desc
+        DATE_ADDED -> R.string.settings_timeline_date_source_added_desc
+    }
+}
+
 enum class TimelineDateFormat {
     SYSTEM_DEFAULT,
     DAY_MONTH_YEAR,
@@ -141,6 +159,7 @@ data class SettingsState(
     val gridSpacing: GridSpacing = GridSpacing.STANDARD,
     val photoGridLayout: PhotoGridLayout = PhotoGridLayout.MOSAIC,
     val animateGifThumbnails: Boolean = false,
+    val groupRawJpegPairs: Boolean = true,
     val showHiddenItems: Boolean = false,
     val photoGridSize: Float = 105f,
     val mosaicRowSize: Float = 120f,
@@ -150,6 +169,7 @@ data class SettingsState(
     val albumHierarchyDepth: Int = 0,
     val globalAlbumSearch: Boolean = true,
     val showTimelineHeaders: Boolean = true,
+    val timelineDateSource: TimelineDateSource = TimelineDateSource.DATE_TAKEN,
     val timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
     val customTimelineDateFormat: String = "d. MMMM yyyy",
     val useRelativeDates: Boolean = true,
@@ -202,6 +222,10 @@ data class SettingsState(
     val useSystemTrash: Boolean = false,
     val videoMuted: Boolean = false,
     val preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
+    val preferredEditorComponent: String = "",
+    val lastUsedEditorId: String = "",
+    val preferredVideoEditorComponent: String = "",
+    val lastUsedVideoEditorId: String = "",
     val editorOverwriteOriginal: Boolean = false,
     val language: String = "",
     val firstLaunchLanguageSetupDone: Boolean = false,
@@ -246,6 +270,7 @@ class SettingsPreferences(context: Context) {
     fun setGridSpacing(spacing: GridSpacing) = update { copy(gridSpacing = spacing) }
     fun setPhotoGridLayout(layout: PhotoGridLayout) = update { copy(photoGridLayout = layout) }
     fun setAnimateGifThumbnails(enabled: Boolean) = update { copy(animateGifThumbnails = enabled) }
+    fun setGroupRawJpegPairs(enabled: Boolean) = update { copy(groupRawJpegPairs = enabled) }
     fun setShowHiddenItems(show: Boolean) = update { copy(showHiddenItems = show) }
     fun setPhotoGridSize(size: Float) = update { copy(photoGridSize = size.coerceIn(36f, 340f)) }
     fun setMosaicRowSize(size: Float) = update { copy(mosaicRowSize = size.coerceIn(56f, 260f)) }
@@ -255,6 +280,7 @@ class SettingsPreferences(context: Context) {
     fun setAlbumHierarchyDepth(depth: Int) = update { copy(albumHierarchyDepth = depth.coerceIn(0, 4)) }
     fun setGlobalAlbumSearch(enabled: Boolean) = update { copy(globalAlbumSearch = enabled) }
     fun setShowTimelineHeaders(show: Boolean) = update { copy(showTimelineHeaders = show) }
+    fun setTimelineDateSource(source: TimelineDateSource) = update { copy(timelineDateSource = source) }
     fun setTimelineDateFormat(format: TimelineDateFormat) = update { copy(timelineDateFormat = format) }
     fun setCustomTimelineDateFormat(pattern: String) = update {
         val trimmed = pattern.trim().ifBlank { "d. MMMM yyyy" }
@@ -331,7 +357,32 @@ class SettingsPreferences(context: Context) {
     fun setDeleteMode(mode: DeleteMode) = update { copy(deleteMode = mode) }
     fun setUseSystemTrash(enabled: Boolean) = update { copy(useSystemTrash = enabled) }
     fun setVideoMuted(muted: Boolean) = update { copy(videoMuted = muted) }
-    fun setPreferredEditor(editor: PreferredEditor) = update { copy(preferredEditor = editor) }
+    fun setPreferredEditor(editor: PreferredEditor) = update {
+        copy(
+            preferredEditor = editor,
+            preferredEditorComponent = if (editor == PreferredEditor.EXTERNAL) preferredEditorComponent else "",
+            lastUsedEditorId = if (editor == PreferredEditor.BUILT_IN) "BUILT_IN" else lastUsedEditorId,
+        )
+    }
+    fun setPreferredExternalEditor(component: String) = update {
+        copy(
+            preferredEditor = PreferredEditor.EXTERNAL,
+            preferredEditorComponent = component,
+            lastUsedEditorId = component.ifBlank { lastUsedEditorId },
+        )
+    }
+    fun setLastUsedEditorId(id: String) = update { copy(lastUsedEditorId = id) }
+    fun resetPreferredEditor() = update {
+        copy(preferredEditor = PreferredEditor.ALWAYS_ASK, preferredEditorComponent = "")
+    }
+    fun setPreferredVideoEditorComponent(component: String) = update {
+        copy(
+            preferredVideoEditorComponent = component,
+            lastUsedVideoEditorId = component.ifBlank { lastUsedVideoEditorId },
+        )
+    }
+    fun setLastUsedVideoEditorId(id: String) = update { copy(lastUsedVideoEditorId = id) }
+    fun resetPreferredVideoEditor() = update { copy(preferredVideoEditorComponent = "") }
     fun setEditorOverwriteOriginal(enabled: Boolean) = update { copy(editorOverwriteOriginal = enabled) }
     fun setMemoriesNotificationEnabled(enabled: Boolean) = update { copy(memoriesNotificationEnabled = enabled) }
     fun setMemoriesNotificationTime(hour: Int, minute: Int) = update { copy(memoriesNotificationHour = hour, memoriesNotificationMinute = minute) }
@@ -551,6 +602,7 @@ class SettingsPreferences(context: Context) {
                 PhotoGridLayout.valueOf(prefs.getString("photo_grid_layout", null).orEmpty())
             }.getOrDefault(PhotoGridLayout.MOSAIC),
             animateGifThumbnails = prefs.getBoolean("animate_gif_thumbnails", false),
+            groupRawJpegPairs = prefs.getBoolean("group_raw_jpeg_pairs", true),
             showHiddenItems = prefs.getBoolean("show_hidden_items", false),
             photoGridSize = prefs.getFloat("photo_grid_size", 105f),
             mosaicRowSize = prefs.getFloat("mosaic_row_size", 120f).coerceIn(56f, 260f),
@@ -562,6 +614,9 @@ class SettingsPreferences(context: Context) {
             albumHierarchyDepth = prefs.getInt("album_hierarchy_depth", 0).coerceIn(0, 4),
             globalAlbumSearch = prefs.getBoolean("global_album_search", true),
             showTimelineHeaders = prefs.getBoolean("show_timeline_headers", true),
+            timelineDateSource = runCatching {
+                TimelineDateSource.valueOf(prefs.getString("timeline_date_source", null).orEmpty())
+            }.getOrDefault(TimelineDateSource.DATE_TAKEN),
             timelineDateFormat = runCatching { TimelineDateFormat.valueOf(dateFormatStr.orEmpty()) }.getOrDefault(TimelineDateFormat.SYSTEM_DEFAULT),
             customTimelineDateFormat = runCatching {
                 val raw = prefs.getString("custom_timeline_date_format", "d. MMMM yyyy").orEmpty().ifBlank { "d. MMMM yyyy" }
@@ -628,6 +683,10 @@ class SettingsPreferences(context: Context) {
             useSystemTrash = prefs.getBoolean("use_system_trash", false),
             videoMuted = prefs.getBoolean("video_muted", false),
             preferredEditor = runCatching { PreferredEditor.valueOf(prefs.getString("preferred_editor", null).orEmpty()) }.getOrDefault(PreferredEditor.ALWAYS_ASK),
+            preferredEditorComponent = prefs.getString("preferred_editor_component", "").orEmpty(),
+            lastUsedEditorId = prefs.getString("last_used_editor_id", "").orEmpty(),
+            preferredVideoEditorComponent = prefs.getString("preferred_video_editor_component", "").orEmpty(),
+            lastUsedVideoEditorId = prefs.getString("last_used_video_editor_id", "").orEmpty(),
             editorOverwriteOriginal = prefs.getBoolean("editor_overwrite_original", false),
             language = prefs.getString("app_language", "").orEmpty(),
             firstLaunchLanguageSetupDone = prefs.getBoolean("first_launch_lang_done", false),
@@ -660,6 +719,7 @@ class SettingsPreferences(context: Context) {
             .putString("grid_spacing", state.gridSpacing.name)
             .putString("photo_grid_layout", state.photoGridLayout.name)
             .putBoolean("animate_gif_thumbnails", state.animateGifThumbnails)
+            .putBoolean("group_raw_jpeg_pairs", state.groupRawJpegPairs)
             .putBoolean("show_hidden_items", state.showHiddenItems)
             .putFloat("photo_grid_size", state.photoGridSize)
             .putFloat("mosaic_row_size", state.mosaicRowSize)
@@ -669,6 +729,7 @@ class SettingsPreferences(context: Context) {
             .putInt("album_hierarchy_depth", state.albumHierarchyDepth)
             .putBoolean("global_album_search", state.globalAlbumSearch)
             .putBoolean("show_timeline_headers", state.showTimelineHeaders)
+            .putString("timeline_date_source", state.timelineDateSource.name)
             .putString("timeline_date_format", state.timelineDateFormat.name)
             .putString("custom_timeline_date_format", state.customTimelineDateFormat)
             .putBoolean("use_relative_dates", state.useRelativeDates)
@@ -721,6 +782,10 @@ class SettingsPreferences(context: Context) {
             .putBoolean("use_system_trash", state.useSystemTrash)
             .putBoolean("video_muted", state.videoMuted)
             .putString("preferred_editor", state.preferredEditor.name)
+            .putString("preferred_editor_component", state.preferredEditorComponent)
+            .putString("last_used_editor_id", state.lastUsedEditorId)
+            .putString("preferred_video_editor_component", state.preferredVideoEditorComponent)
+            .putString("last_used_video_editor_id", state.lastUsedVideoEditorId)
             .putBoolean("editor_overwrite_original", state.editorOverwriteOriginal)
             .putString("app_language", state.language)
             .putBoolean("first_launch_lang_done", state.firstLaunchLanguageSetupDone)

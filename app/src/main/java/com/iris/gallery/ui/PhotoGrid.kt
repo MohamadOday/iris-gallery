@@ -90,6 +90,8 @@ import com.iris.gallery.data.GridSpacing
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.PhotoGridLayout
 import com.iris.gallery.data.TimelineDateFormat
+import com.iris.gallery.data.TimelineDateSource
+import com.iris.gallery.data.timelineTimestamp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -293,6 +295,7 @@ internal fun PhotoGrid(
     animateGifThumbnails: Boolean = false,
     showTimeline: Boolean = false,
     showDateBubble: Boolean = showTimeline,
+    timelineDateSource: TimelineDateSource = TimelineDateSource.DATE_TAKEN,
     timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
     customTimelineDateFormat: String = "d. MMMM yyyy",
     useRelativeDates: Boolean = true,
@@ -325,13 +328,13 @@ internal fun PhotoGrid(
         getTimelineFormatter(timelineDateFormat, isSameYear = false, showDayOfWeek = showDayOfWeek, locale = currentLocale, customPattern = customTimelineDateFormat, abbreviateDayOfWeek = abbreviateDayOfWeek, smartYearHiding = smartYearHiding)
     }
 
-    val groups = remember(images, showTimeline, timelineDateFormat, customTimelineDateFormat, useRelativeDates, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, currentLocale, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
+    val groups = remember(images, showTimeline, timelineDateSource, timelineDateFormat, customTimelineDateFormat, useRelativeDates, showDayOfWeek, abbreviateDayOfWeek, smartYearHiding, currentLocale, todayString, yesterdayString, sameYearFormatter, otherYearFormatter) {
         if (showTimeline) {
             val zone = ZoneId.systemDefault()
             val today = LocalDate.now()
             val dayCache = HashMap<LocalDate, String>()
             images.groupBy { image ->
-                val date = Instant.ofEpochMilli(image.dateTaken).atZone(zone).toLocalDate()
+                val date = Instant.ofEpochMilli(image.timelineTimestamp(timelineDateSource)).atZone(zone).toLocalDate()
                 dayCache.getOrPut(date) {
                     formatTimelineDate(
                         date = date,
@@ -1349,7 +1352,7 @@ internal fun PhotoGrid(
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
-                        text = visibleDate?.let { formatTimelineLabel(it.dateTaken) } ?: "",
+                        text = visibleDate?.let { formatTimelineLabel(it.timelineTimestamp(timelineDateSource)) } ?: "",
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,

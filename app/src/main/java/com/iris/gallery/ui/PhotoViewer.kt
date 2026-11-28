@@ -147,12 +147,13 @@ import coil3.size.Precision
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.ExifMetadata
 import com.iris.gallery.data.ExifEditRequest
+import com.iris.gallery.data.isRaw
 import com.iris.gallery.data.loadExifMetadata
+import com.iris.gallery.data.withPairedFiles
 import com.iris.gallery.ui.MediaThumbnail
 import com.iris.gallery.ui.ThumbnailCache
 import com.iris.gallery.ui.MediaAlbum
 import com.iris.gallery.ui.EditChoiceBottomSheet
-import com.iris.gallery.ui.launchExternalEditor
 import com.iris.gallery.ui.WallpaperChoiceBottomSheet
 import com.iris.gallery.ui.video.VideoPage
 import com.iris.gallery.ui.video.Media3VideoEngine
@@ -195,11 +196,82 @@ import com.iris.gallery.ui.AlbumPickerSheet
 import com.iris.gallery.R
 import java.io.File
 
+@Composable
+private fun PairedDeleteDialog(
+    activeFormatLabel: String,
+    companionFormatLabel: String,
+    companionName: String,
+    forcedPermanent: Boolean,
+    showPermanentNote: Boolean = false,
+    onDismiss: () -> Unit,
+    onDeleteActiveOnly: (permanent: Boolean) -> Unit,
+    onDeleteBoth: (permanent: Boolean) -> Unit,
+) {
+    var deletePermanently by remember(forcedPermanent) { mutableStateOf(forcedPermanent) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.paired_delete_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.paired_delete_message, companionFormatLabel, companionName))
+                if (showPermanentNote) {
+                    Text(
+                        stringResource(R.string.delete_permanent_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (!forcedPermanent) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { deletePermanently = !deletePermanently }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Checkbox(
+                            checked = deletePermanently,
+                            onCheckedChange = { deletePermanently = it },
+                        )
+                        Text(
+                            text = stringResource(R.string.delete_permanently_checkbox),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onDeleteActiveOnly(forcedPermanent || deletePermanently) }) {
+                    Text(
+                        stringResource(R.string.paired_delete_only_format, activeFormatLabel),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                TextButton(onClick = { onDeleteBoth(forcedPermanent || deletePermanently) }) {
+                    Text(
+                        stringResource(R.string.paired_delete_both),
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PhotoViewer(
     images: List<MediaImage>,
     initialPage: Int,
+    initialShowRawVariant: Boolean = false,
     favorites: Set<Long>,
     autoPlay: Boolean = true,
     loop: Boolean = true,
@@ -232,7 +304,15 @@ internal fun PhotoViewer(
     videoMuted: Boolean = false,
     onSetVideoMuted: (Boolean) -> Unit = {},
     preferredEditor: PreferredEditor = PreferredEditor.ALWAYS_ASK,
+    preferredEditorComponent: String = "",
+    lastUsedEditorId: String = "",
+    preferredVideoEditorComponent: String = "",
+    lastUsedVideoEditorId: String = "",
     onSetPreferredEditor: (PreferredEditor) -> Unit = {},
+    onSetPreferredExternalEditor: (String) -> Unit = {},
+    onSetLastUsedEditorId: (String) -> Unit = {},
+    onSetPreferredVideoEditor: (String) -> Unit = {},
+    onSetLastUsedVideoEditorId: (String) -> Unit = {},
     availableAlbums: List<MediaAlbum> = emptyList(),
     albumPickerSort: AlbumPickerSort = AlbumPickerSort.FOLLOW_ALBUMS,
     onSetAlbumPickerSort: (AlbumPickerSort) -> Unit = {},
@@ -240,12 +320,12 @@ internal fun PhotoViewer(
     onClose: () -> Unit,
     onPageChanged: (Long) -> Unit = {},
     onRename: (MediaImage, String) -> Unit = { _, _ -> },
-    onDelete: (MediaImage, Boolean) -> Unit,
+    onDelete: (List<MediaImage>, Boolean) -> Unit,
     onRestore: (MediaImage, () -> Unit) -> Unit = { _, _ -> },
     onEditMetadata: (MediaImage, ExifEditRequest) -> Unit,
     onEdit: (MediaImage) -> Unit,
-    onLock: (MediaImage) -> Unit,
-    onUnlock: (MediaImage) -> Unit = {},
+    onLock: (List<MediaImage>) -> Unit,
+    onUnlock: (List<MediaImage>) -> Unit = {},
     onMoveToAlbum: (List<MediaImage>, File, String, (AlbumOperationResult) -> Unit) -> Unit = { _, _, _, _ -> },
     onCopyToAlbum: (List<MediaImage>, File, String, (AlbumOperationResult) -> Unit) -> Unit = { _, _, _, _ -> },
     getAlbumDir: (MediaAlbum) -> File = { File("") },
@@ -307,7 +387,8 @@ internal fun PhotoViewer(
     var showInfo by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var directPermanentDelete by remember { mutableStateOf(false) }
-    var showEditChoiceSheet by remember { mutableStateOf(false) }
+    var editSheetTarget by remember { mutableStateOf<MediaImage?>(null) }
+    var showPairedShareDialog by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var previewPopupImage by remember { mutableStateOf<MediaImage?>(null) }
     var showRotateTipBanner by remember { mutableStateOf(false) }
@@ -341,37 +422,88 @@ internal fun PhotoViewer(
     var showSecureSharingHintDialog by remember { mutableStateOf(false) }
     var showSecureSharingModePicker by remember { mutableStateOf(false) }
     val current = images.getOrNull(pagerState.currentPage.coerceIn(0, (images.size - 1).coerceAtLeast(0))) ?: return
-    val doShare: (MediaImage) -> Unit = { media ->
+    val initialMediaId = remember { images.getOrNull(initialPage)?.id }
+    var consumedInitialRaw by remember { mutableStateOf(false) }
+    var viewingRawVariant by remember(current.id) {
+        val shouldStartRaw = initialShowRawVariant &&
+            !consumedInitialRaw &&
+            current.id == initialMediaId &&
+            current.pairedRaw != null
+        if (shouldStartRaw) consumedInitialRaw = true
+        mutableStateOf(shouldStartRaw)
+    }
+    LaunchedEffect(current.id, current.pairedRaw?.id) {
+        if (current.pairedRaw == null && viewingRawVariant) {
+            viewingRawVariant = false
+        }
+    }
+    LaunchedEffect(viewingRawVariant) {
+        zoomedImageId = null
+    }
+    val activeMedia = if (viewingRawVariant && current.pairedRaw != null) current.pairedRaw else current
+    val pairedCompanion = if (activeMedia.id == current.id) {
+        current.pairedRaw
+    } else {
+        current.takeIf { current.pairedRaw != null }
+    }
+    val coverFormatLabel = when {
+        current.name.endsWith(".heic", ignoreCase = true) || current.name.endsWith(".heif", ignoreCase = true) -> "HEIC"
+        current.name.endsWith(".webp", ignoreCase = true) -> "WebP"
+        current.name.endsWith(".avif", ignoreCase = true) -> "AVIF"
+        else -> stringResource(R.string.viewer_variant_jpg)
+    }
+    val doShareList: (List<MediaImage>) -> Unit = { items ->
         coroutineScope.launch {
-            val uris = prepareShareUris(context, listOf(media), secureSharingMode)
+            val uris = prepareShareUris(context, items, secureSharingMode)
             if (uris.isEmpty()) {
                 android.widget.Toast.makeText(context, context.getString(R.string.toast_share_failed), android.widget.Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val shareUri = uris.first()
-            val mimeType = media.mimeType.ifBlank { if (media.isVideo) "video/*" else "image/*" }
-            val intent = Intent(Intent.ACTION_SEND).apply {
+            val mimeType = items.map { it.mimeType.ifBlank { if (it.isVideo) "video/*" else "image/*" } }
+                .distinct()
+                .let { mimeTypes ->
+                    when {
+                        mimeTypes.size == 1 -> mimeTypes.first()
+                        mimeTypes.all { it.startsWith("image/") } -> "image/*"
+                        mimeTypes.all { it.startsWith("video/") } -> "video/*"
+                        else -> "*/*"
+                    }
+                }
+            val intent = Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
                 type = mimeType
-                putExtra(Intent.EXTRA_STREAM, shareUri)
-                putExtra(Intent.EXTRA_TITLE, media.name)
-                clipData = ClipData.newUri(context.contentResolver, mimeType, shareUri)
+                if (uris.size == 1) {
+                    putExtra(Intent.EXTRA_STREAM, uris.first())
+                    putExtra(Intent.EXTRA_TITLE, items.first().name)
+                } else {
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                }
+                clipData = ClipData.newUri(context.contentResolver, mimeType, uris.first()).apply {
+                    uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+                }
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(Intent.createChooser(intent, context.getString(R.string.action_share_media)))
         }
     }
-    val currentExif by produceState<ExifMetadata?>(initialValue = null, current.id, current.uri, current.dateTaken, current.description, current.title) {
+    val currentExif by produceState<ExifMetadata?>(
+        initialValue = null,
+        activeMedia.id,
+        activeMedia.uri,
+        activeMedia.dateTaken,
+        activeMedia.description,
+        activeMedia.title,
+    ) {
         value = withContext(Dispatchers.IO) {
-            loadExifMetadata(context, current.uri, current.path)
+            loadExifMetadata(context, activeMedia.uri, activeMedia.path)
         }
     }
-    var currentPhotoHasGainmap by remember(current.id) { mutableStateOf(false) }
-    val currentIsVideoHdr by produceState(initialValue = false, current.id, current.isVideo) {
-        if (current.isVideo) {
+    var currentPhotoHasGainmap by remember(activeMedia.id) { mutableStateOf(false) }
+    val currentIsVideoHdr by produceState(initialValue = false, activeMedia.id, activeMedia.isVideo) {
+        if (activeMedia.isVideo) {
             value = withContext(Dispatchers.IO) {
                 val retriever = MediaMetadataRetriever()
                 try {
-                    retriever.setDataSource(context, current.uri)
+                    retriever.setDataSource(context, activeMedia.uri)
                     val transfer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COLOR_TRANSFER)?.toIntOrNull()
                     } else null
@@ -386,10 +518,10 @@ internal fun PhotoViewer(
             value = false
         }
     }
-    val isCurrentHdr = if (current.isVideo) {
+    val isCurrentHdr = if (activeMedia.isVideo) {
         currentIsVideoHdr
     } else {
-        currentPhotoHasGainmap || (currentExif?.isUltraHdr == true) || (com.iris.gallery.ui.ThumbnailCache.isHdr(current.id) == true)
+        currentPhotoHasGainmap || (currentExif?.isUltraHdr == true) || (com.iris.gallery.ui.ThumbnailCache.isHdr(activeMedia.id) == true)
     }
 
     LaunchedEffect(isCurrentHdr, activity) {
@@ -401,17 +533,56 @@ internal fun PhotoViewer(
             }
         }
     }
-    val viewerComment = remember(current.id, currentExif) {
+    val viewerComment = remember(activeMedia.id, currentExif) {
         currentExif?.userComment?.ifBlank { null }
             ?: currentExif?.xpComment?.ifBlank { null }
             ?: currentExif?.jpegComments?.firstOrNull()?.ifBlank { null }
     }
 
     fun handleEditClick(image: MediaImage) {
+        if (image.isVideo) {
+            if (preferredVideoEditorComponent.isNotBlank()) {
+                coroutineScope.launch {
+                    val targetIntent = withContext(Dispatchers.IO) {
+                        findSpecificExternalEditorIntent(context, image, preferredVideoEditorComponent)
+                    }
+                    val launched = targetIntent != null && launchTargetedEditorIntent(context, targetIntent)
+                    if (launched) {
+                        onSetLastUsedVideoEditorId(preferredVideoEditorComponent)
+                    } else {
+                        editSheetTarget = image
+                    }
+                }
+            } else {
+                editSheetTarget = image
+            }
+            return
+        }
         when (preferredEditor) {
-            PreferredEditor.BUILT_IN -> onEdit(image)
-            PreferredEditor.EXTERNAL -> launchExternalEditor(context, image)
-            PreferredEditor.ALWAYS_ASK -> showEditChoiceSheet = true
+            PreferredEditor.BUILT_IN -> {
+                onSetLastUsedEditorId(BUILT_IN_EDITOR_ID)
+                onEdit(image)
+            }
+            PreferredEditor.EXTERNAL -> {
+                if (preferredEditorComponent.isNotBlank()) {
+                    coroutineScope.launch {
+                        val targetIntent = withContext(Dispatchers.IO) {
+                            findSpecificExternalEditorIntent(context, image, preferredEditorComponent)
+                        }
+                        val launched = targetIntent != null && launchTargetedEditorIntent(context, targetIntent)
+                        if (launched) {
+                            onSetLastUsedEditorId(preferredEditorComponent)
+                        } else {
+                            editSheetTarget = image
+                        }
+                    }
+                } else {
+                    editSheetTarget = image
+                }
+            }
+            PreferredEditor.ALWAYS_ASK -> {
+                editSheetTarget = image
+            }
         }
     }
     val videoEngine = remember {
@@ -430,11 +601,17 @@ internal fun PhotoViewer(
     }
 
     // ---- Motion Photo (Samsung / Google / Nokia) detection & in-place playback ----
-    val motionVideo by produceState<MotionVideo?>(initialValue = null, current.id, current.uri, current.isVideo) {
-        if (!current.isVideo) {
-            // Only images can be motion photos. Cheap filename hint or on-demand content parse.
+    val motionVideo by produceState<MotionVideo?>(
+        initialValue = null,
+        activeMedia.id,
+        activeMedia.uri,
+        activeMedia.isVideo,
+        activeMedia.isRaw,
+    ) {
+        if (!activeMedia.isVideo && !activeMedia.isRaw) {
+            // Only non-RAW images can be motion photos. Cheap filename hint or on-demand content parse.
             value = withContext(Dispatchers.IO) {
-                MotionPhotoExtractor.detectMotionPhoto(context, current)
+                MotionPhotoExtractor.detectMotionPhoto(context, activeMedia)
             }
         } else {
             value = null
@@ -451,8 +628,8 @@ internal fun PhotoViewer(
         val engine = motionEngine
         onDispose { engine?.release() }
     }
-    // Stop motion playback when leaving the current page.
-    LaunchedEffect(current.id) {
+    // Stop motion playback when leaving the current page or switching JPG/RAW variants.
+    LaunchedEffect(activeMedia.id) {
         if (isPlayingMotion) {
             motionEngine = null
             isPlayingMotion = false
@@ -462,13 +639,13 @@ internal fun PhotoViewer(
         if (isPlayingMotion) {
             motionEngine = null
             isPlayingMotion = false
-        } else {
+        } else if (!activeMedia.isRaw) {
             val mv = motionVideo
             if (mv == null) {
                 motionExtracting = true
                 coroutineScope.launch {
                     val extracted = withContext(Dispatchers.IO) {
-                        MotionPhotoExtractor.detectMotionPhoto(context, current)
+                        MotionPhotoExtractor.detectMotionPhoto(context, activeMedia)
                     }
                     motionExtracting = false
                     if (extracted == null) {
@@ -500,24 +677,24 @@ internal fun PhotoViewer(
 
     val dismissOffsetY = remember { Animatable(0f) }
     // ---- Depth Photo (Google GDepth / Nokia / OEM portrait) detection & rendering ----
-    val isDepthPhoto = currentExif?.isDepthPhoto == true
+    val isDepthPhoto = currentExif?.isDepthPhoto == true && !activeMedia.isRaw
     val depthPhoto by produceState<com.iris.gallery.decoder.DepthPhoto?>(
-        initialValue = null, current.id, current.uri, isDepthPhoto
+        initialValue = null, activeMedia.id, activeMedia.uri, isDepthPhoto
     ) {
-        if (isDepthPhoto && !current.isVideo) {
+        if (isDepthPhoto && !activeMedia.isVideo && !activeMedia.isRaw) {
             value = withContext(Dispatchers.IO) {
-                com.iris.gallery.decoder.DepthPhotoExtractor.detectDepthPhoto(context, current)
+                com.iris.gallery.decoder.DepthPhotoExtractor.detectDepthPhoto(context, activeMedia)
             }
         } else {
             value = null
         }
     }
-    var depthEnabled by remember(current.id) { mutableStateOf(false) }
-    var depthFocus by remember(current.id) { mutableFloatStateOf(0.5f) }
-    var depthStrength by remember(current.id) { mutableStateOf(1f) }
-    var depthTransition by remember(current.id) { mutableFloatStateOf(0.15f) }
-    var depthPreviewBitmap by remember(current.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var depthRendering by remember(current.id) { mutableStateOf(false) }
+    var depthEnabled by remember(activeMedia.id) { mutableStateOf(false) }
+    var depthFocus by remember(activeMedia.id) { mutableFloatStateOf(0.5f) }
+    var depthStrength by remember(activeMedia.id) { mutableStateOf(1f) }
+    var depthTransition by remember(activeMedia.id) { mutableFloatStateOf(0.15f) }
+    var depthPreviewBitmap by remember(activeMedia.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var depthRendering by remember(activeMedia.id) { mutableStateOf(false) }
     // Re-render when depth params change (debounced).
     LaunchedEffect(depthPhoto, depthEnabled, depthFocus, depthStrength, depthTransition) {
         val dp = depthPhoto
@@ -531,19 +708,19 @@ internal fun PhotoViewer(
                 val targetSize = maxDim.coerceAtMost(1920)
                 val rawSharp = runCatching {
                     val opts = android.graphics.BitmapFactory.Options().apply {
-                        inSampleSize = com.iris.gallery.decoder.calcSampleSize(current.width, current.height, targetSize)
+                        inSampleSize = com.iris.gallery.decoder.calcSampleSize(activeMedia.width, activeMedia.height, targetSize)
                     }
-                    if (current.path.isNotBlank()) {
-                        val f = java.io.File(current.path)
+                    if (activeMedia.path.isNotBlank()) {
+                        val f = java.io.File(activeMedia.path)
                         if (f.exists() && f.canRead()) {
                             android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
                         } else null
                     } else {
                         val targetUri = if (Build.VERSION.SDK_INT >= 29 &&
-                            current.uri.scheme == android.content.ContentResolver.SCHEME_CONTENT
+                            activeMedia.uri.scheme == android.content.ContentResolver.SCHEME_CONTENT
                         ) {
-                            runCatching { MediaStore.setRequireOriginal(current.uri) }.getOrDefault(current.uri)
-                        } else current.uri
+                            runCatching { MediaStore.setRequireOriginal(activeMedia.uri) }.getOrDefault(activeMedia.uri)
+                        } else activeMedia.uri
                         context.contentResolver.openInputStream(targetUri)?.use { s ->
                             android.graphics.BitmapFactory.decodeStream(s, null, opts)
                         }
@@ -553,19 +730,11 @@ internal fun PhotoViewer(
                     // BitmapFactory ignores EXIF orientation. Read it from the source
                     // and rotate the sharp + blurred + depth map to match what Coil would
                     // display, so the depth preview aligns with the original photo.
-                    val orientation = runCatching {
-                        val exif = if (current.path.isNotBlank() && java.io.File(current.path).canRead()) {
-                            androidx.exifinterface.media.ExifInterface(current.path)
-                        } else {
-                            context.contentResolver.openInputStream(current.uri)?.use { s ->
-                                androidx.exifinterface.media.ExifInterface(s)
-                            } ?: androidx.exifinterface.media.ExifInterface(current.path)
-                        }
-                        exif.getAttributeInt(
-                            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
-                            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL,
-                        )
-                    }.getOrDefault(androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL)
+                    val orientation = com.iris.gallery.decoder.ExifOrientationHelper.readOrientationTag(
+                        context,
+                        activeMedia.uri,
+                        activeMedia.path,
+                    )
                     val sharp = com.iris.gallery.decoder.applyExifOrientation(rawSharp, orientation)
                     if (sharp !== rawSharp) rawSharp.recycle()
                     val blurred = com.iris.gallery.decoder.applyExifOrientation(dp.blurredImage!!, orientation)
@@ -661,9 +830,9 @@ internal fun PhotoViewer(
 
     val returnT = dismissReturnProgress.value
     val targetRect = dismissTargetRect
-    val quarterTurn = ((current.orientation % 360) + 360) % 360 in setOf(90, 270)
-    val mediaW = (if (quarterTurn) current.height else current.width).toFloat()
-    val mediaH = (if (quarterTurn) current.width else current.height).toFloat()
+    val quarterTurn = ((activeMedia.orientation % 360) + 360) % 360 in setOf(90, 270)
+    val mediaW = (if (quarterTurn) activeMedia.height else activeMedia.width).toFloat()
+    val mediaH = (if (quarterTurn) activeMedia.width else activeMedia.height).toFloat()
     val fitW: Float
     val fitH: Float
     if (mediaW > 0f && mediaH > 0f && viewerWidthPx > 0f && viewerHeightPx > 0f) {
@@ -785,19 +954,21 @@ internal fun PhotoViewer(
                 )
             } else {
                 val isCurrent = page == pagerState.currentPage
+                val displayedPhoto = if (isCurrent) activeMedia else media
                 ZoomablePhoto(
-                    image = media,
+                    image = displayedPhoto,
+                    pairGroupId = media.id,
                     active = isCurrent,
                     doubleTapZoomLevel = doubleTapZoomLevel,
                     multiStageZoom = multiStageZoom,
                     pinchToRotate = pinchToRotate,
-                    motionVideo = if (isCurrent) motionVideo else null,
-                    isPlayingMotion = isCurrent && isPlayingMotion,
-                    motionExtracting = isCurrent && motionExtracting,
-                    motionPlayer = if (isCurrent) motionEngine?.player else null,
+                    motionVideo = if (isCurrent && !activeMedia.isRaw) motionVideo else null,
+                    isPlayingMotion = isCurrent && !activeMedia.isRaw && isPlayingMotion,
+                    motionExtracting = isCurrent && !activeMedia.isRaw && motionExtracting,
+                    motionPlayer = if (isCurrent && !activeMedia.isRaw) motionEngine?.player else null,
                     onPlayMotion = onPlayMotion,
-                    depthBitmap = if (isCurrent) depthPreviewBitmap else null,
-                    depthRendering = isCurrent && depthRendering,
+                    depthBitmap = if (isCurrent && !activeMedia.isRaw) depthPreviewBitmap else null,
+                    depthRendering = isCurrent && !activeMedia.isRaw && depthRendering,
                     onTap = { controlsVisible = !controlsVisible },
                     onSwipeUp = { showInfo = true },
                     onSwipeDown = { triggerAnimatedDismiss() },
@@ -847,19 +1018,22 @@ internal fun PhotoViewer(
           enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { -it / 5 },
           exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 5 },
         ) {
-          Box(Modifier.fillMaxWidth().height(156.dp)) {
-          Box(
-            modifier = Modifier.fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .82f), Color.Transparent))),
-          )
+          Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .82f), Color.Transparent)))
+                .statusBarsPadding()
+                .padding(bottom = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+          ) {
           Row(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             IconButton(onClick = { triggerAnimatedDismiss() }) { Icon(Icons.Outlined.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
             val currentLocale = rememberAppLocale()
-            val headerDate = remember(current.dateTaken, currentLocale, timelineDateFormat, smartYearHiding, customTimelineDateFormat, showViewerTime) {
-                val localDate = Instant.ofEpochMilli(current.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
+            val headerDate = remember(activeMedia.dateTaken, currentLocale, timelineDateFormat, smartYearHiding, customTimelineDateFormat, showViewerTime) {
+                val localDate = Instant.ofEpochMilli(activeMedia.dateTaken).atZone(ZoneId.systemDefault()).toLocalDate()
                 val isSameYear = localDate.year == LocalDate.now().year
                 val formatter = getTimelineFormatter(
                     format = timelineDateFormat,
@@ -872,7 +1046,7 @@ internal fun PhotoViewer(
                 val dateStr = localDate.format(formatter)
                 if (showViewerTime) {
                     val tf = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT, currentLocale)
-                    val timeStr = tf.format(java.util.Date(current.dateTaken))
+                    val timeStr = tf.format(java.util.Date(activeMedia.dateTaken))
                     "$dateStr · $timeStr"
                 } else {
                     dateStr
@@ -880,8 +1054,8 @@ internal fun PhotoViewer(
             }
             val pageCountText = stringResource(R.string.viewer_page_count, pagerState.currentPage + 1, images.size)
             val pageCountPrefix = if (showViewerPageCount) "$pageCountText · " else ""
-            val customTitle = current.title.takeIf { it.isNotBlank() && it != current.name && it != current.name.substringBeforeLast('.') }
-            val titleOrName = customTitle ?: current.name
+            val customTitle = activeMedia.title.takeIf { it.isNotBlank() && it != activeMedia.name && it != activeMedia.name.substringBeforeLast('.') }
+            val titleOrName = customTitle ?: activeMedia.name
 
             val (primaryHeaderText, secondaryHeaderText) = when (viewerHeaderStyle) {
                 ViewerHeaderStyle.DATE -> {
@@ -891,13 +1065,13 @@ internal fun PhotoViewer(
                     titleOrName to if (headerDate.isNotBlank()) "$pageCountPrefix$headerDate" else if (showViewerPageCount) pageCountText else ""
                 }
                 ViewerHeaderStyle.FILENAME -> {
-                    current.name to if (headerDate.isNotBlank()) "$pageCountPrefix$headerDate" else if (showViewerPageCount) pageCountText else ""
+                    activeMedia.name to if (headerDate.isNotBlank()) "$pageCountPrefix$headerDate" else if (showViewerPageCount) pageCountText else ""
                 }
                 ViewerHeaderStyle.ADAPTIVE -> {
                     if (customTitle != null) {
                         customTitle to if (headerDate.isNotBlank()) "$pageCountPrefix$headerDate" else if (showViewerPageCount) pageCountText else ""
                     } else {
-                        headerDate to if (current.name.isNotBlank()) "$pageCountPrefix${current.name}" else if (showViewerPageCount) pageCountText else ""
+                        headerDate to if (activeMedia.name.isNotBlank()) "$pageCountPrefix${activeMedia.name}" else if (showViewerPageCount) pageCountText else ""
                     }
                 }
             }
@@ -963,7 +1137,7 @@ internal fun PhotoViewer(
                                 leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
                                 onClick = {
                                     viewerMenuExpanded = false
-                                    copyImageToClipboard(context, current)
+                                    copyImageToClipboard(context, activeMedia)
                                 }
                             )
                             DropdownMenuItem(
@@ -979,24 +1153,25 @@ internal fun PhotoViewer(
                                 leadingIcon = { Icon(Icons.Outlined.AutoFixHigh, null) },
                                 onClick = {
                                     viewerMenuExpanded = false
-                                    onEdit(current)
+                                    onSetLastUsedEditorId(BUILT_IN_EDITOR_ID)
+                                    onEdit(activeMedia)
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.action_edit_external)) },
+                                text = { Text(stringResource(R.string.action_edit_with)) },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 onClick = {
                                     viewerMenuExpanded = false
-                                    launchExternalEditor(context, current)
+                                    editSheetTarget = activeMedia
                                 }
                             )
                         } else {
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.action_edit_external)) },
+                                text = { Text(stringResource(R.string.action_edit_with)) },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 onClick = {
                                     viewerMenuExpanded = false
-                                    launchExternalEditor(context, current)
+                                    editSheetTarget = activeMedia
                                 }
                             )
                         }
@@ -1012,10 +1187,55 @@ internal fun PhotoViewer(
                 }
             }
           }
+          if (!current.isVideo && current.pairedRaw != null) {
+              Surface(
+                  modifier = Modifier.padding(top = 4.dp),
+                  shape = RoundedCornerShape(20.dp),
+                  color = Color.Black.copy(alpha = 0.62f),
+                  border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+              ) {
+                  Row(
+                      modifier = Modifier.padding(3.dp),
+                      horizontalArrangement = Arrangement.spacedBy(2.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                  ) {
+                      Surface(
+                          shape = RoundedCornerShape(16.dp),
+                          color = if (!viewingRawVariant) Color.White else Color.Transparent,
+                          modifier = Modifier
+                              .clip(RoundedCornerShape(16.dp))
+                              .clickable { viewingRawVariant = false },
+                      ) {
+                          Text(
+                              text = coverFormatLabel,
+                              style = MaterialTheme.typography.labelSmall,
+                              fontWeight = FontWeight.Bold,
+                              color = if (!viewingRawVariant) Color.Black else Color.White.copy(alpha = 0.85f),
+                              modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                          )
+                      }
+                      Surface(
+                          shape = RoundedCornerShape(16.dp),
+                          color = if (viewingRawVariant) Color.White else Color.Transparent,
+                          modifier = Modifier
+                              .clip(RoundedCornerShape(16.dp))
+                              .clickable { viewingRawVariant = true },
+                      ) {
+                          Text(
+                              text = stringResource(R.string.viewer_variant_raw),
+                              style = MaterialTheme.typography.labelSmall,
+                              fontWeight = FontWeight.Bold,
+                              color = if (viewingRawVariant) Color.Black else Color.White.copy(alpha = 0.85f),
+                              modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                          )
+                      }
+                  }
+              }
+          }
           }
         }
         // ---- Depth Photo control panel ----
-        if (depthPhoto != null && !current.isVideo) {
+        if (depthPhoto != null && !activeMedia.isVideo && !activeMedia.isRaw) {
             // Offset above the bottom control bar so it doesn't overlap the filmstrip.
             val showFilmstripHere = showFilmstrip && images.size > 1
             val bottomOffset = if (showFilmstripHere) 168.dp else 96.dp
@@ -1405,7 +1625,7 @@ internal fun PhotoViewer(
                 shape = RoundedCornerShape(32.dp),
                 tonalElevation = 8.dp,
             ) {
-              val isFav = current.id in favorites
+              val isFav = current.id in favorites || (current.pairedRaw != null && current.pairedRaw.id in favorites)
               val favScale by animateFloatAsState(
                   targetValue = if (isFav) 1.25f else 1.0f,
                   animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
@@ -1445,8 +1665,10 @@ internal fun PhotoViewer(
                     ) {
                         if (!dismissedSecureSharingTip) {
                             showSecureSharingHintDialog = true
+                        } else if (current.pairedRaw != null) {
+                            showPairedShareDialog = true
                         } else {
-                            doShare(current)
+                            doShareList(listOf(activeMedia))
                         }
                     }
                     if (current.id > 0) {
@@ -1456,43 +1678,47 @@ internal fun PhotoViewer(
                             tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             scaleEffect = favScale,
                             modifier = Modifier.weight(1f),
-                        ) { onToggleFavorite(current.id) }
+                        ) {
+                            val pairedRawId = current.pairedRaw?.id
+                            if (isFav) {
+                                if (current.id in favorites) onToggleFavorite(current.id)
+                                if (pairedRawId != null && pairedRawId in favorites) onToggleFavorite(pairedRawId)
+                            } else {
+                                onToggleFavorite(current.id)
+                            }
+                        }
                     }
                     ViewerIconButton(
                         icon = Icons.Outlined.Edit,
                         label = stringResource(R.string.action_edit),
                         modifier = Modifier.weight(1f),
                     ) {
-                        if (current.isVideo) {
-                            launchExternalEditor(context, current)
-                        } else {
-                            handleEditClick(current)
-                        }
+                        handleEditClick(activeMedia)
                     }
                     if (isLocked) {
                         ViewerIconButton(
                             icon = Icons.Outlined.LockOpen,
                             label = stringResource(R.string.action_unlock),
                             modifier = Modifier.weight(1f),
-                        ) { onUnlock(current) }
+                        ) { onUnlock(current.withPairedFiles()) }
                     } else if (current.id > 0) {
                         ViewerIconButton(
                             icon = Icons.Outlined.Lock,
                             label = stringResource(R.string.action_lock),
                             modifier = Modifier.weight(1f),
-                        ) { onLock(current) }
+                        ) { onLock(current.withPairedFiles()) }
                     }
                     ViewerIconButton(
                         icon = Icons.Outlined.DeleteOutline,
                         label = stringResource(R.string.action_delete),
                         modifier = Modifier.weight(1f),
                     ) {
-                        if (isLocked || isInTrash || deleteMode == DeleteMode.ALWAYS_ASK || confirmDeleteSetting) {
+                        if (isLocked || isInTrash || current.pairedRaw != null || deleteMode == DeleteMode.ALWAYS_ASK || confirmDeleteSetting) {
                             confirmDelete = true
                         } else if (deleteMode == DeleteMode.PERMANENT) {
-                            onDelete(current, true)
+                            onDelete(listOf(current), true)
                         } else {
-                            onDelete(current, false)
+                            onDelete(listOf(current), false)
                         }
                     }
                 }
@@ -1620,7 +1846,11 @@ internal fun PhotoViewer(
     val canNavigatePrev = pagerState.currentPage > 0
     val canNavigateNext = pagerState.currentPage < images.size - 1
     if (showInfo) PhotoDetailsSheet(
-        image = current,
+        image = activeMedia,
+        pairedMedia = pairedCompanion,
+        onSwitchPaired = if (pairedCompanion != null) {
+            { viewingRawVariant = !viewingRawVariant }
+        } else null,
         timelineDateFormat = timelineDateFormat,
         customTimelineDateFormat = customTimelineDateFormat,
         canNavigatePrevious = canNavigatePrev,
@@ -1641,128 +1871,244 @@ internal fun PhotoViewer(
         },
         onDismiss = { showInfo = false },
         onSave = { request ->
-            onEditMetadata(current, request)
+            onEditMetadata(activeMedia, request)
         },
         onRename = onRename,
     )
     if (showRenameDialog) {
         RenameFileDialog(
-            currentName = current.name,
+            currentName = activeMedia.name,
             onDismiss = { showRenameDialog = false },
             onConfirm = { newName ->
-                onRename(current, newName)
+                onRename(activeMedia, newName)
                 showRenameDialog = false
             }
         )
     }
     if (showWallpaperSheet) {
         WallpaperChoiceBottomSheet(
-            image = current,
+            image = activeMedia,
             onDismiss = { showWallpaperSheet = false }
         )
     }
-    if (confirmDelete) {
-        val isPermanentlyDeleting = isLocked || isInTrash || deleteMode == DeleteMode.PERMANENT
-        var deletePermanently by remember { mutableStateOf(isPermanentlyDeleting) }
+    if (showPairedShareDialog && current.pairedRaw != null) {
+        val rawCompanion = current.pairedRaw
         AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = {
-                Text(
-                    if (isPermanentlyDeleting || deletePermanently) {
-                        if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
-                        else stringResource(R.string.delete_permanent_photo_title)
-                    } else {
-                        if (current.isVideo) stringResource(R.string.delete_trash_video_title)
-                        else stringResource(R.string.delete_trash_photo_title)
-                    }
-                )
-            },
+            onDismissRequest = { showPairedShareDialog = false },
+            title = { Text(stringResource(R.string.paired_share_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        if (isLocked) stringResource(R.string.delete_vault_desc)
-                        else if (isPermanentlyDeleting || deletePermanently) stringResource(R.string.delete_permanent_desc)
-                        else stringResource(R.string.delete_trash_desc)
-                    )
-                    if (!isPermanentlyDeleting) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { deletePermanently = !deletePermanently }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Checkbox(
-                                checked = deletePermanently,
-                                onCheckedChange = { deletePermanently = it }
-                            )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                showPairedShareDialog = false
+                                doShareList(listOf(current))
+                            },
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            val jpgDefaultLabel = stringResource(R.string.viewer_variant_jpg)
                             Text(
-                                text = stringResource(R.string.delete_permanently_checkbox),
-                                style = MaterialTheme.typography.bodyMedium
+                                if (coverFormatLabel == jpgDefaultLabel) stringResource(R.string.paired_share_jpeg)
+                                else stringResource(R.string.paired_share_format, coverFormatLabel),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
                             )
+                            Text(current.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                showPairedShareDialog = false
+                                doShareList(listOf(rawCompanion))
+                            },
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(stringResource(R.string.paired_share_raw), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(rawCompanion.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                showPairedShareDialog = false
+                                doShareList(listOf(current, rawCompanion))
+                            },
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(stringResource(R.string.paired_share_both), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    onDelete(current, isPermanentlyDeleting || deletePermanently)
-                }) {
-                    Text(
-                        if (isPermanentlyDeleting || deletePermanently) stringResource(R.string.action_delete_permanently)
-                        else stringResource(R.string.action_delete),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
+            confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) {
+                TextButton(onClick = { showPairedShareDialog = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
         )
     }
+    if (confirmDelete) {
+        val isPermanentlyDeleting = isLocked || isInTrash || deleteMode == DeleteMode.PERMANENT
+        val pairedRaw = current.pairedRaw
+        if (pairedRaw != null && !isLocked && !isInTrash) {
+            val activeFormatLabel = if (activeMedia.isRaw) stringResource(R.string.viewer_variant_raw) else coverFormatLabel
+            val companionFormatLabel = if (activeMedia.isRaw) coverFormatLabel else stringResource(R.string.viewer_variant_raw)
+            val companionName = if (activeMedia.isRaw) current.name else pairedRaw.name
+            PairedDeleteDialog(
+                activeFormatLabel = activeFormatLabel,
+                companionFormatLabel = companionFormatLabel,
+                companionName = companionName,
+                forcedPermanent = isPermanentlyDeleting,
+                onDismiss = { confirmDelete = false },
+                onDeleteActiveOnly = { permanent ->
+                    confirmDelete = false
+                    onDelete(listOf(activeMedia), permanent)
+                },
+                onDeleteBoth = { permanent ->
+                    confirmDelete = false
+                    onDelete(current.withPairedFiles(), permanent)
+                },
+            )
+        } else {
+            var deletePermanently by remember { mutableStateOf(isPermanentlyDeleting) }
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = {
+                    Text(
+                        if (isPermanentlyDeleting || deletePermanently) {
+                            if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
+                            else stringResource(R.string.delete_permanent_photo_title)
+                        } else {
+                            if (current.isVideo) stringResource(R.string.delete_trash_video_title)
+                            else stringResource(R.string.delete_trash_photo_title)
+                        }
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            if (isLocked) stringResource(R.string.delete_vault_desc)
+                            else if (isPermanentlyDeleting || deletePermanently) stringResource(R.string.delete_permanent_desc)
+                            else stringResource(R.string.delete_trash_desc)
+                        )
+                        if (!isPermanentlyDeleting) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { deletePermanently = !deletePermanently }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Checkbox(
+                                    checked = deletePermanently,
+                                    onCheckedChange = { deletePermanently = it }
+                                )
+                                Text(
+                                    text = stringResource(R.string.delete_permanently_checkbox),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDelete = false
+                        onDelete(current.withPairedFiles(), isPermanentlyDeleting || deletePermanently)
+                    }) {
+                        Text(
+                            if (isPermanentlyDeleting || deletePermanently) stringResource(R.string.action_delete_permanently)
+                            else stringResource(R.string.action_delete),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
+    }
 
     if (directPermanentDelete) {
-        AlertDialog(
-            onDismissRequest = { directPermanentDelete = false },
-            title = {
-                Text(
-                    if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
-                    else stringResource(R.string.delete_permanent_photo_title)
-                )
-            },
-            text = {
-                Text(stringResource(R.string.delete_permanent_desc))
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        val pairedRaw = current.pairedRaw
+        if (pairedRaw != null) {
+            val activeFormatLabel = if (activeMedia.isRaw) stringResource(R.string.viewer_variant_raw) else coverFormatLabel
+            val companionFormatLabel = if (activeMedia.isRaw) coverFormatLabel else stringResource(R.string.viewer_variant_raw)
+            val companionName = if (activeMedia.isRaw) current.name else pairedRaw.name
+            PairedDeleteDialog(
+                activeFormatLabel = activeFormatLabel,
+                companionFormatLabel = companionFormatLabel,
+                companionName = companionName,
+                forcedPermanent = true,
+                showPermanentNote = true,
+                onDismiss = { directPermanentDelete = false },
+                onDeleteActiveOnly = {
                     directPermanentDelete = false
-                    onDelete(current, true)
-                }) {
+                    onDelete(listOf(activeMedia), true)
+                },
+                onDeleteBoth = {
+                    directPermanentDelete = false
+                    onDelete(current.withPairedFiles(), true)
+                },
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { directPermanentDelete = false },
+                title = {
                     Text(
-                        stringResource(R.string.action_delete_permanently),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
+                        if (current.isVideo) stringResource(R.string.delete_permanent_video_title)
+                        else stringResource(R.string.delete_permanent_photo_title)
                     )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { directPermanentDelete = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            },
-        )
+                },
+                text = {
+                    Text(stringResource(R.string.delete_permanent_desc))
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        directPermanentDelete = false
+                        onDelete(listOf(current), true)
+                    }) {
+                        Text(
+                            stringResource(R.string.action_delete_permanently),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { directPermanentDelete = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
     }
 
     if (viewerAlbumAction != null) {
         val action = viewerAlbumAction!!
+        val pairedFiles = current.withPairedFiles()
         AlbumPickerSheet(
             action = action,
-            selectedCount = 1,
+            selectedCount = pairedFiles.size,
             albums = availableAlbums,
             currentAlbumId = if (action == AlbumAction.MOVE) current.bucketId else null,
             pickerSort = albumPickerSort,
@@ -1772,44 +2118,62 @@ internal fun PhotoViewer(
                 val targetDir = getAlbumDir(album)
                 viewerAlbumAction = null
                 if (action == AlbumAction.MOVE) {
-                    onMoveToAlbum(listOf(current), targetDir, album.name) { result ->
+                    onMoveToAlbum(pairedFiles, targetDir, album.name) { result ->
                         if (result.successCount > 0) {
                             handleClose()
                         }
                     }
                 } else {
-                    onCopyToAlbum(listOf(current), targetDir, album.name) { }
+                    onCopyToAlbum(pairedFiles, targetDir, album.name) { }
                 }
             },
             onCreateAlbum = { newName ->
                 val targetDir = createAlbumDir(newName)
                 viewerAlbumAction = null
                 if (action == AlbumAction.MOVE) {
-                    onMoveToAlbum(listOf(current), targetDir, newName) { result ->
+                    onMoveToAlbum(pairedFiles, targetDir, newName) { result ->
                         if (result.successCount > 0) {
                             handleClose()
                         }
                     }
                 } else {
-                    onCopyToAlbum(listOf(current), targetDir, newName) { }
+                    onCopyToAlbum(pairedFiles, targetDir, newName) { }
                 }
             }
         )
     }
 
-    if (showEditChoiceSheet) {
+    editSheetTarget?.let { target ->
         EditChoiceBottomSheet(
-            onDismiss = { showEditChoiceSheet = false },
-            onChooseBuiltIn = { rememberChoice ->
-                showEditChoiceSheet = false
-                if (rememberChoice) onSetPreferredEditor(PreferredEditor.BUILT_IN)
-                onEdit(current)
+            image = target,
+            lastUsedEditorId = if (target.isVideo) lastUsedVideoEditorId else lastUsedEditorId,
+            includeBuiltIn = !target.isVideo,
+            onDismiss = { editSheetTarget = null },
+            onChooseBuiltIn = { always ->
+                editSheetTarget = null
+                onSetLastUsedEditorId(BUILT_IN_EDITOR_ID)
+                if (always) onSetPreferredEditor(PreferredEditor.BUILT_IN)
+                onEdit(target)
             },
-            onChooseExternal = { rememberChoice ->
-                showEditChoiceSheet = false
-                if (rememberChoice) onSetPreferredEditor(PreferredEditor.EXTERNAL)
-                launchExternalEditor(context, current)
-            }
+            onChooseExternal = { option, always ->
+                editSheetTarget = null
+                val launched = launchExternalEditorOption(context, option)
+                if (launched) {
+                    if (target.isVideo) {
+                        onSetLastUsedVideoEditorId(option.id)
+                        if (always) onSetPreferredVideoEditor(option.id)
+                    } else {
+                        onSetLastUsedEditorId(option.id)
+                        if (always) onSetPreferredExternalEditor(option.id)
+                    }
+                } else {
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(R.string.no_external_editor_found),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
         )
     }
 
@@ -1874,7 +2238,11 @@ internal fun PhotoViewer(
                 Button(onClick = {
                     showSecureSharingHintDialog = false
                     onDismissSecureSharingTip()
-                    doShare(current)
+                    if (current.pairedRaw != null) {
+                        showPairedShareDialog = true
+                    } else {
+                        doShareList(listOf(activeMedia))
+                    }
                 }) {
                     Text(stringResource(R.string.action_share))
                 }

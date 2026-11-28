@@ -69,6 +69,13 @@ class DuplicateDetector(private val context: Context) {
             for (j in candidates) {
                 val a = fingerprints[i].first
                 val b = fingerprints[j].first
+                // Do not flag intentional RAW+JPEG camera pairs in the same folder as similar duplicates.
+                if (a.isRaw != b.isRaw &&
+                    rawPairFolderKey(a) == rawPairFolderKey(b) &&
+                    rawPairStem(a.name) == rawPairStem(b.name)
+                ) {
+                    continue
+                }
                 val sameShape = kotlin.math.abs(a.width.toFloat() / a.height.coerceAtLeast(1) -
                     b.width.toFloat() / b.height.coerceAtLeast(1)) < 0.035f
                 if (sameShape && java.lang.Long.bitCount(fingerprints[i].second xor fingerprints[j].second) <= 5) {

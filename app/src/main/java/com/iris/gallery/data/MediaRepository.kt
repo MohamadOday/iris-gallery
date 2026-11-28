@@ -8,6 +8,10 @@ import android.os.Bundle
 import android.os.Build
 import android.os.Environment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import android.util.AtomicFile
 import java.io.DataInputStream
@@ -20,6 +24,11 @@ sealed interface UriLoadResult {
     data object MissingOrDeleted : UriLoadResult
 }
 
+data class RescanPhaseResult(
+    val scannedCount: Int,
+    val purgedGhostCount: Int,
+)
+
 class MediaRepository(private val context: Context) {
     private val snapshot = AtomicFile(File(context.filesDir, "media_snapshot.bin"))
     private val libraryPreferences = LibraryPreferences(context)
@@ -31,6 +40,8 @@ class MediaRepository(private val context: Context) {
     }
 
     private val inMemoryCache = java.util.concurrent.ConcurrentHashMap<Long, MediaImage>()
+    private val exifDateVerifiedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val manuallyEditedDateIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val recentMovedOrDeletedIds = java.util.concurrent.ConcurrentHashMap<Long, Long>()
     private val recentMovedOrDeletedPaths = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val verifiedPathsCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -42,10 +53,23 @@ class MediaRepository(private val context: Context) {
         return 0L
     }
 
+    private fun probeImageBounds(uri: Uri, filePath: String): Pair<Int, Int>? = runCatching {
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        val f = filePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() && it.canRead() }
+        if (f != null) {
+            android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
+        } else {
+            context.contentResolver.openInputStream(uri)?.use { s ->
+                android.graphics.BitmapFactory.decodeStream(s, null, opts)
+            }
+        }
+        if (opts.outWidth > 0 && opts.outHeight > 0) opts.outWidth to opts.outHeight else null
+    }.getOrNull()
+
     fun loadSnapshot(): List<MediaImage> = runCatching {
         DataInputStream(snapshot.openRead().buffered()).use { input ->
             val version = input.readInt()
-            if (version != 3 && version != 4) return@use emptyList()
+            if (version !in 3..6) return@use emptyList()
             val list = List(input.readInt().coerceIn(0, 100_000)) {
                 val id = input.readLong(); val isVideo = input.readBoolean()
                 val collection = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -59,6 +83,10 @@ class MediaRepository(private val context: Context) {
                 val durationMs = input.readLong(); val mimeType = input.readUTF(); val sizeBytes = input.readLong()
                 val orientation = input.readInt(); val savedTitle = input.readUTF()
                 val dateModified = input.readLong(); val dateAdded = input.readLong()
+                val exifDateVerified = if (version >= 6) input.readBoolean() else false
+                if (exifDateVerified) {
+                    exifDateVerifiedIds.add(id)
+                }
                 val title = libraryPreferences.getCustomTitle(id) ?: savedTitle
                 MediaImage(id, snapshotUri ?: ContentUris.withAppendedId(collection, id), name, dateTaken,
                     width, height, path, bucketId, bucketName,
@@ -66,11 +94,101 @@ class MediaRepository(private val context: Context) {
                     dateModified = dateModified, dateAdded = dateAdded)
             }
             list.forEach { item ->
-                inMemoryCache[item.id] = item
+                // Older snapshots (v3/v4) may have orientation=0 for portrait RAW/DNG files;
+                // leave them out of inMemoryCache so the background load refreshes their EXIF orientation once.
+                if (version >= 5 || !item.isRaw) {
+                    inMemoryCache[item.id] = item
+                }
             }
             list
         }
     }.getOrDefault(emptyList())
+
+    fun updateCachedMetadata(updated: MediaImage) {
+        inMemoryCache[updated.id] = updated
+        exifDateVerifiedIds.add(updated.id)
+        manuallyEditedDateIds.add(updated.id)
+    }
+
+    fun hasUnverifiedExifDates(items: List<MediaImage>): Boolean {
+        return items.any { !it.isVideo && it.id > 0L && it.id !in exifDateVerifiedIds }
+    }
+
+    /**
+     * Reads EXIF capture timestamps in parallel on [Dispatchers.IO] for non-video photos that were
+     * loaded via the fast MediaStore cursor path without an EXIF check. Results are persisted in
+     * [exifDateVerifiedIds] and `media_snapshot.bin` so each unchanged file is checked only once.
+     */
+    suspend fun enrichExifDatesInBackground(
+        items: List<MediaImage>,
+        onBatchUpdated: (Map<Long, Long>) -> Unit,
+        onCheckpoint: (suspend () -> Unit)? = null,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val pending = items.filter { !it.isVideo && it.id > 0L && it.id !in exifDateVerifiedIds }
+        if (pending.isEmpty()) return@withContext false
+
+        // Prioritize photos whose MediaStore DATE_TAKEN looks missing or equal to file copy/mtime
+        // so migrated and copied photos snap into chronological order first.
+        val prioritized = pending.sortedBy { item ->
+            val missingTaken = item.dateTaken <= 0L
+            val matchesFileDate = (item.dateModified > 0L && kotlin.math.abs(item.dateTaken - item.dateModified) <= 60_000L) ||
+                (item.dateAdded > 0L && kotlin.math.abs(item.dateTaken - item.dateAdded) <= 60_000L)
+            when {
+                missingTaken -> 0
+                matchesFileDate -> 1
+                else -> 2
+            }
+        }
+
+        val chunkSize = 200
+        val workerCount = 4
+        var checkedAny = false
+        var chunksSinceCheckpoint = 0
+
+        for (chunk in prioritized.chunked(chunkSize)) {
+            coroutineContext.ensureActive()
+            val subSize = ((chunk.size + workerCount - 1) / workerCount).coerceAtLeast(1)
+            val batchUpdates = coroutineScope {
+                chunk.chunked(subSize).map { slice ->
+                    async(Dispatchers.IO) {
+                        val localUpdates = HashMap<Long, Long>()
+                        for (item in slice) {
+                            coroutineContext.ensureActive()
+                            if (item.id in manuallyEditedDateIds) {
+                                exifDateVerifiedIds.add(item.id)
+                                continue
+                            }
+                            val exifTaken = extractExifDateTaken(context, item.uri, item.path)
+                            exifDateVerifiedIds.add(item.id)
+                            if (exifTaken != null && exifTaken > 0L && kotlin.math.abs(exifTaken - item.dateTaken) >= 1_000L) {
+                                localUpdates[item.id] = exifTaken
+                                inMemoryCache[item.id]?.let { cached ->
+                                    if (cached.id !in manuallyEditedDateIds) {
+                                        inMemoryCache[item.id] = cached.copy(dateTaken = exifTaken)
+                                    }
+                                }
+                            }
+                        }
+                        localUpdates
+                    }
+                }.awaitAll()
+            }
+            checkedAny = true
+            chunksSinceCheckpoint++
+            val mergedBatch = HashMap<Long, Long>()
+            for (part in batchUpdates) {
+                mergedBatch.putAll(part)
+            }
+            if (mergedBatch.isNotEmpty()) {
+                onBatchUpdated(mergedBatch)
+            }
+            if (onCheckpoint != null && chunksSinceCheckpoint >= 5) {
+                chunksSinceCheckpoint = 0
+                onCheckpoint()
+            }
+        }
+        checkedAny
+    }
 
     fun markMovedOrDeleted(ids: Set<Long>, paths: Set<String>) {
         val now = System.currentTimeMillis()
@@ -78,6 +196,8 @@ class MediaRepository(private val context: Context) {
             if (it > 0) {
                 recentMovedOrDeletedIds[it] = now
                 inMemoryCache.remove(it)
+                exifDateVerifiedIds.remove(it)
+                manuallyEditedDateIds.remove(it)
             }
         }
         paths.forEach {
@@ -108,6 +228,20 @@ class MediaRepository(private val context: Context) {
 
     fun clearVerifiedPathsCache() {
         verifiedPathsCache.clear()
+    }
+
+    fun removeCachedPaths(paths: Set<String>) {
+        if (paths.isEmpty()) return
+        paths.forEach { verifiedPathsCache.remove(it) }
+        val iterator = inMemoryCache.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.value.path in paths) {
+                exifDateVerifiedIds.remove(entry.key)
+                manuallyEditedDateIds.remove(entry.key)
+                iterator.remove()
+            }
+        }
     }
 
     fun purgeGhostMedia(id: Long, path: String, uri: Uri) {
@@ -145,9 +279,28 @@ class MediaRepository(private val context: Context) {
         }
     }
 
-    suspend fun rescanStorage(): Int = withContext(Dispatchers.IO) {
+    suspend fun rescanStorage(): Int =
+        rescanStoragePrioritized(forceReverifyExif = true).scannedCount
+
+    /**
+     * Scans storage directories ordered by most recently modified first and streams newly indexed
+     * URIs and missing ghost paths back live as small batches complete, so the gallery updates
+     * online without waiting for the entire filesystem walk to finish.
+     */
+    suspend fun rescanStoragePrioritized(
+        recentOnly: Boolean = false,
+        skipRecentPhase: Boolean = false,
+        recentWindowMs: Long = 7L * 24L * 60L * 60L * 1000L,
+        minRecentDirs: Int = 15,
+        forceReverifyExif: Boolean = false,
+        onBatchScanned: suspend (List<Uri>) -> Unit = {},
+        onGhostsFound: suspend (Set<String>) -> Unit = {},
+        onRecentPhaseComplete: (suspend () -> Unit)? = null,
+    ): RescanPhaseResult = withContext(Dispatchers.IO) {
         verifiedPathsCache.clear()
-        inMemoryCache.clear()
+        if (forceReverifyExif) {
+            exifDateVerifiedIds.clear()
+        }
 
         val storageRoots = mutableListOf<File>()
         runCatching {
@@ -179,38 +332,29 @@ class MediaRepository(private val context: Context) {
             }
         }
 
-        val candidateFolders = mutableListOf<File>()
-        val standardFolders = listOf("DCIM", "Pictures", "Movies", "Download", "Documents")
-        for (root in storageRoots) {
-            for (folder in standardFolders) {
-                val f = File(root, folder)
-                if (f.exists() && f.isDirectory && f !in candidateFolders) {
-                    candidateFolders.add(f)
-                }
-            }
-            root.listFiles()?.forEach { sub ->
-                if (sub.isDirectory &&
-                    !sub.name.startsWith(".") &&
-                    !sub.name.equals("Android", ignoreCase = true) &&
-                    !sub.name.equals("lost.dir", ignoreCase = true) &&
-                    sub !in candidateFolders
-                ) {
-                    candidateFolders.add(sub)
-                }
-            }
-        }
-
         val mediaExtensions = setOf(
-            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg",
-            "cr2", "nef", "arw", "rw2", "orf", "pef", "raf",
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "raw", "svg",
+            "cr2", "cr3", "nef", "arw", "rw2", "orf", "pef", "raf", "srw",
             "mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts", "m4v", "wmv"
         )
 
-        val knownMap = HashMap<String, Pair<Long, Long>>()
+        class KnownMediaEntry(
+            val modSec: Long,
+            val size: Long,
+            val id: Long,
+            val isVideo: Boolean,
+            val volumeName: String,
+        )
+
+        val knownMap = HashMap<String, KnownMediaEntry>()
+        val knownPathsByDir = HashMap<String, MutableList<String>>()
         val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DATA,
             MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.SIZE
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            if (android.os.Build.VERSION.SDK_INT >= 29) MediaStore.MediaColumns.VOLUME_NAME else MediaStore.MediaColumns.DATA,
         )
         val selection = "(${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?)"
         val selectionArgs = arrayOf(
@@ -230,91 +374,262 @@ class MediaRepository(private val context: Context) {
         }
 
         for (collection in collectionsToQuery) {
+            coroutineContext.ensureActive()
             runCatching {
                 context.contentResolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
+                    val idCol = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
                     val dataCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
                     val modCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
                     val sizeCol = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
-                    if (dataCol >= 0 && modCol >= 0 && sizeCol >= 0) {
+                    val typeCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                    val volCol = if (android.os.Build.VERSION.SDK_INT >= 29) cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME) else -1
+                    if (idCol >= 0 && dataCol >= 0 && modCol >= 0 && sizeCol >= 0) {
                         while (cursor.moveToNext()) {
                             val path = cursor.getString(dataCol)
                             if (!path.isNullOrBlank()) {
+                                val id = cursor.getLong(idCol)
                                 val mod = cursor.getLong(modCol)
                                 val sz = cursor.getLong(sizeCol)
-                                knownMap[path] = Pair(mod, sz)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        val pathsToScan = mutableListOf<String>()
-        val ghostPathsToPurge = mutableListOf<String>()
-
-        for (folder in candidateFolders) {
-            runCatching {
-                folder.walkTopDown()
-                    .maxDepth(12)
-                    .onEnter { dir ->
-                        !dir.name.startsWith(".") &&
-                        !dir.name.equals("Android", ignoreCase = true) &&
-                        !File(dir, ".nomedia").exists()
-                    }
-                    .forEach { file ->
-                        if (file.isFile && !file.name.startsWith(".")) {
-                            val ext = file.extension.lowercase(java.util.Locale.ROOT)
-                            if (ext in mediaExtensions) {
-                                val path = file.absolutePath
-                                val known = knownMap[path]
-                                if (known == null) {
-                                    pathsToScan.add(path)
-                                } else {
-                                    val (msModSec, msSize) = known
-                                    val diskModSec = file.lastModified() / 1000L
-                                    val diskSize = file.length()
-                                    if (Math.abs(diskModSec - msModSec) > 1L || (diskSize > 0L && diskSize != msSize)) {
-                                        pathsToScan.add(path)
-                                    }
+                                val isVid = typeCol >= 0 && cursor.getInt(typeCol) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                                val vol = if (volCol >= 0) cursor.getString(volCol).orEmpty() else ""
+                                knownMap[path] = KnownMediaEntry(mod, sz, id, isVid, vol)
+                                val parent = path.substringBeforeLast('/', "")
+                                if (parent.isNotBlank()) {
+                                    knownPathsByDir.getOrPut(parent) { mutableListOf() }.add(path)
                                 }
                             }
                         }
                     }
+                }
             }
         }
 
-        for ((knownPath, _) in knownMap) {
-            if (!File(knownPath).exists()) {
-                ghostPathsToPurge.add(knownPath)
+        fun isKnownMediaReadable(knownPath: String): Boolean {
+            if (File(knownPath).exists()) return true
+            val entry = knownMap[knownPath] ?: return false
+            if (entry.id <= 0L) return false
+            val vol = if (entry.volumeName.isNotBlank() && entry.volumeName != "external_primary") entry.volumeName else "external"
+            val uri = if (entry.isVideo) {
+                ContentUris.withAppendedId(MediaStore.Video.Media.getContentUri(vol), entry.id)
+            } else {
+                ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(vol), entry.id)
+            }
+            return runCatching {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd -> afd.length != 0L } ?: false
+            }.getOrDefault(false)
+        }
+
+        fun isExcludedDir(dir: File): Boolean {
+            val name = dir.name
+            if (name.startsWith(".") || name.equals("Android", ignoreCase = true) || name.equals("lost.dir", ignoreCase = true)) {
+                return true
+            }
+            val abs = dir.absolutePath
+            if (abs.contains("/Android/data", ignoreCase = true) || abs.contains("/Android/obb", ignoreCase = true)) {
+                return true
+            }
+            return File(dir, ".nomedia").exists()
+        }
+
+        // Collect known album folders and shallow media directories so we can sort by dir.lastModified()
+        // descending; on Linux/Android adding a file updates the immediate parent directory's mtime.
+        val priorityDirMap = LinkedHashMap<String, File>()
+        fun addCandidateDir(dir: File?) {
+            if (dir == null || !dir.exists() || !dir.isDirectory) return
+            if (isExcludedDir(dir)) return
+            priorityDirMap.putIfAbsent(dir.absolutePath, dir)
+        }
+
+        for (knownParent in knownPathsByDir.keys) {
+            addCandidateDir(File(knownParent))
+        }
+        val standardFolders = listOf("DCIM", "Pictures", "Movies", "Download", "Documents")
+        for (root in storageRoots) {
+            for (folder in standardFolders) {
+                val base = File(root, folder)
+                if (base.exists() && base.isDirectory && !isExcludedDir(base)) {
+                    addCandidateDir(base)
+                    runCatching { base.listFiles() }.getOrNull()?.forEach { child ->
+                        if (child.isDirectory && !isExcludedDir(child)) {
+                            addCandidateDir(child)
+                            runCatching { child.listFiles() }.getOrNull()?.forEach { grandChild ->
+                                if (grandChild.isDirectory && !isExcludedDir(grandChild)) {
+                                    addCandidateDir(grandChild)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            runCatching { root.listFiles() }.getOrNull()?.forEach { sub ->
+                if (sub.isDirectory && !isExcludedDir(sub)) {
+                    addCandidateDir(sub)
+                }
             }
         }
 
-        val allPaths = pathsToScan + ghostPathsToPurge
-        if (allPaths.isEmpty()) {
-            return@withContext 0
+        val sortedDirs = priorityDirMap.values.sortedByDescending { runCatching { it.lastModified() }.getOrDefault(0L) }
+        val recentCutoffMs = System.currentTimeMillis() - recentWindowMs
+        val recentDirs = ArrayList<File>()
+        val olderDirs = ArrayList<File>()
+        sortedDirs.forEachIndexed { index, dir ->
+            val mtime = runCatching { dir.lastModified() }.getOrDefault(0L)
+            if (index < minRecentDirs || mtime >= recentCutoffMs) {
+                recentDirs.add(dir)
+            } else {
+                olderDirs.add(dir)
+            }
         }
 
-        var scannedCount = 0
-        for (chunk in allPaths.chunked(200)) {
+        val visitedDirs = HashSet<String>(sortedDirs.size * 2)
+        val checkedKnownDirs = HashSet<String>(sortedDirs.size)
+        val pendingScanPaths = ArrayList<String>(32)
+        val pendingGhostPaths = LinkedHashSet<String>(32)
+        var totalScanned = 0
+        var totalPurgedGhosts = 0
+
+        suspend fun flushScanPaths() {
+            if (pendingScanPaths.isEmpty()) return
+            val batch = pendingScanPaths.toTypedArray()
+            pendingScanPaths.clear()
             val latch = kotlinx.coroutines.CompletableDeferred<Unit>()
             val counter = java.util.concurrent.atomic.AtomicInteger(0)
+            val scannedUris = java.util.Collections.synchronizedList(ArrayList<Uri>(batch.size))
             android.media.MediaScannerConnection.scanFile(
                 context,
-                chunk.toTypedArray(),
+                batch,
                 null
-            ) { _, _ ->
-                if (counter.incrementAndGet() >= chunk.size) {
+            ) { _, uri ->
+                if (uri != null) {
+                    scannedUris.add(uri)
+                }
+                if (counter.incrementAndGet() >= batch.size) {
                     latch.complete(Unit)
                 }
             }
-            kotlinx.coroutines.withTimeoutOrNull(8_000) { latch.await() }
-            scannedCount += counter.get()
+            kotlinx.coroutines.withTimeoutOrNull(6_000) { latch.await() }
+            totalScanned += counter.get()
+            val readyUris = synchronized(scannedUris) { scannedUris.toList() }
+            if (readyUris.isNotEmpty()) {
+                onBatchScanned(readyUris)
+            }
         }
 
-        verifiedPathsCache.clear()
-        inMemoryCache.clear()
+        suspend fun flushGhostPaths() {
+            if (pendingGhostPaths.isEmpty()) return
+            val ghosts = pendingGhostPaths.toSet()
+            pendingGhostPaths.clear()
+            totalPurgedGhosts += ghosts.size
+            removeCachedPaths(ghosts)
+            onGhostsFound(ghosts)
+            // Ask MediaStore asynchronously to prune the stale rows without blocking tile updates.
+            android.media.MediaScannerConnection.scanFile(context, ghosts.toTypedArray(), null, null)
+        }
 
-        scannedCount
+        suspend fun scanDirectory(dir: File, depth: Int) {
+            coroutineContext.ensureActive()
+            if (depth > 12) return
+            val dirPath = dir.absolutePath
+            if (!visitedDirs.add(dirPath)) return
+            if (isExcludedDir(dir)) return
+
+            var foundNewOrModifiedInDir = false
+            val children = runCatching { dir.listFiles() }.getOrNull() ?: return
+            val unvisitedSubdirs = ArrayList<File>()
+            for (child in children) {
+                if (child.isDirectory) {
+                    if (child.absolutePath !in priorityDirMap && !isExcludedDir(child)) {
+                        unvisitedSubdirs.add(child)
+                    }
+                    continue
+                }
+                if (!child.isFile || child.name.startsWith(".")) continue
+                val ext = child.extension.lowercase(java.util.Locale.ROOT)
+                if (ext !in mediaExtensions) continue
+                val path = child.absolutePath
+                val known = knownMap[path]
+                val needsScan = if (known == null) {
+                    true
+                } else {
+                    val diskModSec = child.lastModified() / 1000L
+                    val diskSize = child.length()
+                    Math.abs(diskModSec - known.modSec) > 1L || (diskSize > 0L && diskSize != known.size)
+                }
+                if (needsScan) {
+                    pendingScanPaths.add(path)
+                    foundNewOrModifiedInDir = true
+                    if (pendingScanPaths.size >= 24) {
+                        flushScanPaths()
+                    }
+                }
+            }
+
+            if (checkedKnownDirs.add(dirPath)) {
+                knownPathsByDir[dirPath]?.forEach { knownPath ->
+                    if (!isKnownMediaReadable(knownPath)) {
+                        pendingGhostPaths.add(knownPath)
+                    }
+                }
+            }
+
+            if (foundNewOrModifiedInDir) {
+                flushScanPaths()
+            }
+            if (pendingGhostPaths.isNotEmpty()) {
+                flushGhostPaths()
+            }
+
+            if (unvisitedSubdirs.isNotEmpty()) {
+                unvisitedSubdirs.sortByDescending { runCatching { it.lastModified() }.getOrDefault(0L) }
+                for (sub in unvisitedSubdirs) {
+                    scanDirectory(sub, depth + 1)
+                }
+            }
+        }
+
+        // Phase 1: recently modified directories first
+        if (!skipRecentPhase) {
+            for (dir in recentDirs) {
+                scanDirectory(dir, depth = 0)
+            }
+            flushScanPaths()
+            flushGhostPaths()
+            onRecentPhaseComplete?.invoke()
+        } else {
+            for (dir in recentDirs) {
+                val p = dir.absolutePath
+                visitedDirs.add(p)
+                checkedKnownDirs.add(p)
+            }
+        }
+
+        if (recentOnly) {
+            return@withContext RescanPhaseResult(totalScanned, totalPurgedGhosts)
+        }
+
+        // Phase 2: remaining older directories + any unchecked known folders
+        for (dir in olderDirs) {
+            scanDirectory(dir, depth = 0)
+        }
+        flushScanPaths()
+        flushGhostPaths()
+
+        // Verify any remaining known MediaStore paths whose parent folders were deleted or excluded.
+        for ((dirPath, paths) in knownPathsByDir) {
+            coroutineContext.ensureActive()
+            if (dirPath in checkedKnownDirs) continue
+            for (knownPath in paths) {
+                if (!isKnownMediaReadable(knownPath)) {
+                    pendingGhostPaths.add(knownPath)
+                    if (pendingGhostPaths.size >= 50) {
+                        flushGhostPaths()
+                    }
+                }
+            }
+        }
+        flushGhostPaths()
+
+        RescanPhaseResult(totalScanned, totalPurgedGhosts)
     }
 
     /**
@@ -323,8 +638,8 @@ class MediaRepository(private val context: Context) {
      */
     suspend fun loadHiddenImages(): List<MediaImage> = withContext(Dispatchers.IO) {
         val imageExtensions = setOf(
-            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg",
-            "cr2", "nef", "arw", "rw2", "orf", "pef", "raf"
+            "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "raw", "svg",
+            "cr2", "cr3", "nef", "arw", "rw2", "orf", "pef", "raf", "srw"
         )
         val videoExtensions = setOf(
             "mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts", "m4v", "wmv"
@@ -404,7 +719,20 @@ class MediaRepository(private val context: Context) {
                     val isVideo = ext in videoExtensions
                     val mimeType = android.webkit.MimeTypeMap.getSingleton()
                         .getMimeTypeFromExtension(ext)
-                        ?: if (isVideo) "video/mp4" else "image/jpeg"
+                        ?: when (ext) {
+                            "dng" -> "image/x-adobe-dng"
+                            "cr2" -> "image/x-canon-cr2"
+                            "cr3" -> "image/x-canon-cr3"
+                            "nef" -> "image/x-nikon-nef"
+                            "arw" -> "image/x-sony-arw"
+                            "raf" -> "image/x-fuji-raf"
+                            "orf" -> "image/x-olympus-orf"
+                            "rw2" -> "image/x-panasonic-rw2"
+                            "pef" -> "image/x-pentax-pef"
+                            "srw" -> "image/x-samsung-srw"
+                            "raw" -> "image/x-dcraw"
+                            else -> if (isVideo) "video/mp4" else "image/jpeg"
+                        }
                     val lastMod = child.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
                     val parentFile = child.parentFile
                     val parentPath = parentFile?.absolutePath.orEmpty()
@@ -413,6 +741,7 @@ class MediaRepository(private val context: Context) {
 
                     var width = 0
                     var height = 0
+                    var itemOrientation = 0
                     if (!isVideo && ext != "svg") {
                         runCatching {
                             val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -422,17 +751,23 @@ class MediaRepository(private val context: Context) {
                                 height = opts.outHeight
                             }
                         }
+                        itemOrientation = com.iris.gallery.decoder.ExifOrientationHelper.readRotationDegrees(child)
                     }
 
                     val stableHash = childPath.hashCode().toLong() and 0x7FFFFFFFL
                     val syntheticId = -2_000_000_000_000L - stableHash
+                    val hiddenUri = android.net.Uri.fromFile(child)
+                    val exifTaken = if (!isVideo && ext != "svg") {
+                        extractExifDateTaken(context, hiddenUri, childPath)
+                    } else null
+                    val effectiveDateTaken = if (exifTaken != null && exifTaken > 0L) exifTaken else lastMod
 
                     results.add(
                         MediaImage(
                             id = syntheticId,
-                            uri = android.net.Uri.fromFile(child),
+                            uri = hiddenUri,
                             name = childName,
-                            dateTaken = lastMod,
+                            dateTaken = effectiveDateTaken,
                             width = width,
                             height = height,
                             path = childPath,
@@ -442,7 +777,7 @@ class MediaRepository(private val context: Context) {
                             durationMs = 0L,
                             mimeType = mimeType,
                             sizeBytes = sizeBytes,
-                            orientation = 0,
+                            orientation = itemOrientation,
                             title = "",
                             description = "",
                             dateModified = lastMod,
@@ -611,7 +946,25 @@ class MediaRepository(private val context: Context) {
                         // Snapshot entries land in the cache, so an unchanged row can
                         // skip the disk stat and the EXIF read entirely. This is what
                         // keeps a 13k-item refresh from turning into a multi-minute scan.
+                        val itemMimeType = cursor.getString(mimeType).orEmpty()
                         val existing = if (!trashed) inMemoryCache[mediaId] else null
+                        val orientationMatches = existing != null && (
+                            existing.orientation == itemOrientation ||
+                                (existing.isRaw && itemOrientation == 0)
+                            )
+                        val dimensionsMatch = existing != null && (
+                            (existing.width == itemWidth && existing.height == itemHeight) ||
+                                (
+                                    existing.isRaw &&
+                                        existing.width > 0 &&
+                                        existing.height > 0 &&
+                                        (
+                                            itemWidth <= 0 ||
+                                                itemHeight <= 0 ||
+                                                (existing.orientation in setOf(90, 270) && itemWidth < itemHeight)
+                                            )
+                                    )
+                            )
                         if (existing != null &&
                             existing.name == displayName &&
                             existing.path == filePath &&
@@ -619,9 +972,8 @@ class MediaRepository(private val context: Context) {
                             existing.dateModified == cursorDateModified &&
                             existing.dateAdded == effectiveDateAdded &&
                             existing.sizeBytes == itemSize &&
-                            existing.orientation == itemOrientation &&
-                            existing.width == itemWidth &&
-                            existing.height == itemHeight &&
+                            orientationMatches &&
+                            dimensionsMatch &&
                             existing.title == itemTitle &&
                             existing.isVideo == isVid
                         ) {
@@ -647,9 +999,15 @@ class MediaRepository(private val context: Context) {
                             if (exists) {
                                 diskModifiedMs = file.lastModified()
                                 diskSizeBytes = file.length()
-                            } else if (volName.isNotBlank() && volName != "external_primary") {
+                            } else {
+                                // Under Android 11+ Scoped Storage without MANAGE_EXTERNAL_STORAGE,
+                                // File.exists() can return false for media owned by other apps even
+                                // though ContentResolver can read the URI directly.
                                 exists = runCatching {
-                                    context.contentResolver.openAssetFileDescriptor(mediaUri, "r")?.use { true } ?: false
+                                    context.contentResolver.openAssetFileDescriptor(mediaUri, "r")?.use { afd ->
+                                        if (afd.length > 0L) diskSizeBytes = afd.length
+                                        afd.length != 0L
+                                    } ?: false
                                 }.getOrDefault(false)
                             }
                             if (!exists) {
@@ -686,9 +1044,8 @@ class MediaRepository(private val context: Context) {
                             existing.dateModified == effectiveModified &&
                             existing.dateAdded == effectiveDateAdded &&
                             existing.sizeBytes == itemSize &&
-                            existing.orientation == itemOrientation &&
-                            existing.width == itemWidth &&
-                            existing.height == itemHeight &&
+                            orientationMatches &&
+                            dimensionsMatch &&
                             existing.title == itemTitle &&
                             existing.isVideo == isVid
                         ) {
@@ -696,15 +1053,32 @@ class MediaRepository(private val context: Context) {
                             continue
                         }
 
+                        exifDateVerifiedIds.remove(mediaId)
                         var takenTime = cursorDateTaken
                         if (!isVid && !trustCursor) {
                             val exifTaken = extractExifDateTaken(context, mediaUri, filePath)
                             if (exifTaken != null && exifTaken > 0L) takenTime = exifTaken
+                            exifDateVerifiedIds.add(mediaId)
                         }
 
                         if (takenTime <= 0L && cursorDateTaken > 0L) takenTime = cursorDateTaken
                         if (takenTime <= 0L && effectiveModified > 0L) takenTime = effectiveModified
                         if (takenTime <= 0L && effectiveDateAdded > 0L) takenTime = effectiveDateAdded
+
+                        val isRawItem = !isVid && isRawMedia(displayName, itemMimeType)
+                        val effectiveOrientation = if (isRawItem && itemOrientation == 0) {
+                            com.iris.gallery.decoder.ExifOrientationHelper.readRotationDegrees(context, mediaUri, filePath)
+                        } else {
+                            itemOrientation
+                        }
+                        var effectiveWidth = itemWidth
+                        var effectiveHeight = itemHeight
+                        if (isRawItem && (effectiveWidth <= 0 || effectiveHeight <= 0 || (effectiveOrientation in setOf(90, 270) && effectiveWidth < effectiveHeight))) {
+                            probeImageBounds(mediaUri, filePath)?.let { (w, h) ->
+                                effectiveWidth = w
+                                effectiveHeight = h
+                            }
+                        }
 
                         val itemBucketName = if (trashed) "Trash" else cursor.getString(bucketName).orEmpty().ifBlank {
                             filePath.substringBeforeLast('/', "").substringAfterLast('/', "").ifBlank { "Other" }
@@ -715,16 +1089,16 @@ class MediaRepository(private val context: Context) {
                             uri = mediaUri,
                             name = displayName,
                             dateTaken = takenTime,
-                            width = itemWidth,
-                            height = itemHeight,
+                            width = effectiveWidth,
+                            height = effectiveHeight,
                             path = filePath,
                             bucketId = itemBucketId,
                             bucketName = itemBucketName,
                             isVideo = isVid,
                             durationMs = itemDuration,
-                            mimeType = cursor.getString(mimeType).orEmpty(),
+                            mimeType = itemMimeType,
                             sizeBytes = effectiveSize,
-                            orientation = itemOrientation,
+                            orientation = effectiveOrientation,
                             title = itemTitle,
                             dateModified = effectiveModified,
                             dateAdded = effectiveDateAdded,
@@ -749,6 +1123,7 @@ class MediaRepository(private val context: Context) {
         if (!trashed) {
             val validIds = sorted.mapTo(HashSet(sorted.size)) { it.id }
             inMemoryCache.keys.retainAll(validIds)
+            exifDateVerifiedIds.retainAll(validIds)
             saveSnapshot(sorted)
         }
         sorted
@@ -869,11 +1244,17 @@ class MediaRepository(private val context: Context) {
                         diskSize = file.length()
                         diskMod = file.lastModified()
                         fileReady = diskSize > 0L || cursorSize > 0L
-                    } else if (volumeName.isNotBlank() && volumeName != "external_primary") {
-                        fileReady = runCatching {
-                            context.contentResolver.openAssetFileDescriptor(canonicalUri, "r")?.use { true } ?: false
-                        }.getOrDefault(false)
                     }
+                }
+                if (!fileReady) {
+                    // Fall back to ContentResolver for Scoped Storage (Android 11+) and secondary volumes
+                    // where File.exists() can fail on videos downloaded by other apps.
+                    fileReady = runCatching {
+                        context.contentResolver.openAssetFileDescriptor(canonicalUri, "r")?.use { afd ->
+                            if (afd.length > 0L) diskSize = afd.length
+                            afd.length > 0L || (afd.length == android.content.res.AssetFileDescriptor.UNKNOWN_LENGTH && cursorSize > 0L)
+                        } ?: false
+                    }.getOrDefault(false)
                 }
                 if (!fileReady) {
                     return@use if (isFreshRow || filePath.isBlank()) UriLoadResult.Pending else UriLoadResult.MissingOrDeleted
@@ -883,8 +1264,9 @@ class MediaRepository(private val context: Context) {
                 val effectiveSize = if (diskSize > 0L) diskSize else cursorSize
                 val dateAdded = RestoredTimestamps.getDateAdded(context, filePath) ?: cursorDateAdded
                 var dateTaken = number(MediaStore.Images.Media.DATE_TAKEN)
-                if (!isVideo && dateTaken <= 0L && filePath.isNotBlank()) {
+                if (!isVideo) {
                     extractExifDateTaken(context, canonicalUri, filePath)?.let { if (it > 0L) dateTaken = it }
+                    exifDateVerifiedIds.add(id)
                 }
                 if (dateTaken <= 0L) dateTaken = effectiveModified
                 if (dateTaken <= 0L) dateTaken = dateAdded
@@ -895,13 +1277,29 @@ class MediaRepository(private val context: Context) {
                 val bucketId = resolveBucketId(number(MediaStore.Images.Media.BUCKET_ID), filePath)
                 val title = libraryPreferences.getCustomTitle(id) ?: text(MediaStore.MediaColumns.TITLE).ifBlank { displayName }
 
+                val cursorOrientation = integer(MediaStore.Images.Media.ORIENTATION)
+                val isRawItem = !isVideo && isRawMedia(displayName, mimeType)
+                val effectiveOrientation = if (isRawItem && cursorOrientation == 0) {
+                    com.iris.gallery.decoder.ExifOrientationHelper.readRotationDegrees(context, canonicalUri, filePath)
+                } else {
+                    cursorOrientation
+                }
+                var effectiveWidth = integer(MediaStore.Images.Media.WIDTH)
+                var effectiveHeight = integer(MediaStore.Images.Media.HEIGHT)
+                if (isRawItem && (effectiveWidth <= 0 || effectiveHeight <= 0 || (effectiveOrientation in setOf(90, 270) && effectiveWidth < effectiveHeight))) {
+                    probeImageBounds(canonicalUri, filePath)?.let { (w, h) ->
+                        effectiveWidth = w
+                        effectiveHeight = h
+                    }
+                }
+
                 val item = MediaImage(
                     id = id,
                     uri = canonicalUri,
                     name = displayName,
                     dateTaken = dateTaken,
-                    width = integer(MediaStore.Images.Media.WIDTH),
-                    height = integer(MediaStore.Images.Media.HEIGHT),
+                    width = effectiveWidth,
+                    height = effectiveHeight,
                     path = filePath,
                     bucketId = bucketId,
                     bucketName = bucketName,
@@ -909,7 +1307,7 @@ class MediaRepository(private val context: Context) {
                     durationMs = number(MediaStore.Video.VideoColumns.DURATION),
                     mimeType = mimeType,
                     sizeBytes = effectiveSize,
-                    orientation = integer(MediaStore.Images.Media.ORIENTATION),
+                    orientation = effectiveOrientation,
                     title = title,
                     dateModified = effectiveModified,
                     dateAdded = dateAdded,
@@ -1161,7 +1559,7 @@ class MediaRepository(private val context: Context) {
         runCatching {
             stream = snapshot.startWrite()
             val output = DataOutputStream(stream!!.buffered())
-            output.writeInt(4); output.writeInt(media.size)
+            output.writeInt(6); output.writeInt(media.size)
             media.forEach { item ->
                 output.writeLong(item.id); output.writeBoolean(item.isVideo); output.writeUTF(item.name.take(8_000))
                 output.writeUTF(item.uri.toString().take(4_000))
@@ -1170,6 +1568,7 @@ class MediaRepository(private val context: Context) {
                 output.writeLong(item.durationMs); output.writeUTF(item.mimeType.take(1_000)); output.writeLong(item.sizeBytes)
                 output.writeInt(item.orientation); output.writeUTF(item.title.take(8_000))
                 output.writeLong(item.dateModified); output.writeLong(item.dateAdded)
+                output.writeBoolean(item.id in exifDateVerifiedIds)
             }
             output.flush()
             snapshot.finishWrite(stream)

@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -376,6 +378,9 @@ fun SettingsScreen(
         val animateGifsTitle = stringResource(R.string.settings_animate_gif_thumbs_title)
         val animateGifsDesc = stringResource(R.string.settings_animate_gif_thumbs_desc)
         val showAnimateGifs = layoutSectionMatch || matches(animateGifsTitle, animateGifsDesc)
+        val groupRawJpegTitle = stringResource(R.string.settings_group_raw_jpeg_title)
+        val groupRawJpegDesc = stringResource(R.string.settings_group_raw_jpeg_desc)
+        val showGroupRawJpeg = layoutSectionMatch || matches(groupRawJpegTitle, groupRawJpegDesc, "raw", "dng", "jpeg")
         val cornerStyleTitle = stringResource(R.string.settings_corner_style)
         val cornerSharp = stringResource(R.string.settings_corner_sharp)
         val cornerSubtle = stringResource(R.string.settings_corner_subtle)
@@ -397,6 +402,19 @@ fun SettingsScreen(
         val badgesSectionMatch = matches(badgesSectionTitle)
         val timelineTitle = stringResource(R.string.settings_show_timeline_title)
         val timelineDesc = stringResource(R.string.settings_show_timeline_desc)
+        val timelineDateSourceTitle = stringResource(R.string.settings_timeline_date_source_title)
+        val timelineDateSourceTaken = stringResource(R.string.settings_timeline_date_source_taken)
+        val timelineDateSourceModified = stringResource(R.string.settings_timeline_date_source_modified)
+        val timelineDateSourceAdded = stringResource(R.string.settings_timeline_date_source_added)
+        val showTimelineDateSource = badgesSectionMatch || matches(
+            timelineDateSourceTitle,
+            timelineDateSourceTaken,
+            timelineDateSourceModified,
+            timelineDateSourceAdded,
+            "sort",
+            "exposure",
+            "exif",
+        )
         val dateFormatTitle = stringResource(R.string.settings_date_format_title)
         val relativeDatesTitle = stringResource(R.string.settings_relative_dates_title)
         val relativeDatesDesc = stringResource(R.string.settings_relative_dates_desc)
@@ -549,7 +567,24 @@ fun SettingsScreen(
         val editorAsk = stringResource(R.string.settings_editor_always_ask)
         val editorBuiltin = stringResource(R.string.settings_editor_builtin)
         val editorExternal = stringResource(R.string.settings_editor_external)
-        val showPreferredEditor = behaviorSectionMatch || matches(prefEditorTitle, prefEditorDesc, editorAsk, editorBuiltin, editorExternal)
+        val editorResetLabel = stringResource(R.string.settings_editor_reset)
+        val savedExternalEditorName = remember(settings.preferredEditorComponent) {
+            resolveEditorLabel(context, settings.preferredEditorComponent)
+        }
+        val savedVideoEditorName = remember(settings.preferredVideoEditorComponent) {
+            resolveEditorLabel(context, settings.preferredVideoEditorComponent)
+        }
+        val showPreferredEditor = behaviorSectionMatch || matches(
+            prefEditorTitle,
+            prefEditorDesc,
+            editorAsk,
+            editorBuiltin,
+            editorExternal,
+            editorResetLabel,
+            savedExternalEditorName.orEmpty(),
+            savedVideoEditorName.orEmpty(),
+            "video",
+        )
         val overwriteTitle = stringResource(R.string.settings_editor_overwrite_title)
         val overwriteDesc = stringResource(R.string.settings_editor_overwrite_desc)
         val showOverwrite = behaviorSectionMatch || matches(overwriteTitle, overwriteDesc)
@@ -588,8 +623,8 @@ fun SettingsScreen(
         val showAboutSection = matches(aboutTitle, aboutSubtitle)
 
         val hasAnyAppearance = showThemeMode || showAmoled || showMaterialYou || showCustomAccents
-        val hasAnyLayout = showGridLayout || showAnimateGifs || showCornerStyle || showGridSpacing || showPhotosTileSize || showAlbumsTileSize
-        val hasAnyBadges = showTimeline || showBadgeDuration || showBadgeFormats || showAlbumCount || showAlbumLabels
+        val hasAnyLayout = showGridLayout || showAnimateGifs || showGroupRawJpeg || showCornerStyle || showGridSpacing || showPhotosTileSize || showAlbumsTileSize
+        val hasAnyBadges = showTimeline || showTimelineDateSource || showBadgeDuration || showBadgeFormats || showAlbumCount || showAlbumLabels
         val hasAnyViewer = showViewerHeader || showAutoplay || showLoop || showVideoDoubleTap ||
             showVideoGestures || showUserComments || showFilmstrip || showPinchRotate || showImageRotateBtn || showMultiStageZoom
         val hasAnyNavBehavior = showNavTabs || showTiltNavIcons || showNavBarStyle || showNavLabelMode ||
@@ -997,6 +1032,16 @@ fun SettingsScreen(
                         )
                     }
                 }
+                if (showGroupRawJpeg) {
+                    add {
+                        SettingsSwitchRow(
+                            title = groupRawJpegTitle,
+                            subtitle = groupRawJpegDesc,
+                            checked = settings.groupRawJpegPairs,
+                            onCheckedChange = { preferences.setGroupRawJpegPairs(it) }
+                        )
+                    }
+                }
                 if (showCornerStyle) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1369,6 +1414,42 @@ fun SettingsScreen(
 
         item {
             val badgeBlocks = buildList<@Composable () -> Unit> {
+                if (showTimelineDateSource) {
+                    add {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                timelineDateSourceTitle,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                stringResource(settings.timelineDateSource.getDescriptionRes()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                com.iris.gallery.data.TimelineDateSource.entries.forEach { source ->
+                                    FilterChip(
+                                        selected = settings.timelineDateSource == source,
+                                        onClick = { preferences.setTimelineDateSource(source) },
+                                        label = {
+                                            Text(
+                                                stringResource(source.getTitleRes()),
+                                                maxLines = 1,
+                                                softWrap = false,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 if (showTimeline) {
                     add {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -2112,41 +2193,84 @@ fun SettingsScreen(
                 }
                 if (showPreferredEditor) {
                     add {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            prefEditorTitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            prefEditorDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.ALWAYS_ASK) },
-                                label = { Text(editorAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
-                                label = { Text(editorBuiltin, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = settings.preferredEditor == PreferredEditor.EXTERNAL,
-                                onClick = { preferences.setPreferredEditor(PreferredEditor.EXTERNAL) },
-                                label = { Text(editorExternal, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
-                            )
+                        val externalEditorName = savedExternalEditorName
+                        val videoEditorName = savedVideoEditorName
+                        val currentDefaultLabel = when (settings.preferredEditor) {
+                            PreferredEditor.ALWAYS_ASK -> editorAsk
+                            PreferredEditor.BUILT_IN -> editorBuiltin
+                            PreferredEditor.EXTERNAL -> externalEditorName ?: editorExternal
                         }
-                    }
+                        val hasCustomDefault = settings.preferredEditor != PreferredEditor.ALWAYS_ASK ||
+                            settings.preferredEditorComponent.isNotBlank()
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        prefEditorTitle,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        stringResource(R.string.settings_editor_current_default, currentDefaultLabel),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (hasCustomDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = if (hasCustomDefault) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                }
+                                if (hasCustomDefault) {
+                                    TextButton(onClick = { preferences.resetPreferredEditor() }) {
+                                        Text(stringResource(R.string.settings_editor_reset))
+                                    }
+                                }
+                            }
+                            Text(
+                                prefEditorDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.preferredEditor == PreferredEditor.ALWAYS_ASK,
+                                    onClick = { preferences.resetPreferredEditor() },
+                                    label = { Text(editorAsk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                                )
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.preferredEditor == PreferredEditor.BUILT_IN,
+                                    onClick = { preferences.setPreferredEditor(PreferredEditor.BUILT_IN) },
+                                    label = { Text(editorBuiltin, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                                )
+                            }
+                            if (settings.preferredVideoEditorComponent.isNotBlank()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.settings_video_editor_default,
+                                            videoEditorName ?: editorExternal,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = { preferences.resetPreferredVideoEditor() }) {
+                                        Text(stringResource(R.string.settings_editor_reset))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 if (showOverwrite) {

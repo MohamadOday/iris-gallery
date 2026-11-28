@@ -5,10 +5,13 @@ import android.os.Build
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
+import coil3.bitmapFactoryExifOrientationStrategy
+import coil3.decode.ExifOrientationStrategy
 import coil3.decode.StaticImageDecoder
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import com.iris.gallery.decoder.AvifCoilDecoder
+import com.iris.gallery.decoder.RawCoilDecoder
 
 class IrisApplication : Application(), SingletonImageLoader.Factory {
     companion object {
@@ -23,8 +26,10 @@ class IrisApplication : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         return ImageLoader.Builder(context)
+            .bitmapFactoryExifOrientationStrategy(ExifOrientationStrategy.RESPECT_ALL)
             .components {
                 add(AvifCoilDecoder.Factory())
+                add(RawCoilDecoder.Factory())
                 add(coil3.svg.SvgDecoder.Factory())
                 if (Build.VERSION.SDK_INT >= 28) {
                     add(AnimatedImageDecoder.Factory())

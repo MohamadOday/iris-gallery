@@ -53,21 +53,60 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
+          set -euo pipefail
+          umask 077
+          trap 'rm -f /tmp/release.jks' EXIT
           mkdir -p build-artifacts
-          RAW_APK=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/release.jks
-            BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
-            $BUILD_TOOLS/apksigner sign \
+          RAW_APK=$(find app/build/outputs/apk/release/ -name "*.apk" -print -quit)
+          if [ -z "$RAW_APK" ]; then
+            echo "::error::Release APK was not produced by Gradle."
+            exit 1
+          fi
+
+          IS_TAG_BUILD=false
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            IS_TAG_BUILD=true
+          fi
+
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            SIGNED_APK="build-artifacts/Iris-Gallery-v${{ env.APP_VERSION }}.apk"
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > /tmp/release.jks
+            BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+            "$BUILD_TOOLS/apksigner" sign \
               --ks /tmp/release.jks \
               --ks-key-alias "$KEY_ALIAS" \
-              --ks-pass "pass:$KEYSTORE_PASSWORD" \
-              --key-pass "pass:$KEY_PASSWORD" \
-              --out "build-artifacts/Iris-Gallery-v${{ env.APP_VERSION }}.apk" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --key-pass env:KEY_PASSWORD \
+              --out "$SIGNED_APK" \
               "$RAW_APK"
-            $BUILD_TOOLS/apksigner verify --verbose "build-artifacts/Iris-Gallery-v${{ env.APP_VERSION }}.apk"
+
+            VERIFY_OUTPUT=$("$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$SIGNED_APK")
+            echo "$VERIFY_OUTPUT"
+
+            CERT_SHA256_RAW=$(echo "$VERIFY_OUTPUT" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print $2; exit}')
+            if [ -z "$CERT_SHA256_RAW" ]; then
+              echo "::error::Failed to extract SHA-256 signing certificate digest from apksigner output."
+              exit 1
+            fi
+            CERT_SHA256=$(echo "$CERT_SHA256_RAW" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g; s/:$//')
+
+            EXPECTED_SHA256="90:EF:CB:06:86:7F:89:A5:D7:1B:5A:5D:5A:E6:8F:1A:1D:F1:C9:52:D9:03:65:34:80:FF:96:C1:7F:45:AF:D2"
+            if [ "$IS_TAG_BUILD" = true ] && [ "$GITHUB_REPOSITORY" = "MohamadOday/iris-gallery" ] && [ "$CERT_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo "::error::Signed APK certificate SHA-256 ($CERT_SHA256) does not match expected fingerprint ($EXPECTED_SHA256)."
+              exit 1
+            fi
+
+            APK_SHA256=$(sha256sum "$SIGNED_APK" | awk '{print $1}')
+            echo "CERT_SHA256=$CERT_SHA256" >> "$GITHUB_ENV"
+            echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+          elif [ "$IS_TAG_BUILD" = true ]; then
+            echo "::error::Release signing secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) are required on tag builds. Refusing to publish an unsigned APK."
+            exit 1
           else
+            echo "::notice::Signing secrets not configured on non-tag build; packaging unsigned CI artifact."
             cp "$RAW_APK" "build-artifacts/Iris-Gallery-v${{ env.APP_VERSION }}-unsigned.apk"
           fi
 
@@ -87,5 +126,15 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ### Verification
+
+            **Signing certificate SHA-256 (AppVerifier format):**
+            ```
+            com.iris.gallery
+            ${{ env.CERT_SHA256 }}
+            ```
+
+            **APK SHA-256:** `${{ env.APK_SHA256 }}`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

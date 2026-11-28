@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.iris.gallery.R
+import com.iris.gallery.data.isRaw
+import com.iris.gallery.decoder.ExifOrientationHelper
 import com.iris.gallery.data.MediaImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,14 +65,14 @@ suspend fun applyWallpaper(
             image.uri
         }
 
-        if (allowScroll) {
+        if (allowScroll && !image.isRaw) {
             // Full stream - Android launcher can scroll image horizontally across pages
             val stream = context.contentResolver.openInputStream(uri) ?: return@withContext false
             stream.use { wallpaperManager.setStream(it, null, true, which) }
             return@withContext true
         }
 
-        // Scrolling disabled: center-crop image to screen aspect ratio
+        // Scrolling disabled (or RAW image that needs explicit EXIF orientation): decode upright
         val dm = context.resources.displayMetrics
         val isTablet = (context.resources.configuration.smallestScreenWidthDp >= 600)
         val (targetW, targetH) = if (isTablet) {
@@ -81,8 +83,47 @@ suspend fun applyWallpaper(
 
         var success = false
 
-        // API 28+ ImageDecoder with native crop and automatic EXIF orientation
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (image.isRaw || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            val maxDim = maxOf(targetW, targetH) * 2
+            val oriented = ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                context = context,
+                uri = uri,
+                path = image.path,
+                maxDimPx = maxDim,
+            )
+            if (oriented != null) {
+                try {
+                    val toApply = if (allowScroll) {
+                        oriented
+                    } else {
+                        val imgW = oriented.width
+                        val imgH = oriented.height
+                        val screenAspect = targetW.toFloat() / targetH.toFloat()
+                        val imgAspect = imgW.toFloat() / imgH.toFloat()
+                        val cropRect = if (imgAspect > screenAspect) {
+                            val cropWidth = (imgH * screenAspect).toInt().coerceIn(1, imgW)
+                            val cropLeft = (imgW - cropWidth) / 2
+                            Rect(cropLeft, 0, cropLeft + cropWidth, imgH)
+                        } else {
+                            val cropHeight = (imgW / screenAspect).toInt().coerceIn(1, imgH)
+                            val cropTop = (imgH - cropHeight) / 2
+                            Rect(0, cropTop, imgW, cropTop + cropHeight)
+                        }
+                        Bitmap.createBitmap(oriented, cropRect.left, cropRect.top, cropRect.width(), cropRect.height())
+                    }
+                    wallpaperManager.setBitmap(toApply, null, true, which)
+                    if (toApply !== oriented) toApply.recycle()
+                    success = true
+                } catch (e: Exception) {
+                    android.util.Log.w("WallpaperChoiceSheet", "EXIF-oriented wallpaper set failed: ${e.message}")
+                } finally {
+                    oriented.recycle()
+                }
+            }
+        }
+
+        // API 28+ ImageDecoder with native crop and automatic EXIF orientation (non-RAW)
+        if (!success && !image.isRaw && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 val source = if (image.path.isNotBlank() && File(image.path).exists()) {
                     ImageDecoder.createSource(File(image.path))

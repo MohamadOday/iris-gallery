@@ -227,6 +227,8 @@ import com.iris.gallery.data.AlbumPickerSort
 import com.iris.gallery.data.AlbumSort
 import com.iris.gallery.data.AlbumsViewMode
 import com.iris.gallery.data.PhotoGridLayout
+import com.iris.gallery.data.expandPairedRaw
+import com.iris.gallery.data.timelineTimestamp
 import com.iris.gallery.ui.AlbumPickerSheet
 import com.iris.gallery.R
 import java.io.File
@@ -235,17 +237,20 @@ internal fun filterMediaList(list: List<MediaImage>, query: String): List<MediaI
     if (query.isBlank()) return list
     val q = query.trim()
     val qLower = q.lowercase()
-    return list.filter { item ->
-        item.name.contains(q, ignoreCase = true) ||
+    fun matchesSingle(item: MediaImage): Boolean {
+        return item.name.contains(q, ignoreCase = true) ||
             item.title.contains(q, ignoreCase = true) ||
             item.bucketName.contains(q, ignoreCase = true) ||
             item.path.contains(q, ignoreCase = true) ||
             ((qLower == "video" || qLower == "videos" || qLower == ".mp4" || qLower == ".mkv" || qLower == ".mov" || qLower == ".webm" || qLower == ".3gp") && item.isVideo) ||
             ((qLower == "photo" || qLower == "photos" || qLower == "image" || qLower == "images" || qLower == ".jpg" || qLower == ".jpeg" || qLower == ".png" || qLower == ".webp" || qLower == ".heic") && !item.isVideo) ||
             ((qLower == "gif" || qLower == "gifs" || qLower == ".gif") && item.isGif) ||
-            ((qLower == "raw" || qLower == ".dng" || qLower == ".cr2" || qLower == ".nef" || qLower == ".arw") && item.isRaw) ||
+            ((qLower == "raw" || qLower == ".dng" || qLower == ".cr2" || qLower == ".cr3" || qLower == ".nef" || qLower == ".arw") && item.isRaw) ||
             ((qLower == "motion" || qLower == "live") && item.isMotionPhoto) ||
             ((qLower == "pano" || qLower == "panorama") && item.isPanorama)
+    }
+    return list.filter { item ->
+        matchesSingle(item) || (item.pairedRaw != null && matchesSingle(item.pairedRaw))
     }
 }
 
@@ -541,27 +546,37 @@ internal fun GalleryScaffold(
     // so the standalone viewer can be swapped for the regular one (swipe through the library,
     // delete to trash) as soon as the item shows up in [images].
     var pendingExternalUri by remember { mutableStateOf<Uri?>(null) }
-    fun findInLibrary(uri: Uri, path: String): MediaImage? {
+    var initialShowRawVariant by remember { mutableStateOf(false) }
+    fun matchesUriOrPath(item: MediaImage, uri: Uri, path: String, isMediaStoreUri: Boolean): Boolean {
+        return item.uri == uri ||
+            (path.isNotBlank() && item.path == path) ||
+            (isMediaStoreUri && !uri.lastPathSegment.isNullOrBlank() && item.uri.lastPathSegment == uri.lastPathSegment)
+    }
+    fun findInLibrary(uri: Uri, path: String): Pair<MediaImage, Boolean>? {
         val isMediaStoreUri = uri.authority == android.provider.MediaStore.AUTHORITY
-        return images.firstOrNull {
-            it.uri == uri ||
-            (path.isNotBlank() && it.path == path) ||
-            (isMediaStoreUri && !uri.lastPathSegment.isNullOrBlank() && it.uri.lastPathSegment == uri.lastPathSegment)
+        for (item in images) {
+            if (matchesUriOrPath(item, uri, path, isMediaStoreUri)) return item to false
+            val raw = item.pairedRaw
+            if (raw != null && matchesUriOrPath(raw, uri, path, isMediaStoreUri)) return item to true
         }
+        return null
     }
     LaunchedEffect(initialViewUri, initialEditMode, initialOpenLatest, images, initialIntentGeneration) {
         if (handledIntentGeneration != initialIntentGeneration) {
             pendingExternalUri = null
+            initialShowRawVariant = false
             if (initialViewUri != null) {
                 val resolved = withContext(Dispatchers.IO) { resolveMediaUri(context, initialViewUri) }
                 // Mark as handled only after resolving: if [images] changes meanwhile, this effect
                 // is restarted and must not skip the intent.
                 handledIntentGeneration = initialIntentGeneration
                 activeOverlayScreen = null
-                val matched = findInLibrary(initialViewUri, resolved.path)
+                val found = findInLibrary(initialViewUri, resolved.path)
+                val matched = found?.first
+                val matchedRawSide = found?.second == true
                 if (matched != null) {
                     if (initialEditMode) {
-                        editorImage = matched
+                        editorImage = if (matchedRawSide && matched.pairedRaw != null) matched.pairedRaw else matched
                         selectedId = null
                         externalMedia = null
                         viewerImages = null
@@ -570,6 +585,7 @@ internal fun GalleryScaffold(
                         editorImage = null
                         viewerImages = null
                         activeViewerSourceKey = "external_intent"
+                        initialShowRawVariant = matchedRawSide
                         selectedId = matched.id
                         externalMedia = null
                         viewerSessionId += 1
@@ -613,12 +629,13 @@ internal fun GalleryScaffold(
                     // The standalone viewer was closed (or left for the editor): nothing to swap.
                     pendingExternalUri = null
                 } else {
-                    val matched = findInLibrary(pendingUri, shown.path)
-                    if (matched != null) {
+                    val found = findInLibrary(pendingUri, shown.path)
+                    if (found != null) {
                         pendingExternalUri = null
                         viewerImages = null
                         activeViewerSourceKey = "external_intent"
-                        selectedId = matched.id
+                        initialShowRawVariant = found.second
+                        selectedId = found.first.id
                         externalMedia = null
                         viewerSessionId += 1
                     }
@@ -679,7 +696,9 @@ internal fun GalleryScaffold(
         customAlbumCellSize = newSize
         settingsPreferences.setAlbumGridSize(newSize.value)
     }
-    val favoriteImages = remember(images, favorites) { images.filter { it.id in favorites } }
+    val favoriteImages = remember(images, favorites) {
+        images.filter { it.id in favorites || (it.pairedRaw != null && it.pairedRaw.id in favorites) }
+    }
     val allHierarchyAlbums = remember(images, albumCovers, settings.albumHierarchyDepth) {
         buildMediaAlbums(images, albumCovers, settings.albumHierarchyDepth)
     }
@@ -783,12 +802,17 @@ internal fun GalleryScaffold(
         }
     }
     val effectiveAlbumMediaSort = selectedAlbum?.id?.let { albumMediaSortOverrides[it] } ?: albumMediaSort
-    val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery, effectiveAlbumMediaSort) {
+    val displayedAlbumPhotos = remember(selectedAlbum, fileSearchQuery, effectiveAlbumMediaSort, settings.timelineDateSource) {
         selectedAlbum?.let { album ->
             val filtered = filterMediaList(album.images, fileSearchQuery)
             when (effectiveAlbumMediaSort) {
-                MediaSort.DATE_DESC -> filtered.sortedWith(compareByDescending<MediaImage> { it.dateTaken }.thenByDescending { it.dateModified }.thenByDescending { it.dateAdded }.thenByDescending { it.id })
-                MediaSort.DATE_ASC -> filtered.sortedWith(compareBy<MediaImage> { it.dateTaken }.thenBy { it.dateModified }.thenBy { it.dateAdded }.thenBy { it.id })
+                MediaSort.DATE_DESC -> filtered.sortedWith(com.iris.gallery.data.timelineComparator(settings.timelineDateSource))
+                MediaSort.DATE_ASC -> filtered.sortedWith(
+                    compareBy<MediaImage> { it.timelineTimestamp(settings.timelineDateSource) }
+                        .thenBy { it.dateModified }
+                        .thenBy { it.dateAdded }
+                        .thenBy { it.id }
+                )
                 MediaSort.NAME_ASC -> filtered.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
                 MediaSort.NAME_DESC -> filtered.sortedWith { a, b -> NaturalOrderComparator.compare(b.name, a.name) }
                 MediaSort.SIZE_DESC -> filtered.sortedWith(compareByDescending<MediaImage> { it.sizeBytes }.thenByDescending { it.id })
@@ -952,19 +976,24 @@ internal fun GalleryScaffold(
     val showSelectionPill = settings.useFloatingSelectionToolbar && selectedIds.isNotEmpty() && selectedId == null && editorImage == null && activeOverlayScreen == null && externalMedia == null
 
     val isTrashSelection = destination == 3 && librarySection == "trash"
-    val allSelectedAreFavorites = selectedIds.isNotEmpty() && selectedIds.all { it in favorites }
+    val selectedMediaForFav = remember(activeMedia, selectedIds) {
+        if (selectedIds.isEmpty()) emptyList() else activeMedia.filter { it.id in selectedIds }
+    }
+    val allSelectedAreFavorites = selectedMediaForFav.isNotEmpty() && selectedMediaForFav.all { item ->
+        item.id in favorites || (item.pairedRaw != null && item.pairedRaw.id in favorites)
+    }
     val executeSelectionAction: (String) -> Unit = { actionKey ->
         when (actionKey) {
             "share" -> shareSelection()
             "move" -> {
-                val selected = activeMedia.filter { it.id in selectedIds }
+                val selected = activeMedia.filter { it.id in selectedIds }.expandPairedRaw()
                 if (selected.isNotEmpty()) {
                     pendingAlbumMedia = selected
                     albumPickerAction = AlbumAction.MOVE
                 }
             }
             "copy" -> {
-                val selected = activeMedia.filter { it.id in selectedIds }
+                val selected = activeMedia.filter { it.id in selectedIds }.expandPairedRaw()
                 if (selected.isNotEmpty()) {
                     pendingAlbumMedia = selected
                     albumPickerAction = AlbumAction.COPY
@@ -972,18 +1001,28 @@ internal fun GalleryScaffold(
             }
             "favorite" -> {
                 val makeFavorite = !allSelectedAreFavorites
-                selectedIds.forEach { id -> if ((id in favorites) != makeFavorite) onToggleFavorite(id) }
+                selectedMediaForFav.forEach { item ->
+                    val rawId = item.pairedRaw?.id
+                    if (makeFavorite) {
+                        if (item.id !in favorites && (rawId == null || rawId !in favorites)) {
+                            onToggleFavorite(item.id)
+                        }
+                    } else {
+                        if (item.id in favorites) onToggleFavorite(item.id)
+                        if (rawId != null && rawId in favorites) onToggleFavorite(rawId)
+                    }
+                }
                 clearSelection()
             }
             "lock" -> {
-                val selected = activeMedia.filter { it.id in selectedIds }
+                val selected = activeMedia.filter { it.id in selectedIds }.expandPairedRaw()
                 if (selected.isNotEmpty()) {
                     clearSelection()
                     onLockMedia(selected, null)
                 }
             }
             "delete" -> {
-                val selected = activeMedia.filter { it.id in selectedIds }
+                val selected = activeMedia.filter { it.id in selectedIds }.expandPairedRaw()
                 if (selected.isNotEmpty()) {
                     if (isTrashSelection || isVaultActive) {
                         pendingDeleteItems = selected
@@ -999,7 +1038,7 @@ internal fun GalleryScaffold(
                 }
             }
             "delete_permanent" -> {
-                val selected = activeMedia.filter { it.id in selectedIds }
+                val selected = activeMedia.filter { it.id in selectedIds }.expandPairedRaw()
                 if (selected.isNotEmpty()) {
                     pendingPermanentDeleteItems = selected
                 }
@@ -1514,7 +1553,7 @@ internal fun GalleryScaffold(
                                             // vault prompt and the system delete dialog can still be
                                             // cancelled, and the album drops out below by itself once
                                             // its images are filtered out.
-                                            onLockMedia(selectedAlbum!!.images) {
+                                            onLockMedia(selectedAlbum!!.images.expandPairedRaw()) {
                                                 selectedAlbumId = null
                                             }
                                         }
@@ -1805,6 +1844,7 @@ internal fun GalleryScaffold(
                     layoutMode = settings.photoGridLayout,
                     animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
+                    timelineDateSource = settings.timelineDateSource,
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
                     useRelativeDates = settings.useRelativeDates,
@@ -1858,6 +1898,7 @@ internal fun GalleryScaffold(
                       layoutMode = settings.photoGridLayout,
                       animateGifThumbnails = settings.animateGifThumbnails,
                       showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
+                      timelineDateSource = settings.timelineDateSource,
                       timelineDateFormat = settings.timelineDateFormat,
                       customTimelineDateFormat = settings.customTimelineDateFormat,
                       useRelativeDates = settings.useRelativeDates,
@@ -1905,7 +1946,7 @@ internal fun GalleryScaffold(
                     activeCluster = activeFolderCluster,
                     onTogglePinned = onTogglePinnedAlbum,
                     onOrderChanged = onSetAlbumOrder,
-                    onLockAlbum = { album -> onLockMedia(album.images, null) },
+                    onLockAlbum = { album -> onLockMedia(album.images.expandPairedRaw(), null) },
                     onExcludeFolder = { album ->
                         val samplePath = album.images.firstOrNull { it.path.isNotBlank() }?.path.orEmpty()
                         val folderPath = if (samplePath.contains('/')) samplePath.substringBeforeLast('/') else ""
@@ -2084,12 +2125,14 @@ internal fun GalleryScaffold(
                         "formats" -> {
                             var formatFilter by remember { mutableStateOf(MediaFormatFilter.ALL) }
                             val allVideos = remember(images) { images.filter { it.isVideo } }
-                            val allRaw = remember(images) { images.filter { it.isRaw } }
+                            val allRaw = remember(images) { images.mapNotNull { if (it.isRaw) it else it.pairedRaw } }
                             val allGifs = remember(images) { images.filter { it.isGif } }
                             val allPanos = remember(images) { images.filter { it.isPanorama } }
                             val allMotion = remember(images) { images.filter { it.isMotionPhoto } }
-                            val allSpecial = remember(allVideos, allRaw, allGifs, allPanos, allMotion) {
-                                (allVideos + allRaw + allGifs + allPanos + allMotion).distinctBy { it.id }.sortedByDescending { it.dateTaken }
+                            val allSpecial = remember(allVideos, allRaw, allGifs, allPanos, allMotion, settings.timelineDateSource) {
+                                (allVideos + allRaw + allGifs + allPanos + allMotion)
+                                    .distinctBy { it.id }
+                                    .sortedWith(com.iris.gallery.data.timelineComparator(settings.timelineDateSource))
                             }
                             val currentFiltered = when (formatFilter) {
                                 MediaFormatFilter.ALL -> allSpecial
@@ -2165,6 +2208,7 @@ internal fun GalleryScaffold(
                                             onCellSizeChange = activeOnCellSizeChange,
                                             layoutMode = settings.photoGridLayout,
                                             animateGifThumbnails = settings.animateGifThumbnails,
+                                            timelineDateSource = settings.timelineDateSource,
                                             cornerStyle = settings.cornerStyle,
                                             gridSpacing = settings.gridSpacing,
                                             showVideoDuration = settings.showVideoDurationBadge,
@@ -2189,6 +2233,7 @@ internal fun GalleryScaffold(
                             if (editable.isEmpty()) EmptyState(stringResource(R.string.empty_editable), padding)
                             else PhotoGrid(
                                 editable, padding, libraryGridState, cellSize = photoCellSize, onCellSizeChange = onCellSizeChange,
+                                timelineDateSource = settings.timelineDateSource,
                                 cornerStyle = settings.cornerStyle,
                                 gridSpacing = settings.gridSpacing,
                                 showVideoDuration = settings.showVideoDurationBadge,
@@ -2248,6 +2293,7 @@ internal fun GalleryScaffold(
                     layoutMode = settings.photoGridLayout,
                     animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = settings.showTimelineHeaders && fileSearchQuery.isBlank(),
+                    timelineDateSource = settings.timelineDateSource,
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
                     useRelativeDates = settings.useRelativeDates,
@@ -2696,11 +2742,12 @@ internal fun GalleryScaffold(
             title = { Text(stringResource(R.string.delete_album_dialog_title, album.name)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val totalAlbumFileCount = album.images.expandPairedRaw().size
                     Text(
                         if (isPermanentDefault || deleteAlbumPermanently) {
-                            stringResource(R.string.delete_album_permanent_desc, album.images.size, album.name)
+                            stringResource(R.string.delete_album_permanent_desc, totalAlbumFileCount, album.name)
                         } else {
-                            stringResource(R.string.delete_album_trash_desc, album.images.size, album.name)
+                            stringResource(R.string.delete_album_trash_desc, totalAlbumFileCount, album.name)
                         }
                     )
                     if (!isPermanentDefault) {
@@ -2734,10 +2781,11 @@ internal fun GalleryScaffold(
                             selectedAlbumId = null
                         }
                     }
+                    val allAlbumItems = targetAlbum.images.expandPairedRaw()
                     if (permanent) {
-                        handleDeletePermanently(targetAlbum.images, onConfirmed)
+                        handleDeletePermanently(allAlbumItems, onConfirmed)
                     } else {
-                        handleTrash(targetAlbum.images, onConfirmed)
+                        handleTrash(allAlbumItems, onConfirmed)
                     }
                 }) {
                     Text(
@@ -3049,7 +3097,15 @@ internal fun GalleryScaffold(
             videoMuted = settings.videoMuted,
             onSetVideoMuted = { settingsPreferences.setVideoMuted(it) },
             preferredEditor = settings.preferredEditor,
+            preferredEditorComponent = settings.preferredEditorComponent,
+            lastUsedEditorId = settings.lastUsedEditorId,
+            preferredVideoEditorComponent = settings.preferredVideoEditorComponent,
+            lastUsedVideoEditorId = settings.lastUsedVideoEditorId,
             onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
+            onSetPreferredExternalEditor = { settingsPreferences.setPreferredExternalEditor(it) },
+            onSetLastUsedEditorId = { settingsPreferences.setLastUsedEditorId(it) },
+            onSetPreferredVideoEditor = { settingsPreferences.setPreferredVideoEditorComponent(it) },
+            onSetLastUsedVideoEditorId = { settingsPreferences.setLastUsedVideoEditorId(it) },
             availableAlbums = availableAlbums,
             onToggleFavorite = { },
             onClose = { externalMedia = null },
@@ -3063,9 +3119,11 @@ internal fun GalleryScaffold(
                     }
                 }
             },
-            onDelete = { item, _ ->
+            onDelete = { items, _ ->
                 externalMedia = null
-                runCatching { context.contentResolver.delete(item.uri, null, null) }
+                items.forEach { item ->
+                    runCatching { context.contentResolver.delete(item.uri, null, null) }
+                }
             },
             onRestore = { _, _ -> },
             onEditMetadata = { media, request ->
@@ -3107,7 +3165,7 @@ internal fun GalleryScaffold(
 
     selectedId?.let { id ->
         val activeImages = viewerImages ?: images
-        val index = activeImages.indexOfFirst { it.id == id }
+        val index = activeImages.indexOfFirst { it.id == id || it.pairedRaw?.id == id }
         val isViewingLocked = activeViewerSourceKey == "vault" || activeViewerSourceKey == "vault_tab" ||
             (activeViewerSourceKey == null && isVaultActive)
         val isViewingTrash = activeViewerSourceKey == "trash" ||
@@ -3126,6 +3184,7 @@ internal fun GalleryScaffold(
         if (index >= 0 && activeImages.isNotEmpty()) androidx.compose.runtime.key(viewerSessionId) { PhotoViewer(
             images = activeImages,
             initialPage = index,
+            initialShowRawVariant = initialShowRawVariant,
             favorites = favorites,
             autoPlay = settings.autoPlayVideo,
             loop = settings.loopVideo,
@@ -3158,35 +3217,87 @@ internal fun GalleryScaffold(
             videoMuted = settings.videoMuted,
             onSetVideoMuted = { settingsPreferences.setVideoMuted(it) },
             preferredEditor = settings.preferredEditor,
+            preferredEditorComponent = settings.preferredEditorComponent,
+            lastUsedEditorId = settings.lastUsedEditorId,
+            preferredVideoEditorComponent = settings.preferredVideoEditorComponent,
+            lastUsedVideoEditorId = settings.lastUsedVideoEditorId,
             onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
+            onSetPreferredExternalEditor = { settingsPreferences.setPreferredExternalEditor(it) },
+            onSetLastUsedEditorId = { settingsPreferences.setLastUsedEditorId(it) },
+            onSetPreferredVideoEditor = { settingsPreferences.setPreferredVideoEditorComponent(it) },
+            onSetLastUsedVideoEditorId = { settingsPreferences.setLastUsedVideoEditorId(it) },
             availableAlbums = availableAlbums,
             albumPickerSort = settings.albumPickerSort,
             onSetAlbumPickerSort = { settingsPreferences.setAlbumPickerSort(it) },
             onToggleFavorite = onToggleFavorite,
-            onClose = { selectedId = null; viewerImages = null; activeViewerSourceKey = null },
+            onClose = { selectedId = null; viewerImages = null; activeViewerSourceKey = null; initialShowRawVariant = false },
             onPageChanged = { selectedId = it },
             onRename = { media, newName ->
                 onRenameMedia(media, newName) { updated ->
                     if (updated != null) {
-                        viewerImages = viewerImages?.map { if (it.id == media.id) updated else it }
+                        viewerImages = viewerImages?.flatMap { item ->
+                            when {
+                                item.id == media.id -> {
+                                    val companion = item.pairedRaw
+                                    if (companion != null &&
+                                        com.iris.gallery.data.rawPairStem(updated.name) != com.iris.gallery.data.rawPairStem(companion.name)
+                                    ) {
+                                        listOf(updated.copy(pairedRaw = null), companion)
+                                    } else {
+                                        listOf(updated.copy(pairedRaw = companion))
+                                    }
+                                }
+                                item.pairedRaw?.id == media.id -> {
+                                    if (com.iris.gallery.data.rawPairStem(item.name) != com.iris.gallery.data.rawPairStem(updated.name)) {
+                                        listOf(item.copy(pairedRaw = null), updated)
+                                    } else {
+                                        listOf(item.copy(pairedRaw = updated))
+                                    }
+                                }
+                                else -> listOf(item)
+                            }
+                        }
                         Toast.makeText(context, context.getString(R.string.toast_rename_success, updated.name), Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, R.string.toast_rename_failed, Toast.LENGTH_SHORT).show()
                     }
                 }
             },
-            onDelete = { media, deletePermanently ->
-                val onConfirmedAction = { removeViewerItemAndAdvance(media) }
+            onDelete = { mediaList, deletePermanently ->
+                val deletedIds = mediaList.mapTo(HashSet()) { it.id }
+                val onConfirmedAction = {
+                    val activeList = viewerImages ?: images
+                    val removedPrimary = activeList.firstOrNull { it.id in deletedIds }
+                    if (removedPrimary != null) {
+                        val survivingRaw = removedPrimary.pairedRaw?.takeIf { it.id !in deletedIds }
+                        if (survivingRaw != null) {
+                            selectedId = survivingRaw.id
+                            viewerImages = viewerImages?.map { item ->
+                                if (item.id == removedPrimary.id) survivingRaw else item
+                            }
+                        } else {
+                            removeViewerItemAndAdvance(removedPrimary)
+                        }
+                    } else {
+                        viewerImages = viewerImages?.map { item ->
+                            if (item.pairedRaw != null && item.pairedRaw.id in deletedIds) {
+                                item.copy(pairedRaw = null)
+                            } else {
+                                item
+                            }
+                        }
+                    }
+                }
 
                 if (isViewingTrash || deletePermanently) {
-                    handleDeletePermanently(listOf(media), onConfirmedAction)
+                    handleDeletePermanently(mediaList, onConfirmedAction)
                 } else if (isViewingLocked) {
-                    onDeleteFromLocked(listOf(media)) {
-                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, 1))
+                    onDeleteFromLocked(mediaList) {
+                        onTrashFeedbackChange(TrashFeedback(TrashFeedbackType.PERMANENTLY_DELETED, mediaList.size))
                         onConfirmedAction()
                     }
                 } else {
-                    handleTrash(listOf(media), onConfirmedAction)
+                    handleTrash(mediaList, onConfirmedAction)
                 }
             },
             onRestore = { media, onViewerConfirmed ->
@@ -3198,19 +3309,31 @@ internal fun GalleryScaffold(
             onEditMetadata = { media, request ->
                 onEditMetadata(media, request) { updated ->
                     if (updated != null) {
-                        viewerImages = viewerImages?.map { if (it.id == media.id) updated else it }
+                        viewerImages = viewerImages?.map { item ->
+                            when {
+                                item.id == media.id -> updated.copy(pairedRaw = item.pairedRaw)
+                                item.pairedRaw?.id == media.id -> item.copy(pairedRaw = updated)
+                                else -> item
+                            }
+                        }
                     }
                 }
             },
             onEdit = { editorImage = it; selectedId = null },
-            onLock = { media ->
-                onLockMedia(listOf(media)) {
-                    removeViewerItemAndAdvance(media)
+            onLock = { mediaList ->
+                val deletedIds = mediaList.mapTo(HashSet()) { it.id }
+                onLockMedia(mediaList) {
+                    val activeList = viewerImages ?: images
+                    val removedPrimary = activeList.firstOrNull { it.id in deletedIds }
+                    if (removedPrimary != null) removeViewerItemAndAdvance(removedPrimary)
                 }
             },
-            onUnlock = { media ->
-                onUnlockMedia(listOf(media)) {
-                    removeViewerItemAndAdvance(media)
+            onUnlock = { mediaList ->
+                val unlockedIds = mediaList.mapTo(HashSet()) { it.id }
+                onUnlockMedia(mediaList) {
+                    val activeList = viewerImages ?: images
+                    val removedPrimary = activeList.firstOrNull { it.id in unlockedIds }
+                    if (removedPrimary != null) removeViewerItemAndAdvance(removedPrimary)
                 }
             },
             onMoveToAlbum = { mediaList, dir, name, onDone ->

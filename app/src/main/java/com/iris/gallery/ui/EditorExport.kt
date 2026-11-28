@@ -20,39 +20,26 @@ import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import com.iris.gallery.data.LibraryPreferences
 import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.isRaw
 import com.iris.gallery.data.isSvg
+import com.iris.gallery.decoder.ExifOrientationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.aomedia.avif.android.AvifDecoder
 import java.io.File
 import java.nio.ByteBuffer
 
-private fun decodePreviewLegacy(context: Context, image: MediaImage, isFile: Boolean): Bitmap? {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    if (isFile) {
-        BitmapFactory.decodeFile(image.path, bounds)
-    } else {
-        context.contentResolver.openInputStream(image.uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        } ?: return null
-    }
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-    var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
-    val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    return if (isFile) {
-        BitmapFactory.decodeFile(image.path, options)
-    } else {
-        context.contentResolver.openInputStream(image.uri)?.use {
-            BitmapFactory.decodeStream(it, null, options)
-        }
-    }
-}
-
 internal suspend fun loadEditorPreview(context: Context, image: MediaImage): Bitmap? = withContext(Dispatchers.IO) {
     val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
     val standardBitmap = runCatching {
-        if (Build.VERSION.SDK_INT >= 28) {
+        if (image.isRaw || Build.VERSION.SDK_INT < 28) {
+            ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                context = context,
+                uri = image.uri,
+                path = image.path,
+                maxDimPx = 1600,
+            )
+        } else {
             val source = if (isFile) ImageDecoder.createSource(File(image.path))
             else ImageDecoder.createSource(context.contentResolver, image.uri)
             ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
@@ -63,8 +50,6 @@ internal suspend fun loadEditorPreview(context: Context, image: MediaImage): Bit
                 )
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-        } else {
-            decodePreviewLegacy(context, image, isFile)
         }
     }.getOrNull()
 
@@ -237,15 +222,19 @@ internal suspend fun renderEditedBitmapToBytes(
 ): ByteArray = withContext(Dispatchers.IO) {
     val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
     val rawSource: Bitmap = runCatching {
-        if (Build.VERSION.SDK_INT >= 28) {
+        if (image.isRaw || Build.VERSION.SDK_INT < 28) {
+            ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                context = context,
+                uri = image.uri,
+                path = image.path,
+                maxDimPx = null,
+            ) ?: error("Could not decode image")
+        } else {
             val source = if (isFile) ImageDecoder.createSource(File(image.path))
             else ImageDecoder.createSource(context.contentResolver, image.uri)
             ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-        } else {
-            if (isFile) BitmapFactory.decodeFile(image.path) ?: error("Could not decode image")
-            else context.contentResolver.openInputStream(image.uri).use(BitmapFactory::decodeStream) ?: error("Could not decode image")
         }
     }.getOrNull() ?: runCatching {
         val bytes = if (isFile) {

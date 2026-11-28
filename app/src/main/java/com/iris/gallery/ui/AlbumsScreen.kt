@@ -157,7 +157,7 @@ sealed interface AlbumDisplayItem {
         override val displayName: String = album.name
         override val latestDate: Long = album.cover.dateTaken
         override val totalItemCount: Int = album.images.size
-        override val totalSizeBytes: Long = album.images.sumOf { it.sizeBytes }
+        override val totalSizeBytes: Long = album.images.sumOf { it.sizeBytes + (it.pairedRaw?.sizeBytes ?: 0L) }
     }
 
     data class SubfolderGroup(
@@ -168,7 +168,7 @@ sealed interface AlbumDisplayItem {
         override val displayName: String = cluster.name
         override val latestDate: Long = cluster.cover.dateTaken
         override val totalItemCount: Int = cluster.allImages.size
-        override val totalSizeBytes: Long = cluster.allImages.sumOf { it.sizeBytes }
+        override val totalSizeBytes: Long = cluster.allImages.sumOf { it.sizeBytes + (it.pairedRaw?.sizeBytes ?: 0L) }
     }
 
     data class ManualGroup(
@@ -180,7 +180,7 @@ sealed interface AlbumDisplayItem {
         override val displayName: String = group.name
         override val latestDate: Long = allImages.maxOfOrNull { it.dateTaken } ?: 0L
         override val totalItemCount: Int = allImages.size
-        override val totalSizeBytes: Long = allImages.sumOf { it.sizeBytes }
+        override val totalSizeBytes: Long = allImages.sumOf { it.sizeBytes + (it.pairedRaw?.sizeBytes ?: 0L) }
         override val isPinned: Boolean = false
     }
 }
@@ -409,7 +409,7 @@ internal fun buildMediaAlbums(
             MediaAlbum(
                 id = id,
                 name = media.first().bucketName,
-                cover = media.firstOrNull { it.id == covers[id] } ?: media.first(),
+                cover = media.firstOrNull { it.id == covers[id] || it.pairedRaw?.id == covers[id] } ?: media.first(),
                 images = media,
                 isSdCard = isSd,
                 storageLabel = if (isSd) "SD Card" else "",

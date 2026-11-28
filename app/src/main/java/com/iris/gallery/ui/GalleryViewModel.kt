@@ -473,27 +473,62 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private var pendingCheckAfterRefresh = false
     private var lastGenerationByVolume: Map<String, Long>? = null
     private var hasCheckedObsolete = false
-    private val pendingChangedUris = mutableSetOf<Uri>()
-    private val pendingRetryUriSet = LinkedHashSet<Uri>()
+    private val pendingChangedUris = LinkedHashSet<Uri>()
+    private var observerFullCheckNeeded = false
+    @Volatile
+    private var lastObserverEventMs = 0L
+    private val pendingRetryAttempts = LinkedHashMap<Uri, Int>()
 
     fun registerObserver() {
         if (contentObserver != null) return
         runCatching {
             fun handleObservedUris(uris: Collection<Uri>) {
-                if (uris.isNotEmpty()) {
-                    synchronized(pendingChangedUris) { pendingChangedUris.addAll(uris) }
-                }
-                liveReloadJob?.cancel()
-                liveReloadJob = viewModelScope.launch {
-                    delay(250)
-                    val batch = synchronized(pendingChangedUris) {
-                        pendingChangedUris.toSet().also { pendingChangedUris.clear() }
-                    }
-                    val itemUris = batch.filter { it.lastPathSegment?.toLongOrNull() != null }
-                    if (batch.isNotEmpty() && itemUris.size == batch.size && itemUris.size <= 200) {
-                        applyIncrementalMediaChanges(itemUris)
+                synchronized(pendingChangedUris) {
+                    if (uris.isEmpty()) {
+                        observerFullCheckNeeded = true
                     } else {
-                        checkForChanges()
+                        for (u in uris) {
+                            if (u.lastPathSegment?.toLongOrNull() != null) {
+                                pendingChangedUris.add(u)
+                            } else {
+                                observerFullCheckNeeded = true
+                            }
+                        }
+                    }
+                }
+                lastObserverEventMs = android.os.SystemClock.elapsedRealtime()
+                // Never cancel an active drain job mid-flight: canceling after clearing
+                // pendingChangedUris drops earlier URIs during rapid multi-file downloads.
+                if (liveReloadJob?.isActive == true) return
+                liveReloadJob = viewModelScope.launch {
+                    try {
+                        while (true) {
+                            val burstStart = android.os.SystemClock.elapsedRealtime()
+                            while (true) {
+                                val now = android.os.SystemClock.elapsedRealtime()
+                                val quietElapsed = now - lastObserverEventMs
+                                val totalElapsed = now - burstStart
+                                if (quietElapsed >= 250L || totalElapsed >= 1_000L) break
+                                delay((250L - quietElapsed).coerceIn(25L, 250L))
+                            }
+                            val (batch, needsFullCheck) = synchronized(pendingChangedUris) {
+                                val copy = pendingChangedUris.toList()
+                                pendingChangedUris.clear()
+                                val full = observerFullCheckNeeded
+                                observerFullCheckNeeded = false
+                                copy to full
+                            }
+                            if (batch.isEmpty() && !needsFullCheck) break
+                            if (batch.isNotEmpty() && batch.size <= 200) {
+                                applyIncrementalMediaChanges(batch)
+                            }
+                            if (needsFullCheck || batch.size > 200) {
+                                checkForChanges()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.w("GalleryViewModel", "live observer drain failed", e)
                     }
                 }
             }
@@ -575,16 +610,33 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         if (media.orientation != request.orientation) {
             ThumbnailCache.remove(media.id)
         }
+        repository.updateCachedMetadata(updated)
         if (media.id < 0 || media.path.startsWith(getApplication<Application>().filesDir.absolutePath)) {
             viewModelScope.launch {
                 vaultRepository.updateItemMetadata(media.id, request)
             }
         }
+        var updatedSnapshotList: List<MediaImage> = emptyList()
         _uiState.update { state ->
+            val mapped = state.images.map { if (it.id == media.id) updated else it }
+            val finalImages = if (updated.dateTaken != media.dateTaken) {
+                mapped.sortedWith(
+                    compareByDescending<MediaImage> { it.dateTaken }
+                        .thenByDescending { it.dateModified }
+                        .thenByDescending { it.dateAdded }
+                        .thenByDescending { it.id }
+                )
+            } else {
+                mapped
+            }
+            updatedSnapshotList = finalImages
             state.copy(
-                images = state.images.map { if (it.id == media.id) updated else it },
+                images = finalImages,
                 trashed = state.trashed.map { if (it.id == media.id) updated else it },
             )
+        }
+        if (updatedSnapshotList.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) { repository.persistSnapshot(updatedSnapshotList) }
         }
         return updated
     }
@@ -612,13 +664,54 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private fun removeGhostPathsFromState(ghostPaths: Set<String>) {
+        if (ghostPaths.isEmpty()) return
+        var updated: List<MediaImage>? = null
+        _uiState.update { state ->
+            val removed = state.images.filter { it.path in ghostPaths }
+            if (removed.isEmpty()) return@update state
+            removed.forEach { ThumbnailCache.remove(it.id) }
+            val remaining = state.images.filterNot { it.path in ghostPaths }
+            updated = remaining
+            state.copy(images = remaining)
+        }
+        updated?.let { remaining ->
+            if (remaining.isNotEmpty()) {
+                viewModelScope.launch(Dispatchers.IO) { repository.persistSnapshot(remaining) }
+            }
+        }
+    }
+
     fun rescanMedia(onComplete: (Int) -> Unit = {}) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(loading = true) }
-            vaultRepository.recoverOrphanedItems()
-            val count = repository.rescanStorage()
-            refresh(showLoading = false)
-            onComplete(count)
+        backgroundRescanJob?.cancel()
+        backgroundRescanJob = viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    vaultRepository.recoverOrphanedItems()
+                    vaultRepository.loadVaultItems()
+                }
+                refreshTrashOnly()
+                if (settingsPreferences.state.value.showHiddenItems) {
+                    refreshHiddenMedia()
+                }
+                val result = repository.rescanStoragePrioritized(
+                    recentOnly = false,
+                    forceReverifyExif = true,
+                    onBatchScanned = { uris -> applyIncrementalMediaChanges(uris) },
+                    onGhostsFound = { ghosts -> removeGhostPathsFromState(ghosts) },
+                )
+                val latestGen = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
+                if (latestGen != null) {
+                    lastGenerationByVolume = latestGen
+                    repository.saveGenerationByVolume(latestGen)
+                }
+                scheduleExifDateEnrichment(_uiState.value.images)
+                onComplete(result.scannedCount)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.w("GalleryViewModel", "rescanMedia failed", e)
+                onComplete(0)
+            }
         }
     }
 
@@ -677,7 +770,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private fun isOnKnownStoragePath(path: String): Boolean {
         if (path.isBlank()) return false
-        if (path.startsWith("/storage/")) return true
+        if (path.startsWith("/storage/") || path.startsWith("/sdcard/")) return true
         return path.startsWith(getApplication<Application>().filesDir.absolutePath)
     }
 
@@ -744,40 +837,64 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun scheduleRetryPendingUris(uris: List<Uri>) {
-        synchronized(pendingRetryUriSet) {
-            pendingRetryUriSet.addAll(uris)
+        synchronized(pendingRetryAttempts) {
+            for (u in deduplicateMediaUris(uris)) {
+                pendingRetryAttempts.putIfAbsent(u, 0)
+            }
         }
         if (retryPendingJob?.isActive == true) return
         retryPendingJob = viewModelScope.launch {
-            var delayMs = 800L
-            repeat(10) {
-                delay(delayMs)
-                delayMs = (delayMs * 2).coerceAtMost(8000L)
-                val batch = synchronized(pendingRetryUriSet) {
-                    if (pendingRetryUriSet.isEmpty()) return@launch
-                    deduplicateMediaUris(pendingRetryUriSet.toList()).also { pendingRetryUriSet.clear() }
+            val maxAttemptsPerUri = 15
+            var consecutiveEmptyWaves = 0
+            while (true) {
+                val delayMs = when (consecutiveEmptyWaves) {
+                    0 -> 800L
+                    1 -> 1_500L
+                    2 -> 2_500L
+                    else -> 4_000L
                 }
+                delay(delayMs)
+                val snapshot = synchronized(pendingRetryAttempts) {
+                    if (pendingRetryAttempts.isEmpty()) return@launch
+                    pendingRetryAttempts.entries.map { it.key to it.value }
+                }
+                val batch = deduplicateMediaUris(snapshot.map { it.first })
                 val loaded = mutableListOf<MediaImage>()
-                val stillPending = mutableListOf<Uri>()
+                val doneUris = HashSet<Uri>()
+                val stillPendingUris = HashSet<Uri>()
                 for (uri in batch) {
                     when (val result = repository.loadImageByUriResult(uri)) {
                         is UriLoadResult.Ready -> {
                             if (isOnKnownStoragePath(result.item.path)) {
                                 loaded.add(result.item)
+                                doneUris.add(uri)
                             } else {
-                                stillPending.add(uri)
+                                stillPendingUris.add(uri)
                             }
                         }
-                        is UriLoadResult.Pending -> stillPending.add(uri)
-                        is UriLoadResult.MissingOrDeleted -> Unit
+                        is UriLoadResult.Pending -> stillPendingUris.add(uri)
+                        is UriLoadResult.MissingOrDeleted -> doneUris.add(uri)
                     }
                 }
                 if (loaded.isNotEmpty()) {
                     mergeChangedMedia(loaded.mapTo(HashSet()) { it.id }, loaded)
+                    consecutiveEmptyWaves = 0
+                } else {
+                    consecutiveEmptyWaves++
                 }
-                val hasMore = synchronized(pendingRetryUriSet) {
-                    pendingRetryUriSet.addAll(stillPending)
-                    pendingRetryUriSet.isNotEmpty()
+                val hasMore = synchronized(pendingRetryAttempts) {
+                    for (done in doneUris) {
+                        pendingRetryAttempts.remove(done)
+                    }
+                    for (pendingUri in stillPendingUris) {
+                        val nextAttempt = (pendingRetryAttempts[pendingUri] ?: 0) + 1
+                        if (nextAttempt >= maxAttemptsPerUri) {
+                            pendingRetryAttempts.remove(pendingUri)
+                        } else {
+                            pendingRetryAttempts[pendingUri] = nextAttempt
+                        }
+                    }
+                    pendingRetryAttempts.isNotEmpty()
                 }
                 if (!hasMore) return@launch
             }
@@ -827,6 +944,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 } else {
                     refreshTrashOnly()
                 }
+                scheduleExifDateEnrichment(_uiState.value.images)
             } else {
                 refresh(showLoading = false)
             }
@@ -835,13 +953,187 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private var refreshJob: Job? = null
     private var backgroundRescanJob: Job? = null
+    private var exifEnrichJob: Job? = null
 
-    fun rescanNewFilesInBackground() {
+    private fun scheduleExifDateEnrichment(items: List<MediaImage>) {
+        if (items.isEmpty() || !repository.hasUnverifiedExifDates(items)) return
+        if (exifEnrichJob?.isActive == true) return
+        exifEnrichJob = viewModelScope.launch {
+            try {
+                var checkedAnyOverall = false
+                while (true) {
+                    val current = _uiState.value.images
+                    if (current.isEmpty() || !repository.hasUnverifiedExifDates(current)) break
+                    val checkedThisPass = repository.enrichExifDatesInBackground(
+                        items = current,
+                        onBatchUpdated = { updatedDates ->
+                            _uiState.update { state ->
+                                var changed = false
+                                val updatedList = state.images.map { img ->
+                                    val newDate = updatedDates[img.id]
+                                    if (newDate != null && newDate != img.dateTaken) {
+                                        changed = true
+                                        img.copy(dateTaken = newDate)
+                                    } else {
+                                        img
+                                    }
+                                }
+                                if (!changed) state else state.copy(
+                                    images = updatedList.sortedWith(
+                                        compareByDescending<MediaImage> { it.dateTaken }
+                                            .thenByDescending { it.dateModified }
+                                            .thenByDescending { it.dateAdded }
+                                            .thenByDescending { it.id }
+                                    )
+                                )
+                            }
+                        },
+                        onCheckpoint = {
+                            val latest = _uiState.value.images
+                            if (latest.isNotEmpty()) {
+                                withContext(Dispatchers.IO) { repository.persistSnapshot(latest) }
+                            }
+                        },
+                    )
+                    if (!checkedThisPass) break
+                    checkedAnyOverall = true
+                }
+                if (checkedAnyOverall) {
+                    val latest = _uiState.value.images
+                    if (latest.isNotEmpty()) {
+                        withContext(Dispatchers.IO) { repository.persistSnapshot(latest) }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.w("GalleryViewModel", "background EXIF enrichment failed", e)
+            }
+        }
+    }
+
+    fun rescanNewFilesInBackground(skipRecentPhase: Boolean = false) {
         if (backgroundRescanJob?.isActive == true) return
         backgroundRescanJob = viewModelScope.launch {
-            val scanned = runCatching { repository.rescanStorage() }.getOrDefault(0)
-            if (scanned > 0) {
-                refresh(showLoading = false, forceClearCache = true)
+            runCatching {
+                repository.rescanStoragePrioritized(
+                    recentOnly = false,
+                    skipRecentPhase = skipRecentPhase,
+                    forceReverifyExif = false,
+                    onBatchScanned = { uris -> applyIncrementalMediaChanges(uris) },
+                    onGhostsFound = { ghosts -> removeGhostPathsFromState(ghosts) },
+                )
+                val latestGen = withContext(Dispatchers.IO) { repository.getGenerationByVolume() }
+                if (latestGen != null) {
+                    lastGenerationByVolume = latestGen
+                    repository.saveGenerationByVolume(latestGen)
+                }
+            }
+        }
+    }
+
+    /**
+     * Pull-to-refresh entry point: syncs recent MediaStore deltas and the most recently modified
+     * storage folders first (streaming tiles live as they index), stops the pull-to-refresh
+     * spinner as soon as Phase 1 finishes, and lets older folders finish scanning silently in the
+     * background.
+     */
+    fun quickRefresh() {
+        if (_uiState.value.images.isEmpty() || !repository.isSnapshotComplete()) {
+            refresh(showLoading = true, forceClearCache = false, rescanStorage = false)
+            rescanNewFilesInBackground()
+            return
+        }
+        val current = refreshJob
+        if (current?.isActive == true) {
+            current.cancel()
+        }
+        backgroundRescanJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            _uiState.update { it.copy(loading = true, error = null) }
+            try {
+                kotlinx.coroutines.withTimeout(30_000) {
+                    val internalTrash = withContext(Dispatchers.IO) {
+                        vaultRepository.recoverOrphanedItems()
+                        vaultRepository.loadVaultItems()
+                        trashRepository.loadTrashItems()
+                    }
+                    val trashList = loadCombinedTrash(internalTrash)
+                    _uiState.update { it.copy(trashed = trashList, error = null) }
+
+                    // Fast MediaStore generation delta check + obsolete ID prune (or cached loadImages on API < 30)
+                    val previous = lastGenerationByVolume ?: repository.loadGenerationByVolume()
+                    val currentGen = runCatching { repository.getGenerationByVolume() }.getOrNull()
+                    val prevVersion = repository.loadMediaStoreVersion()
+                    val currVersion = withContext(Dispatchers.IO) { repository.getCurrentMediaStoreVersion() }
+                    val versionMismatch = prevVersion != null && currVersion != null && prevVersion != currVersion
+                    val generationInvalid = previous != null && currentGen != null && currentGen.any { (vol, gen) ->
+                        val prevGen = previous[vol]
+                        prevGen == null || gen < prevGen
+                    }
+                    if (previous != null && currentGen != null && !versionMismatch && !generationInvalid) {
+                        if (currentGen != previous) {
+                            val changed = runCatching { repository.getChangedUrisSince(previous) }.getOrDefault(emptyList())
+                            if (changed.isNotEmpty()) {
+                                applyIncrementalMediaChanges(changed)
+                            }
+                        }
+                        val knownIds = _uiState.value.images.mapNotNullTo(HashSet()) { it.id.takeIf { id -> id > 0 } }
+                        val obsolete = runCatching { repository.checkObsoleteContentIds(knownIds) }.getOrDefault(emptySet())
+                        if (obsolete.isNotEmpty()) {
+                            obsolete.forEach { ThumbnailCache.remove(it) }
+                            var remainingAfterPrune: List<MediaImage> = emptyList()
+                            _uiState.update { state ->
+                                remainingAfterPrune = state.images.filterNot { it.id in obsolete }
+                                state.copy(images = remainingAfterPrune)
+                            }
+                            if (remainingAfterPrune.isNotEmpty()) {
+                                withContext(Dispatchers.IO) { repository.persistSnapshot(remainingAfterPrune) }
+                            }
+                        }
+                        lastGenerationByVolume = currentGen
+                        repository.saveGenerationByVolume(currentGen)
+                        if (currVersion != null) repository.saveMediaStoreVersion(currVersion)
+                    } else {
+                        val loaded = repository.loadImages()
+                        _uiState.update { it.copy(images = loaded, error = null) }
+                        if (currentGen != null) {
+                            lastGenerationByVolume = currentGen
+                            repository.saveGenerationByVolume(currentGen)
+                        }
+                        if (currVersion != null) repository.saveMediaStoreVersion(currVersion)
+                    }
+
+                    // Phase 1: scan most recently modified directories first and stream new tiles live
+                    runCatching {
+                        repository.rescanStoragePrioritized(
+                            recentOnly = true,
+                            forceReverifyExif = false,
+                            onBatchScanned = { uris -> applyIncrementalMediaChanges(uris) },
+                            onGhostsFound = { ghosts -> removeGhostPathsFromState(ghosts) },
+                        )
+                    }
+
+                    val afterPhase1Gen = runCatching { repository.getGenerationByVolume() }.getOrNull()
+                    if (afterPhase1Gen != null) {
+                        lastGenerationByVolume = afterPhase1Gen
+                        repository.saveGenerationByVolume(afterPhase1Gen)
+                    }
+                    if (settingsPreferences.state.value.showHiddenItems) {
+                        refreshHiddenMedia()
+                    }
+                    scheduleExifDateEnrichment(_uiState.value.images)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.w("GalleryViewModel", "quickRefresh failed", e)
+            } finally {
+                val thisJob = kotlinx.coroutines.currentCoroutineContext()[Job]
+                if (refreshJob === thisJob) {
+                    _uiState.update { it.copy(loading = false) }
+                    refreshJob = null
+                    // Continue scanning older directories silently in the background without redoing Phase 1
+                    rescanNewFilesInBackground(skipRecentPhase = true)
+                }
             }
         }
     }
@@ -922,6 +1214,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         if (settingsPreferences.state.value.showHiddenItems) {
                             refreshHiddenMedia()
                         }
+                        scheduleExifDateEnrichment(combined)
                         if (_duplicateState.value.hasScanned) _duplicateState.value = DuplicateScanState()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e

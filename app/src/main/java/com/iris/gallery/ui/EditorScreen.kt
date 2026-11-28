@@ -147,6 +147,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.iris.gallery.R
 import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.SettingsPreferences
+import com.iris.gallery.data.isRaw
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -277,7 +278,7 @@ fun EditorScreen(
     val scope = rememberCoroutineScope()
     val settingsPrefs = remember { SettingsPreferences(context) }
     var overwriteOriginal by remember(image.id) {
-        mutableStateOf(settingsPrefs.state.value.editorOverwriteOriginal)
+        mutableStateOf(settingsPrefs.state.value.editorOverwriteOriginal && !image.isRaw)
     }
     var saving by remember { mutableStateOf(false) }
     var pendingOverwriteBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -1004,11 +1005,15 @@ fun EditorScreen(
         SaveAsDialog(
             selectedFormat = selectedExportFormat,
             originalFormat = originalExportFormat,
-            overwriteOriginal = overwriteOriginal,
+            overwriteOriginal = overwriteOriginal && !image.isRaw,
             onToggleOverwrite = {
-                overwriteOriginal = it
-                if (it) {
-                    selectedExportFormat = originalExportFormat
+                if (!image.isRaw) {
+                    overwriteOriginal = it
+                    if (it) {
+                        selectedExportFormat = originalExportFormat
+                    }
+                } else {
+                    overwriteOriginal = false
                 }
             },
             onSelectFormat = { selectedExportFormat = it },
@@ -1019,7 +1024,7 @@ fun EditorScreen(
                 val crop = RectF(session.crop)
                 val strokes = session.strokes.map { it.copy(points = it.points.toMutableList()) }
                 val textOverlays = session.textOverlays.map { it.copy() }
-                val shouldOverwrite = overwriteOriginal
+                val shouldOverwrite = overwriteOriginal && !image.isRaw
                 val format = if (shouldOverwrite) originalExportFormat else selectedExportFormat
                 saving = true
                 scope.launch {

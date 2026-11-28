@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.iris.gallery.data.MediaImage
+import com.iris.gallery.data.hasPairedRaw
 import com.iris.gallery.data.isGif
 import com.iris.gallery.data.isMotionPhoto
 import com.iris.gallery.data.isPanorama
@@ -139,7 +140,16 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
             if (cached != null && cached.exists() && cached.length() > 0) cached.absolutePath else image.path
         } else image.path
         val isFile = image.uri.scheme == "file" || image.path.startsWith(context.filesDir.absolutePath)
-        if (isFile) {
+        if (image.isRaw) {
+            // Bypass ThumbnailUtils / MediaProvider / ImageDecoder for RAW/DNG files because
+            // SkRawCodec frequently ignores EXIF orientation and returns sideways portrait thumbnails.
+            com.iris.gallery.decoder.ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                context = context,
+                uri = image.uri,
+                path = effectivePath,
+                maxDimPx = targetSizePx,
+            )
+        } else if (isFile) {
             val file = java.io.File(effectivePath)
             if (Build.VERSION.SDK_INT >= 29) {
                 if (image.isVideo) {
@@ -152,11 +162,12 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
                     @Suppress("DEPRECATION")
                     android.media.ThumbnailUtils.createVideoThumbnail(image.path, MediaStore.Images.Thumbnails.MINI_KIND)
                 } else {
-                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    android.graphics.BitmapFactory.decodeFile(image.path, opts)
-                    val sample = maxOf(opts.outWidth / targetSizePx, opts.outHeight / targetSizePx, 1)
-                    val opts2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
-                    android.graphics.BitmapFactory.decodeFile(image.path, opts2)
+                    com.iris.gallery.decoder.ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                        context = context,
+                        uri = image.uri,
+                        path = effectivePath,
+                        maxDimPx = targetSizePx,
+                    )
                 }
             }
         } else if (Build.VERSION.SDK_INT >= 29) {
@@ -228,7 +239,7 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
                 }
                 (res.image as? coil3.BitmapImage)?.bitmap
             }.getOrNull()
-        } else if (!image.isVideo) {
+        } else if (!image.isVideo && !image.isRaw) {
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val source = if (image.path.isNotBlank() && java.io.File(image.path).exists()) {
@@ -248,22 +259,12 @@ private fun loadThumbnail(context: Context, image: MediaImage, targetSizePx: Int
                         }
                     }
                 } else {
-                    val openStream: () -> java.io.InputStream? = {
-                        if (image.path.isNotBlank() && java.io.File(image.path).exists()) {
-                            java.io.FileInputStream(image.path)
-                        } else {
-                            context.contentResolver.openInputStream(image.uri)
-                        }
-                    }
-                    openStream()?.use { s ->
-                        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        BitmapFactory.decodeStream(s, null, opts)
-                        val sample = maxOf(opts.outWidth / targetSizePx, opts.outHeight / targetSizePx, 1)
-                        val opts2 = BitmapFactory.Options().apply { inSampleSize = sample }
-                        openStream()?.use { s2 ->
-                            BitmapFactory.decodeStream(s2, null, opts2)
-                        }
-                    }
+                    com.iris.gallery.decoder.ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                        context = context,
+                        uri = image.uri,
+                        path = image.path,
+                        maxDimPx = targetSizePx,
+                    )
                 }
             }.getOrNull()
         } else {
@@ -498,7 +499,7 @@ fun MediaThumbnail(
             }
         } else if (!image.isVideo && showFormatBadge) {
             val badge = when {
-                image.isRaw -> "RAW"
+                image.isRaw || image.hasPairedRaw -> "RAW"
                 image.isGif -> "GIF"
                 image.isSvg -> "SVG"
                 image.isPanorama -> "PANO"

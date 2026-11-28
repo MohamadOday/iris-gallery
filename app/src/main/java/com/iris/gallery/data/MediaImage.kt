@@ -27,7 +27,135 @@ data class MediaImage(
     val description: String = "",
     val dateModified: Long = 0L,
     val dateAdded: Long = 0L,
+    val pairedRaw: MediaImage? = null,
 )
+
+val MediaImage.hasPairedRaw: Boolean
+    get() = pairedRaw != null
+
+val MediaImage.isRawOrPaired: Boolean
+    get() = isRaw || pairedRaw != null
+
+fun MediaImage.timelineTimestamp(source: TimelineDateSource): Long = when (source) {
+    TimelineDateSource.DATE_TAKEN -> dateTaken.takeIf { it > 0L } ?: dateModified.takeIf { it > 0L } ?: dateAdded
+    TimelineDateSource.DATE_MODIFIED -> dateModified.takeIf { it > 0L } ?: dateTaken.takeIf { it > 0L } ?: dateAdded
+    TimelineDateSource.DATE_ADDED -> dateAdded.takeIf { it > 0L } ?: dateModified.takeIf { it > 0L } ?: dateTaken
+}
+
+fun timelineComparator(source: TimelineDateSource): Comparator<MediaImage> = when (source) {
+    TimelineDateSource.DATE_TAKEN -> compareByDescending<MediaImage> { it.timelineTimestamp(source) }
+        .thenByDescending { it.dateModified }
+        .thenByDescending { it.dateAdded }
+        .thenByDescending { it.id }
+    TimelineDateSource.DATE_MODIFIED -> compareByDescending<MediaImage> { it.timelineTimestamp(source) }
+        .thenByDescending { it.dateTaken }
+        .thenByDescending { it.dateAdded }
+        .thenByDescending { it.id }
+    TimelineDateSource.DATE_ADDED -> compareByDescending<MediaImage> { it.timelineTimestamp(source) }
+        .thenByDescending { it.dateModified }
+        .thenByDescending { it.dateTaken }
+        .thenByDescending { it.id }
+}
+
+fun MediaImage.withPairedFiles(): List<MediaImage> =
+    if (pairedRaw != null) listOf(this, pairedRaw) else listOf(this)
+
+fun List<MediaImage>.expandPairedRaw(): List<MediaImage> =
+    flatMap { it.withPairedFiles() }.distinctBy { it.id }
+
+fun rawPairFolderKey(item: MediaImage): String {
+    if (item.path.isNotBlank()) {
+        val parent = File(item.path).parent
+        if (!parent.isNullOrBlank()) return parent.lowercase(java.util.Locale.ROOT)
+    }
+    return "bucket:${item.bucketId}"
+}
+
+private val PIXEL_RAW_SUFFIX_REGEX = Regex("""\.raw-\d+(?:\.[a-z0-9]+)*$""")
+
+fun rawPairStem(name: String): String {
+    val withoutExt = name.substringBeforeLast('.', name).lowercase(java.util.Locale.ROOT)
+    return withoutExt.replace(PIXEL_RAW_SUFFIX_REGEX, "")
+}
+
+private fun isRawPairCoverCandidate(item: MediaImage): Boolean {
+    if (item.isVideo || item.isRaw || item.isGif || item.isSvg) return false
+    val lowerName = item.name.lowercase(java.util.Locale.ROOT)
+    val lowerMime = item.mimeType.lowercase(java.util.Locale.ROOT)
+    return lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") ||
+        lowerName.endsWith(".heic") || lowerName.endsWith(".heif") ||
+        lowerName.endsWith(".webp") || lowerName.endsWith(".avif") ||
+        lowerMime.contains("jpeg") || lowerMime.contains("heic") || lowerMime.contains("heif")
+}
+
+private fun areTimestampsCloseForRawPair(a: MediaImage, b: MediaImage): Boolean {
+    val maxDiffMs = 60_000L
+    if (a.dateTaken > 0L && b.dateTaken > 0L) {
+        return kotlin.math.abs(a.dateTaken - b.dateTaken) <= maxDiffMs
+    }
+    if (a.dateModified > 0L && b.dateModified > 0L) {
+        return kotlin.math.abs(a.dateModified - b.dateModified) <= maxDiffMs
+    }
+    return a.dateTaken == 0L && b.dateTaken == 0L
+}
+
+/**
+ * Groups matching RAW+JPEG (or RAW+HEIF) shots in the same folder with matching base names and
+ * close timestamps into a single stacked [MediaImage] (JPEG primary with [MediaImage.pairedRaw]).
+ */
+fun groupRawJpegPairs(media: List<MediaImage>): List<MediaImage> {
+    if (media.size < 2) return media
+    val hasAnyRaw = media.any { it.isRaw }
+    if (!hasAnyRaw) return media
+
+    // Bucket by (folder, normalized stem) only for non-video candidates
+    val groups = HashMap<Pair<String, String>, MutableList<MediaImage>>()
+    for (item in media) {
+        if (item.isVideo) continue
+        if (!item.isRaw && !isRawPairCoverCandidate(item)) continue
+        val key = rawPairFolderKey(item) to rawPairStem(item.name)
+        groups.getOrPut(key) { mutableListOf() }.add(item)
+    }
+
+    val pairedRawByCoverId = HashMap<Long, MediaImage>()
+    val consumedRawIds = HashSet<Long>()
+
+    for (bucket in groups.values) {
+        if (bucket.size < 2) continue
+        val raws = bucket.filter { it.isRaw }
+        if (raws.isEmpty()) continue
+        val covers = bucket.filter { isRawPairCoverCandidate(it) }
+        if (covers.isEmpty()) continue
+
+        val availableRaws = raws.toMutableList()
+        val orderedCovers = covers.sortedBy {
+            val lower = it.name.lowercase(java.util.Locale.ROOT)
+            if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) 0 else 1
+        }
+        for (cover in orderedCovers) {
+            val match = availableRaws
+                .filter { areTimestampsCloseForRawPair(cover, it) }
+                .minWithOrNull(
+                    compareBy<MediaImage> {
+                        if (it.name.endsWith(".dng", ignoreCase = true)) 0 else 1
+                    }.thenBy { kotlin.math.abs(cover.dateTaken - it.dateTaken) }
+                ) ?: continue
+            pairedRawByCoverId[cover.id] = match
+            consumedRawIds.add(match.id)
+            availableRaws.remove(match)
+        }
+    }
+
+    if (consumedRawIds.isEmpty()) return media
+
+    return buildList(media.size - consumedRawIds.size) {
+        for (item in media) {
+            if (item.id in consumedRawIds) continue
+            val rawCompanion = pairedRawByCoverId[item.id]
+            add(if (rawCompanion != null) item.copy(pairedRaw = rawCompanion) else item)
+        }
+    }
+}
 
 val MediaImage.isScreenshot: Boolean
     get() = bucketName.contains("screenshot", ignoreCase = true) ||
@@ -37,19 +165,19 @@ val MediaImage.isScreenshot: Boolean
             name.startsWith("Screen_Shot", ignoreCase = true) ||
             name.startsWith("ScreenShot", ignoreCase = true)
 
+val RAW_IMAGE_EXTENSIONS: Set<String> = setOf(
+    "dng", "raw", "cr2", "cr3", "arw", "nef", "raf", "orf", "rw2", "pef", "srw"
+)
+
+fun isRawMedia(name: String, mimeType: String): Boolean {
+    val lowerMime = mimeType.lowercase(java.util.Locale.ROOT)
+    if (lowerMime.contains("raw") || lowerMime.contains("dng")) return true
+    val ext = name.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+    return ext in RAW_IMAGE_EXTENSIONS
+}
+
 val MediaImage.isRaw: Boolean
-    get() {
-        if (isVideo) return false
-        val lowerMime = mimeType.lowercase()
-        val lowerName = name.lowercase()
-        return lowerMime.contains("raw") || lowerMime.contains("dng") ||
-                lowerName.endsWith(".dng") || lowerName.endsWith(".raw") ||
-                lowerName.endsWith(".cr2") || lowerName.endsWith(".cr3") ||
-                lowerName.endsWith(".arw") || lowerName.endsWith(".nef") ||
-                lowerName.endsWith(".raf") || lowerName.endsWith(".orf") ||
-                lowerName.endsWith(".rw2") || lowerName.endsWith(".pef") ||
-                lowerName.endsWith(".srw")
-    }
+    get() = !isVideo && isRawMedia(name, mimeType)
 
 val MediaImage.isGif: Boolean
     get() = mimeType.equals("image/gif", ignoreCase = true) ||
@@ -633,17 +761,19 @@ fun extractExifDateTaken(context: Context, uri: Uri, filePath: String): Long? {
     if (filePath.isNotBlank()) {
         val file = File(filePath)
         if (file.exists() && file.canRead()) {
-            val res = runCatching {
+            val directAttempt = runCatching {
                 val exif = androidx.exifinterface.media.ExifInterface(file)
                 parseExifDateTime(exif)
-            }.getOrNull()
-            if (res != null && res > 0L) return res
+            }
+            if (directAttempt.isSuccess) {
+                return directAttempt.getOrNull()?.takeIf { it > 0L }
+            }
         }
     }
     return runCatching {
         context.contentResolver.openInputStream(uri)?.use { stream ->
             val exif = androidx.exifinterface.media.ExifInterface(stream)
-            parseExifDateTime(exif)
+            parseExifDateTime(exif)?.takeIf { it > 0L }
         }
     }.getOrNull()
 }

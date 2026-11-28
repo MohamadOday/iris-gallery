@@ -57,6 +57,23 @@ Download the signed APK directly from the [Releases](https://github.com/MohamadO
 - **F-Droid**: Available on [F-Droid](https://f-droid.org/packages/com.iris.gallery/).
 - **IzzyOnDroid**: Available via the [IzzyOnDroid F-Droid repository](https://apt.izzysoft.de/fdroid/index/apk/com.iris.gallery).
 
+### Verifying APK Authenticity
+
+APKs published via **GitHub Releases**, **Obtainium**, and **IzzyOnDroid** are signed with the developer release certificate below (official F-Droid builds are signed by F-Droid):
+
+```text
+Signing certificate SHA-256:
+90:EF:CB:06:86:7F:89:A5:D7:1B:5A:5D:5A:E6:8F:1A:1D:F1:C9:52:D9:03:65:34:80:FF:96:C1:7F:45:AF:D2
+```
+
+#### Verify with AppVerifier
+Copy and paste this block directly into [AppVerifier](https://github.com/soupslurpr/AppVerifier) to verify an installed or downloaded APK:
+
+```text
+com.iris.gallery
+90:EF:CB:06:86:7F:89:A5:D7:1B:5A:5D:5A:E6:8F:1A:1D:F1:C9:52:D9:03:65:34:80:FF:96:C1:7F:45:AF:D2
+```
+
 ---
 
 ## Highlights

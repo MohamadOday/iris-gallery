@@ -181,6 +181,7 @@ object BackupManager {
         put("gridSpacing", s.gridSpacing.name)
         put("photoGridLayout", s.photoGridLayout.name)
         put("animateGifThumbnails", s.animateGifThumbnails)
+        put("groupRawJpegPairs", s.groupRawJpegPairs)
         put("showHiddenItems", s.showHiddenItems)
         put("photoGridSize", s.photoGridSize.toDouble())
         put("mosaicRowSize", s.mosaicRowSize.toDouble())
@@ -190,6 +191,7 @@ object BackupManager {
         put("albumHierarchyDepth", s.albumHierarchyDepth)
         put("globalAlbumSearch", s.globalAlbumSearch)
         put("showTimelineHeaders", s.showTimelineHeaders)
+        put("timelineDateSource", s.timelineDateSource.name)
         put("timelineDateFormat", s.timelineDateFormat.name)
         put("customTimelineDateFormat", s.customTimelineDateFormat)
         put("useRelativeDates", s.useRelativeDates)
@@ -235,6 +237,10 @@ object BackupManager {
         put("useSystemTrash", s.useSystemTrash)
         put("videoMuted", s.videoMuted)
         put("preferredEditor", s.preferredEditor.name)
+        put("preferredEditorComponent", s.preferredEditorComponent)
+        put("lastUsedEditorId", s.lastUsedEditorId)
+        put("preferredVideoEditorComponent", s.preferredVideoEditorComponent)
+        put("lastUsedVideoEditorId", s.lastUsedVideoEditorId)
         put("editorOverwriteOriginal", s.editorOverwriteOriginal)
         put("language", s.language)
         put("memoriesNotificationEnabled", s.memoriesNotificationEnabled)
@@ -302,6 +308,7 @@ object BackupManager {
             gridSpacing = parseEnum(obj.optString("gridSpacing"), defaults.gridSpacing),
             photoGridLayout = parseEnum(obj.optString("photoGridLayout"), defaults.photoGridLayout),
             animateGifThumbnails = obj.optBoolean("animateGifThumbnails", defaults.animateGifThumbnails),
+            groupRawJpegPairs = obj.optBoolean("groupRawJpegPairs", defaults.groupRawJpegPairs),
             showHiddenItems = safeShowHidden,
             photoGridSize = obj.optDouble("photoGridSize", defaults.photoGridSize.toDouble()).toFloat().coerceIn(36f, 340f),
             mosaicRowSize = obj.optDouble("mosaicRowSize", defaults.mosaicRowSize.toDouble()).toFloat().coerceIn(56f, 260f),
@@ -311,6 +318,7 @@ object BackupManager {
             albumHierarchyDepth = obj.optInt("albumHierarchyDepth", defaults.albumHierarchyDepth).coerceIn(0, 4),
             globalAlbumSearch = obj.optBoolean("globalAlbumSearch", defaults.globalAlbumSearch),
             showTimelineHeaders = obj.optBoolean("showTimelineHeaders", defaults.showTimelineHeaders),
+            timelineDateSource = parseEnum(obj.optString("timelineDateSource"), defaults.timelineDateSource),
             timelineDateFormat = parseEnum(obj.optString("timelineDateFormat"), defaults.timelineDateFormat),
             customTimelineDateFormat = safeCustomDate,
             useRelativeDates = obj.optBoolean("useRelativeDates", defaults.useRelativeDates),
@@ -356,6 +364,10 @@ object BackupManager {
             useSystemTrash = obj.optBoolean("useSystemTrash", defaults.useSystemTrash),
             videoMuted = obj.optBoolean("videoMuted", defaults.videoMuted),
             preferredEditor = parseEnum(obj.optString("preferredEditor"), defaults.preferredEditor),
+            preferredEditorComponent = obj.optString("preferredEditorComponent", defaults.preferredEditorComponent),
+            lastUsedEditorId = obj.optString("lastUsedEditorId", defaults.lastUsedEditorId),
+            preferredVideoEditorComponent = obj.optString("preferredVideoEditorComponent", defaults.preferredVideoEditorComponent),
+            lastUsedVideoEditorId = obj.optString("lastUsedVideoEditorId", defaults.lastUsedVideoEditorId),
             editorOverwriteOriginal = obj.optBoolean("editorOverwriteOriginal", defaults.editorOverwriteOriginal),
             language = safeLang,
             memoriesNotificationEnabled = obj.optBoolean("memoriesNotificationEnabled", defaults.memoriesNotificationEnabled),

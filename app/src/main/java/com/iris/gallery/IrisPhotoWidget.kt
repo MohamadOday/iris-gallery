@@ -130,28 +130,55 @@ class IrisPhotoWidget : AppWidgetProvider() {
         Log.i("IrisWidget", "published widget $id with ${memories.size} memories")
     }
 
-    private data class Memory(val id: Long, val date: LocalDate)
+    private data class Memory(
+        val id: Long,
+        val date: LocalDate,
+        val path: String = "",
+        val isRaw: Boolean = false,
+    )
 
     private fun loadMemories(context: Context): List<Memory> {
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
         val locked = context.getSharedPreferences("library_preferences", Context.MODE_PRIVATE)
             .getStringSet("locked", emptySet()).orEmpty().mapNotNullTo(hashSetOf(), String::toLongOrNull)
-        return buildList {
-            context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED),
-                null, null, "${MediaStore.Images.Media.DATE_TAKEN} DESC")?.use { cursor ->
-                while (cursor.moveToNext() && size < 30) {
-                    val mediaId = cursor.getLong(0)
-                    if (mediaId in locked) continue
-                    val timestamp = cursor.getLong(1).takeIf { it > 0 } ?: cursor.getLong(2) * 1_000
-                    val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
-                    if (date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth) {
-                        add(Memory(mediaId, date))
-                    }
+        val candidates = mutableListOf<Triple<Memory, String, String>>()
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATE_TAKEN,
+                MediaStore.Images.Media.DATE_ADDED,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.MIME_TYPE,
+                MediaStore.Images.Media.DATA,
+            ),
+            null,
+            null,
+            "${MediaStore.Images.Media.DATE_TAKEN} DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext() && candidates.size < 60) {
+                val mediaId = cursor.getLong(0)
+                if (mediaId in locked) continue
+                val timestamp = cursor.getLong(1).takeIf { it > 0 } ?: cursor.getLong(2) * 1_000
+                val date = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
+                if (date.year < today.year && date.month == today.month && date.dayOfMonth == today.dayOfMonth) {
+                    val name = cursor.getString(3).orEmpty()
+                    val mime = cursor.getString(4).orEmpty()
+                    val path = cursor.getString(5).orEmpty()
+                    val raw = com.iris.gallery.data.isRawMedia(name, mime)
+                    val folder = java.io.File(path).parent.orEmpty().lowercase()
+                    val stem = com.iris.gallery.data.rawPairStem(name)
+                    candidates.add(Triple(Memory(mediaId, date, path, raw), folder, stem))
                 }
             }
         }
+        // Deduplicate RAW+JPEG pairs on the same day/folder, preferring the non-RAW cover.
+        val nonRawKeys = candidates.filterNot { it.first.isRaw }.mapTo(HashSet()) { it.second to it.third }
+        return candidates
+            .filterNot { (mem, folder, stem) -> mem.isRaw && (folder to stem) in nonRawKeys }
+            .take(30)
+            .map { it.first }
     }
 
     private fun memoryCard(context: Context, memory: Memory, index: Int, ratio: Float): Bitmap {
@@ -159,7 +186,14 @@ class IrisPhotoWidget : AppWidgetProvider() {
         val outputHeight = (outputWidth / ratio).toInt().coerceIn(420, 900)
         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, memory.id)
         val source = runCatching {
-            if (Build.VERSION.SDK_INT >= 29) {
+            if (memory.isRaw) {
+                com.iris.gallery.decoder.ExifOrientationHelper.decodeWithBitmapFactoryAndExif(
+                    context = context,
+                    uri = uri,
+                    path = memory.path,
+                    maxDimPx = maxOf(outputWidth, outputHeight),
+                )
+            } else if (Build.VERSION.SDK_INT >= 29) {
                 context.contentResolver.loadThumbnail(uri, Size(outputWidth, outputHeight), null)
             } else {
                 @Suppress("DEPRECATION")

@@ -25,8 +25,9 @@ private fun viewerMaxDimension(context: Context): Int {
 
 fun viewerImageSize(context: Context, image: MediaImage): Size {
     val maxDim = viewerMaxDimension(context)
-    val width = image.width
-    val height = image.height
+    val quarterTurn = ((image.orientation % 360) + 360) % 360 in setOf(90, 270)
+    val width = if (quarterTurn) image.height else image.width
+    val height = if (quarterTurn) image.width else image.height
     if (width <= 0 || height <= 0) return Size(maxDim, maxDim)
     val longest = maxOf(width, height)
     if (longest <= maxDim) return Size.ORIGINAL
@@ -39,8 +40,9 @@ fun viewerImageSize(context: Context, image: MediaImage): Size {
 
 fun viewerPreloadSize(context: Context, image: MediaImage): Size {
     val preview = minOf(viewerMaxDimension(context), 1280)
-    val width = image.width
-    val height = image.height
+    val quarterTurn = ((image.orientation % 360) + 360) % 360 in setOf(90, 270)
+    val width = if (quarterTurn) image.height else image.width
+    val height = if (quarterTurn) image.width else image.height
     if (width <= 0 || height <= 0) return Size(preview, preview)
     val longest = maxOf(width, height)
     if (longest <= preview) return Size.ORIGINAL

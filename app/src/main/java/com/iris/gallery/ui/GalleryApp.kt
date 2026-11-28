@@ -585,14 +585,24 @@ internal fun GalleryApp(
                 videoMuted = settings.videoMuted,
                 onSetVideoMuted = { settingsPreferences.setVideoMuted(it) },
                 preferredEditor = settings.preferredEditor,
+                preferredEditorComponent = settings.preferredEditorComponent,
+                lastUsedEditorId = settings.lastUsedEditorId,
+                preferredVideoEditorComponent = settings.preferredVideoEditorComponent,
+                lastUsedVideoEditorId = settings.lastUsedVideoEditorId,
                 onSetPreferredEditor = { settingsPreferences.setPreferredEditor(it) },
+                onSetPreferredExternalEditor = { settingsPreferences.setPreferredExternalEditor(it) },
+                onSetLastUsedEditorId = { settingsPreferences.setLastUsedEditorId(it) },
+                onSetPreferredVideoEditor = { settingsPreferences.setPreferredVideoEditorComponent(it) },
+                onSetLastUsedVideoEditorId = { settingsPreferences.setLastUsedVideoEditorId(it) },
                 availableAlbums = emptyList(),
                 onToggleFavorite = { },
                 onClose = { standaloneExternalMedia = null },
-                onDelete = { item, _ ->
-                    val deleted = runCatching { context.contentResolver.delete(item.uri, null, null) > 0 }
-                        .onFailure { android.util.Log.w("IrisGallery", "standalone delete failed", it) }
-                        .getOrDefault(false)
+                onDelete = { items, _ ->
+                    val deleted = items.any { item ->
+                        runCatching { context.contentResolver.delete(item.uri, null, null) > 0 }
+                            .onFailure { android.util.Log.w("IrisGallery", "standalone delete failed", it) }
+                            .getOrDefault(false)
+                    }
                     if (deleted) {
                         standaloneExternalMedia = null
                     } else {
@@ -640,17 +650,12 @@ internal fun GalleryApp(
                     }
                 )
             } else {
-                val visibleMedia = remember(state.images, hiddenMedia, settings.showHiddenItems, requestedType, libraryState.lockedMedia, libraryState.excludedFolders) {
+                val visibleMedia = remember(state.images, hiddenMedia, settings.showHiddenItems, settings.groupRawJpegPairs, settings.timelineDateSource, requestedType, libraryState.lockedMedia, libraryState.excludedFolders) {
                     val merged = if (settings.showHiddenItems && hiddenMedia.isNotEmpty()) {
                         val existingPaths = state.images.mapTo(HashSet(state.images.size)) { it.path }
                         val extras = hiddenMedia.filter { it.path.isNotBlank() && it.path !in existingPaths }
                         if (extras.isEmpty()) state.images
-                        else (state.images + extras).sortedWith(
-                            compareByDescending<MediaImage> { it.dateTaken }
-                                .thenByDescending { it.dateModified }
-                                .thenByDescending { it.dateAdded }
-                                .thenByDescending { it.id }
-                        )
+                        else state.images + extras
                     } else {
                         state.images
                     }
@@ -659,8 +664,18 @@ internal fun GalleryApp(
                         requestedType?.startsWith("video/") == true -> merged.filter { it.isVideo }
                         else -> merged
                     }
-                    requested.filterNot { it.id in libraryState.lockedMedia }
+                    val filtered = requested.filterNot { it.id in libraryState.lockedMedia }
                         .filterNot { img -> isPathExcluded(img.path, libraryState.excludedFolders) }
+                    val canGroupRawPairs = settings.groupRawJpegPairs &&
+                        (requestedType == null || requestedType == "*/*" || requestedType == "image/*")
+                    val grouped = if (canGroupRawPairs) com.iris.gallery.data.groupRawJpegPairs(filtered) else filtered
+                    if (settings.timelineDateSource == com.iris.gallery.data.TimelineDateSource.DATE_TAKEN &&
+                        (!settings.showHiddenItems || hiddenMedia.isEmpty())
+                    ) {
+                        grouped
+                    } else {
+                        grouped.sortedWith(com.iris.gallery.data.timelineComparator(settings.timelineDateSource))
+                    }
                 }
                 var showHiddenAccessDialog by remember { mutableStateOf(false) }
                 var awaitingHiddenAllFilesAccessGrant by remember { mutableStateOf(false) }
@@ -1399,7 +1414,7 @@ internal fun GalleryApp(
                         },
                         getAlbumDir = viewModel::getAlbumDirectory,
                         createAlbumDir = viewModel::createNewAlbumDirectory,
-                        onRefresh = { viewModel.refresh(showLoading = true, forceClearCache = true, rescanStorage = true) },
+                        onRefresh = { viewModel.quickRefresh() },
                         onExportBackupJson = viewModel::exportBackupJson,
                         onParseBackupPreview = viewModel::parseBackupPreview,
                         onImportBackupJson = { raw -> viewModel.importBackupJson(raw) },

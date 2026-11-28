@@ -67,6 +67,7 @@ import com.iris.gallery.data.ExifMetadata
 import com.iris.gallery.data.ExifEditRequest
 import com.iris.gallery.data.loadExifMetadata
 import com.iris.gallery.ui.ExifEditorSheet
+import com.iris.gallery.data.isRaw
 import com.iris.gallery.data.isSvg
 import com.iris.gallery.ui.ThumbnailCache
 import androidx.compose.material.icons.outlined.Image
@@ -90,6 +91,8 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 internal fun PhotoDetailsSheet(
     image: MediaImage,
+    pairedMedia: MediaImage? = null,
+    onSwitchPaired: (() -> Unit)? = null,
     timelineDateFormat: TimelineDateFormat = TimelineDateFormat.SYSTEM_DEFAULT,
     customTimelineDateFormat: String = "d. MMMM yyyy",
     canNavigatePrevious: Boolean = false,
@@ -544,8 +547,72 @@ internal fun PhotoDetailsSheet(
                 }
             }
 
-            // Edit Metadata Action Button
-            if (!image.isVideo) {
+            if (pairedMedia != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Image,
+                                    stringResource(R.string.details_paired_file),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Text(
+                                    stringResource(R.string.details_paired_file),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            if (onSwitchPaired != null) {
+                                TextButton(onClick = onSwitchPaired) {
+                                    val coverLabel = when {
+                                        pairedMedia.name.endsWith(".heic", ignoreCase = true) ||
+                                            pairedMedia.name.endsWith(".heif", ignoreCase = true) -> "HEIC"
+                                        else -> null
+                                    }
+                                    Text(
+                                        when {
+                                            pairedMedia.isRaw -> stringResource(R.string.details_switch_to_raw)
+                                            coverLabel != null -> stringResource(R.string.details_switch_to_format, coverLabel)
+                                            else -> stringResource(R.string.details_switch_to_jpeg)
+                                        },
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                        DetailItem(stringResource(R.string.details_file_name), pairedMedia.name)
+                        if (pairedMedia.width > 0 && pairedMedia.height > 0) {
+                            val pairedMp = (pairedMedia.width * pairedMedia.height) / 1_000_000.0
+                            DetailItem(
+                                stringResource(R.string.details_resolution),
+                                "${pairedMedia.width} × ${pairedMedia.height} (%.1f MP)".format(Locale.US, pairedMp),
+                            )
+                        }
+                        DetailItem(
+                            stringResource(R.string.details_type),
+                            pairedMedia.mimeType.ifBlank { if (pairedMedia.isRaw) "RAW" else stringResource(R.string.format_image) },
+                        )
+                        DetailItem(stringResource(R.string.details_size), formatFileSize(pairedMedia.sizeBytes))
+                        DetailBlock(stringResource(R.string.details_path), pairedMedia.path)
+                    }
+                }
+            }
+
+            // Edit Metadata Action Button (AndroidX ExifInterface cannot write back into RAW/DNG files)
+            if (!image.isVideo && !image.isRaw) {
                 Button(
                     onClick = { editing = true },
                     modifier = Modifier.fillMaxWidth(),

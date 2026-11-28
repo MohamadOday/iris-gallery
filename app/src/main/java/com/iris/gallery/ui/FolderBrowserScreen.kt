@@ -83,7 +83,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
-private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "dng", "svg")
+private val IMAGE_EXTENSIONS = setOf(
+    "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif", "svg"
+) + com.iris.gallery.data.RAW_IMAGE_EXTENSIONS
 private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "mov", "webm", "3gp", "avi", "flv", "ts")
 
 data class FolderItem(
@@ -615,7 +617,14 @@ private fun loadDirectoryContents(directory: File): List<FolderItem> {
             }.getOrDefault(0)
             items.add(FolderItem(file = file, isDirectory = true, mediaCount = count))
         } else if (isMediaFile(file)) {
-            val isVid = file.extension.lowercase(Locale.ROOT) in VIDEO_EXTENSIONS
+            val ext = file.extension.lowercase(Locale.ROOT)
+            val isVid = ext in VIDEO_EXTENSIONS
+            val resolvedMime = android.webkit.MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(ext)
+                ?: if (isVid) "video/*" else "image/*"
+            val orientation = if (!isVid && ext != "svg") {
+                com.iris.gallery.decoder.ExifOrientationHelper.readRotationDegrees(file)
+            } else 0
             val media = MediaImage(
                 id = syntheticFileId(file),
                 uri = Uri.fromFile(file),
@@ -628,8 +637,9 @@ private fun loadDirectoryContents(directory: File): List<FolderItem> {
                 bucketName = directory.name,
                 isVideo = isVid,
                 durationMs = 0L,
-                mimeType = if (isVid) "video/*" else "image/*",
+                mimeType = resolvedMime,
                 sizeBytes = file.length(),
+                orientation = orientation,
             )
             items.add(FolderItem(file = file, isDirectory = false, mediaImage = media))
         }

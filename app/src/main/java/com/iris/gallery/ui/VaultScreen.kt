@@ -54,17 +54,20 @@ import com.iris.gallery.data.MediaImage
 import com.iris.gallery.data.MediaSort
 import com.iris.gallery.data.NaturalOrderComparator
 import com.iris.gallery.data.SettingsState
+import com.iris.gallery.data.TimelineDateSource
+import com.iris.gallery.data.timelineComparator
+import com.iris.gallery.data.timelineTimestamp
 
-internal fun sortVaultMediaList(list: List<MediaImage>, sort: MediaSort): List<MediaImage> = when (sort) {
-    MediaSort.DATE_DESC -> list.sortedWith(
-        compareByDescending<MediaImage> { it.dateTaken }
-            .thenByDescending { it.dateModified }
-            .thenByDescending { it.dateAdded }
-            .thenByDescending { it.id }
-    )
+internal fun sortVaultMediaList(
+    list: List<MediaImage>,
+    sort: MediaSort,
+    dateSource: TimelineDateSource = TimelineDateSource.DATE_TAKEN,
+): List<MediaImage> = when (sort) {
+    MediaSort.DATE_DESC -> list.sortedWith(timelineComparator(dateSource))
     MediaSort.DATE_ASC -> list.sortedWith(
-        compareBy<MediaImage> { it.dateTaken }
+        compareBy<MediaImage> { it.timelineTimestamp(dateSource) }
             .thenBy { it.dateModified }
+            .thenBy { it.dateAdded }
             .thenBy { it.id }
     )
     MediaSort.NAME_ASC -> list.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
@@ -76,9 +79,10 @@ internal fun sortVaultMediaList(list: List<MediaImage>, sort: MediaSort): List<M
 internal fun buildVaultAlbums(
     lockedMedia: List<MediaImage>,
     albumSort: AlbumSort,
+    dateSource: TimelineDateSource = TimelineDateSource.DATE_TAKEN,
 ): List<MediaAlbum> {
     val albums = lockedMedia.groupBy { it.bucketName.ifBlank { "Locked" } }.map { (bucketName, list) ->
-        val sorted = sortVaultMediaList(list, MediaSort.DATE_DESC)
+        val sorted = sortVaultMediaList(list, MediaSort.DATE_DESC, dateSource)
         MediaAlbum(
             id = bucketName.hashCode().toLong(),
             name = bucketName,
@@ -87,8 +91,8 @@ internal fun buildVaultAlbums(
         )
     }
     return when (albumSort) {
-        AlbumSort.NEWEST, AlbumSort.CUSTOM -> albums.sortedByDescending { it.cover.dateTaken }
-        AlbumSort.OLDEST -> albums.sortedBy { it.cover.dateTaken }
+        AlbumSort.NEWEST, AlbumSort.CUSTOM -> albums.sortedByDescending { it.cover.timelineTimestamp(dateSource) }
+        AlbumSort.OLDEST -> albums.sortedBy { it.cover.timelineTimestamp(dateSource) }
         AlbumSort.NAME -> albums.sortedWith { a, b -> NaturalOrderComparator.compare(a.name, b.name) }
         AlbumSort.ITEM_COUNT -> albums.sortedWith(compareByDescending<MediaAlbum> { it.images.size }.thenBy { it.name.lowercase() })
     }
@@ -170,22 +174,22 @@ internal fun VaultContent(
         return
     }
 
-    val vaultAlbums = remember(lockedMedia, vaultAlbumSort) {
-        buildVaultAlbums(lockedMedia, vaultAlbumSort)
+    val vaultAlbums = remember(lockedMedia, vaultAlbumSort, settings.timelineDateSource) {
+        buildVaultAlbums(lockedMedia, vaultAlbumSort, settings.timelineDateSource)
     }
     val filteredVaultAlbums = remember(vaultAlbums, searchQuery) {
         if (searchQuery.isBlank()) vaultAlbums
         else vaultAlbums.filter { it.name.contains(searchQuery.trim(), ignoreCase = true) }
     }
-    val allSortedMedia = remember(lockedMedia, vaultMediaSort, searchQuery) {
-        val sorted = sortVaultMediaList(lockedMedia, vaultMediaSort)
+    val allSortedMedia = remember(lockedMedia, vaultMediaSort, searchQuery, settings.timelineDateSource) {
+        val sorted = sortVaultMediaList(lockedMedia, vaultMediaSort, settings.timelineDateSource)
         filterMediaList(sorted, searchQuery)
     }
-    val currentAlbumMedia = remember(selectedLockedAlbum, lockedMedia, vaultMediaSort, searchQuery) {
+    val currentAlbumMedia = remember(selectedLockedAlbum, lockedMedia, vaultMediaSort, searchQuery, settings.timelineDateSource) {
         if (selectedLockedAlbum == null) emptyList()
         else {
             val matching = lockedMedia.filter { it.bucketName.ifBlank { "Locked" } == selectedLockedAlbum }
-            filterMediaList(sortVaultMediaList(matching, vaultMediaSort), searchQuery)
+            filterMediaList(sortVaultMediaList(matching, vaultMediaSort, settings.timelineDateSource), searchQuery)
         }
     }
 
@@ -205,6 +209,7 @@ internal fun VaultContent(
                 layoutMode = settings.photoGridLayout,
                 animateGifThumbnails = settings.animateGifThumbnails,
                 showTimeline = showTimelineForSort,
+                timelineDateSource = settings.timelineDateSource,
                 timelineDateFormat = settings.timelineDateFormat,
                 customTimelineDateFormat = settings.customTimelineDateFormat,
                 useRelativeDates = settings.useRelativeDates,
@@ -389,6 +394,7 @@ internal fun VaultContent(
                     layoutMode = settings.photoGridLayout,
                     animateGifThumbnails = settings.animateGifThumbnails,
                     showTimeline = showTimelineForSort,
+                    timelineDateSource = settings.timelineDateSource,
                     timelineDateFormat = settings.timelineDateFormat,
                     customTimelineDateFormat = settings.customTimelineDateFormat,
                     useRelativeDates = settings.useRelativeDates,

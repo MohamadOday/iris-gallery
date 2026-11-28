@@ -102,6 +102,7 @@ internal fun bottomSystemGestureDeadzonePx(view: android.view.View, minPx: Float
 @Composable
 internal fun ZoomablePhoto(
     image: MediaImage,
+    pairGroupId: Long = image.id,
     active: Boolean = true,
     doubleTapZoomLevel: Float = 2.5f,
     multiStageZoom: Boolean = false,
@@ -130,7 +131,11 @@ internal fun ZoomablePhoto(
     val offsetAnim = remember(image.id) { Animatable(Offset.Zero, Offset.VectorConverter) }
     val rotationAnim = remember(image.id) { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
-    var containerSize by remember(image.id) { mutableStateOf(IntSize.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+
+    LaunchedEffect(image.id) {
+        onZoomChanged(false)
+    }
 
     LaunchedEffect(active) {
         if (!active && (scaleAnim.value > 1.01f || offsetAnim.value != Offset.Zero || rotationAnim.value != 0f)) {
@@ -141,12 +146,26 @@ internal fun ZoomablePhoto(
         }
     }
 
-    // Instant zero-delay preview from memory cache while full image decodes
-    var cachedThumb by remember(image.id) { mutableStateOf(com.iris.gallery.ui.ThumbnailCache.findForImage(image.id)) }
-    if (cachedThumb == null) {
-        LaunchedEffect(image.id, image.uri) {
+    // Instant zero-delay preview from memory cache while full image decodes.
+    // Key lastThumb on pairGroupId so thumbnails carry over only when toggling between
+    // paired JPG/RAW variants of the same shot and never leak onto unrelated photos.
+    var lastThumb by remember(pairGroupId) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var cachedThumb by remember(image.id) {
+        val hit = com.iris.gallery.ui.ThumbnailCache.findForImage(image.id)
+        if (hit != null) lastThumb = hit
+        mutableStateOf(hit ?: lastThumb)
+    }
+    LaunchedEffect(image.id, image.uri) {
+        val hit = com.iris.gallery.ui.ThumbnailCache.findForImage(image.id)
+        if (hit != null) {
+            cachedThumb = hit
+            lastThumb = hit
+        } else {
             val thumb = withContext(Dispatchers.IO) { com.iris.gallery.ui.loadThumbnailSync(context, image, 512) }
-            if (thumb != null) cachedThumb = thumb
+            if (thumb != null) {
+                cachedThumb = thumb
+                lastThumb = thumb
+            }
         }
     }
     val thumbPainter = remember(cachedThumb) {
@@ -209,16 +228,19 @@ internal fun ZoomablePhoto(
         val hasIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
         val thumbIntrinsic = thumbPainter?.intrinsicSize
         val hasThumbIntrinsic = thumbIntrinsic != null && thumbIntrinsic.isSpecified && thumbIntrinsic.width > 0f && thumbIntrinsic.height > 0f
+        val quarterTurn = ((image.orientation % 360) + 360) % 360 in setOf(90, 270)
+        val orientedFallbackW = if (quarterTurn) image.height else image.width
+        val orientedFallbackH = if (quarterTurn) image.width else image.height
         val imgWidth = when {
             hasIntrinsic -> intrinsic.width
             hasThumbIntrinsic -> thumbIntrinsic!!.width
-            image.width > 0 -> image.width.toFloat()
+            orientedFallbackW > 0 -> orientedFallbackW.toFloat()
             else -> 1080f
         }
         val imgHeight = when {
             hasIntrinsic -> intrinsic.height
             hasThumbIntrinsic -> thumbIntrinsic!!.height
-            image.height > 0 -> image.height.toFloat()
+            orientedFallbackH > 0 -> orientedFallbackH.toFloat()
             else -> 1080f
         }
         val imageAspect = imgWidth / imgHeight
@@ -438,16 +460,19 @@ internal fun ZoomablePhoto(
             val hasValidIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
             val thumbIntrinsic = thumbPainter?.intrinsicSize
             val hasThumbIntrinsic = thumbIntrinsic != null && thumbIntrinsic.isSpecified && thumbIntrinsic.width > 0f && thumbIntrinsic.height > 0f
+            val quarterTurn = ((image.orientation % 360) + 360) % 360 in setOf(90, 270)
+            val orientedFallbackW = if (quarterTurn) image.height else image.width
+            val orientedFallbackH = if (quarterTurn) image.width else image.height
             val imgWidth = when {
                 hasValidIntrinsic -> intrinsic.width
                 hasThumbIntrinsic -> thumbIntrinsic!!.width
-                image.width > 0 -> image.width.toFloat()
+                orientedFallbackW > 0 -> orientedFallbackW.toFloat()
                 else -> 1080f
             }
             val imgHeight = when {
                 hasValidIntrinsic -> intrinsic.height
                 hasThumbIntrinsic -> thumbIntrinsic!!.height
-                image.height > 0 -> image.height.toFloat()
+                orientedFallbackH > 0 -> orientedFallbackH.toFloat()
                 else -> 1080f
             }
 
@@ -504,16 +529,19 @@ internal fun ZoomablePhoto(
             val hasValidIntrinsic = intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f
             val thumbIntrinsic = thumbPainter?.intrinsicSize
             val hasThumbIntrinsic = thumbIntrinsic != null && thumbIntrinsic.isSpecified && thumbIntrinsic.width > 0f && thumbIntrinsic.height > 0f
+            val quarterTurn = ((image.orientation % 360) + 360) % 360 in setOf(90, 270)
+            val orientedFallbackW = if (quarterTurn) image.height else image.width
+            val orientedFallbackH = if (quarterTurn) image.width else image.height
             val imgWidth = when {
                 hasValidIntrinsic -> intrinsic.width
                 hasThumbIntrinsic -> thumbIntrinsic!!.width
-                image.width > 0 -> image.width.toFloat()
+                orientedFallbackW > 0 -> orientedFallbackW.toFloat()
                 else -> 1080f
             }
             val imgHeight = when {
                 hasValidIntrinsic -> intrinsic.height
                 hasThumbIntrinsic -> thumbIntrinsic!!.height
-                image.height > 0 -> image.height.toFloat()
+                orientedFallbackH > 0 -> orientedFallbackH.toFloat()
                 else -> 1080f
             }
 
